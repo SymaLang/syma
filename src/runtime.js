@@ -11,21 +11,18 @@ import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice
 import { createEventHandler, handleBinding, clearInput, getInputValue } from './events.js';
 import { createEffectsProcessor, freshId } from './effects-processor.js';
 import { foldPrims } from './primitives.js';
+import {
+    isTraceEnabled,
+    setTrace as debugSetTrace,
+    formatStep,
+    logDispatchTrace,
+    logProjectionTrace,
+    explainProjectionFailure,
+    logProjectionFailure
+} from './debug.js';
 
 /* -------- Dev trace toggle -------- */
-// Enable tracing via:
-//   1) window.SYMA_DEV_TRACE = true
-//   2) or URL query ?trace (any value)
-// Tracing prints a step-by-step rewrite log (rule, path, before -> after).
-const SYMA_DEV_TRACE = (() => {
-    try {
-        const q = new URLSearchParams(window.location.search);
-        if (q.has('trace')) return true;
-        if (typeof window !== 'undefined' && window.SYMA_DEV_TRACE === true) return true;
-    } catch (_) {
-    }
-    return false;
-})();
+const SYMA_DEV_TRACE = isTraceEnabled();
 
 /* --------------------- Rule extraction ----------------------- */
 /* We expect: Rules[...] where each rule is R[name:Str, lhs:Expr, rhs:Expr, prio?:Num] */
@@ -369,11 +366,6 @@ function normalizeWithTrace(expr, rules, maxSteps = 10000) {
     throw new Error("normalizeWithTrace: exceeded maxSteps (possible non-termination)");
 }
 
-/* Pretty formatter for console use */
-function formatStep(step) {
-    const pathStr = Array.isArray(step.path) ? `[${step.path.join(".")}]` : "[]";
-    return `#${step.i} ${step.rule || "<host/prim>"} ${pathStr}: ${show(step.before)} -> ${show(step.after)}`;
-}
 
 /* --------------------- Universe plumbing --------------------- */
 function getProgram(universe) {
@@ -437,12 +429,7 @@ function dispatch(universe, rules, actionTerm) {
     let newProg;
     if (SYMA_DEV_TRACE) {
         const {result, trace} = normalizeWithTrace(applied, rules);
-        try {
-            console.groupCollapsed?.(`[SYMA TRACE] dispatch ${show(actionTerm)}`);
-            trace.forEach(step => console.log(formatStep(step)));
-            console.groupEnd?.();
-        } catch (_) {
-        }
+        logDispatchTrace(actionTerm, trace);
         newProg = result;
     } else {
         newProg = normalize(applied, rules);
@@ -454,36 +441,6 @@ function dispatch(universe, rules, actionTerm) {
 
 /* Supports: App[ State[...], UI[ ... ]] with VStack, HStack, Text, Button[Str, OnClick->action] */
 
-// ---- Debug helpers for /@ projection failures ----
-function tryMatchBool(pat, subj) {
-    try { return match(pat, subj, {}) !== null; } catch (_) { return false; }
-}
-function explainProjectionFailure(annotated, rules) {
-    // annotated is /@[part, App[State[...], _]]
-    const out = [];
-    const lhsCandidates = rules.filter(r => isCall(r.lhs) && isSym(r.lhs.h) && r.lhs.h.v === "/@");
-    for (const r of lhsCandidates) {
-        const pat = r.lhs;
-        const headOK = true; // filtered by "/@"
-        const arityOK = isCall(pat) && isCall(annotated) && pat.a.length === annotated.a.length;
-        let partOK = false, ctxOK = false;
-        if (arityOK) {
-            // Check first arg (the Show[...] part) in isolation
-            partOK = tryMatchBool(pat.a[0], annotated.a[0]);
-            // Check second arg (the App[State[..], _]) in isolation
-            ctxOK = tryMatchBool(pat.a[1], annotated.a[1]);
-        }
-        out.push({
-            rule: r.name,
-            headOK,
-            arityOK,
-            partOK,
-            ctxOK,
-            lhs: show(r.lhs)
-        });
-    }
-    return out;
-}
 
 function splitPropsAndChildren(node) {
     if (!isCall(node)) return {props: null, children: []};
@@ -616,12 +573,7 @@ function renderTextPart(part, state) {
             const currentRules = extractRules(GLOBAL_UNIVERSE);
             if (SYMA_DEV_TRACE) {
                 const {result, trace} = normalizeWithTrace(annotated, currentRules);
-                try {
-                    console.groupCollapsed?.(`[SYMA TRACE] project ${show(part)}`);
-                    trace.forEach(step => console.log(formatStep(step)));
-                    console.groupEnd?.();
-                } catch (_) {
-                }
+                logProjectionTrace(part, trace);
                 return result;
             }
             return normalize(annotated, currentRules);
@@ -629,20 +581,8 @@ function renderTextPart(part, state) {
         if (isStr(reduced)) return document.createTextNode(reduced.v);
         if (isNum(reduced)) return document.createTextNode(String(reduced.v));
         // If your rules emit Call(Str[...]) etc., adjust here
-        try {
-            const currentRules = extractRules(GLOBAL_UNIVERSE);
-            const hints = explainProjectionFailure(annotated, currentRules)
-                .filter(h => h.headOK)
-                .slice(0, 8);
-            console.groupCollapsed?.(`[SYMA HINT] /@ failed for ${show(part)} in context; result=${show(reduced)}`);
-            console.log("Annotated:", show(annotated));
-            if (hints.length === 0) {
-                console.log("No /@ rules found. Ensure a rule like (R \"ShowX\" (/@ (Show X) (App (State ...) _)) ... ) exists.");
-            } else {
-                console.table(hints);
-            }
-            console.groupEnd?.();
-        } catch (_) {}
+        const currentRules = extractRules(GLOBAL_UNIVERSE);
+        logProjectionFailure(part, annotated, reduced, currentRules);
         throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
     }
 
@@ -734,15 +674,7 @@ Object.defineProperty(window, "GLOBAL_RULES", {
 });
 
 // Dynamic toggle for trace in console: SymbolicHost.setTrace(true/false)
-function setTrace(v) {
-    try {
-        window.SYMA_DEV_TRACE = !!v;
-    } catch (_) {
-    }
-    // No re-render here; next dispatch/projection will honor it.
-    return !!v;
-}
-
+const setTrace = debugSetTrace;
 window.SymbolicHost = {...window.SymbolicHost, setTrace};
 
 export {boot, show, dispatch, clearInput, getInputValue, freshId};
