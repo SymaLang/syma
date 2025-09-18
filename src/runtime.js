@@ -46,9 +46,46 @@ function extractRulesFromNode(rulesNode) {
     const rs = [];
     for (const r of rulesNode.a) {
         if (!isR(r)) throw new Error(`Rules must contain R[...] entries; found ${show(r)}`);
-        const [nm, lhs, rhs, prio] = r.a;
+        if (r.a.length < 3) throw new Error("R[name, lhs, rhs, ...] requires at least 3 arguments");
+
+        const [nm, lhs, rhs, ...rest] = r.a;
         if (!isStr(nm)) throw new Error("R[name] must be Str");
-        rs.push({ name: nm.v, lhs, rhs, prio: (prio && isNum(prio)) ? prio.v : 0 });
+
+        let prio = 0;
+        let guard = null;
+
+        // Parse named arguments (:guard, :prio) or legacy positional args
+        let i = 0;
+        while (i < rest.length) {
+            const arg = rest[i];
+
+            // Check for named arguments
+            if (isSym(arg) && arg.v === ":guard" && i + 1 < rest.length) {
+                guard = rest[i + 1];
+                i += 2;
+            } else if (isSym(arg) && arg.v === ":prio" && i + 1 < rest.length) {
+                const prioArg = rest[i + 1];
+                if (isNum(prioArg)) {
+                    prio = prioArg.v;
+                }
+                i += 2;
+            } else {
+                // Legacy: 4th arg could be guard (expression) or prio (number)
+                // 5th arg could be prio if 4th was guard
+                if (i === 0) {
+                    if (isNum(arg)) {
+                        prio = arg.v;
+                    } else {
+                        guard = arg;
+                    }
+                } else if (i === 1 && guard && isNum(arg)) {
+                    prio = arg.v;
+                }
+                i++;
+            }
+        }
+
+        rs.push({ name: nm.v, lhs, rhs, guard, prio });
     }
     rs.sort((a, b) => b.prio - a.prio);
     return rs;
@@ -201,6 +238,17 @@ function applyOnce(expr, rules) {
     for (const r of rules) {
         const env = match(r.lhs, expr, {});
         if (env) {
+            // Check guard if present
+            if (r.guard) {
+                // Substitute the guard with matched bindings
+                const guardValue = subst(r.guard, env);
+                // Evaluate the guard expression
+                const evaluatedGuard = foldPrims(guardValue);
+                // Guard must evaluate to the symbol True
+                if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
+                    continue; // Guard failed, try next rule
+                }
+            }
             const out = subst(r.rhs, env);
             return {changed: true, expr: out};
         }
@@ -230,6 +278,17 @@ function applyOnceTrace(expr, rules) {
         for (const r of rules) {
             const env = match(r.lhs, node, {});
             if (env) {
+                // Check guard if present
+                if (r.guard) {
+                    // Substitute the guard with matched bindings
+                    const guardValue = subst(r.guard, env);
+                    // Evaluate the guard expression
+                    const evaluatedGuard = foldPrims(guardValue);
+                    // Guard must evaluate to the symbol True
+                    if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
+                        continue; // Guard failed, try next rule
+                    }
+                }
                 const out = subst(r.rhs, env);
                 if (parent === null) {
                     return {
@@ -280,7 +339,7 @@ function applyOnceTrace(expr, rules) {
 }
 
 
-function normalize(expr, rules, maxSteps = 1000) {
+function normalize(expr, rules, maxSteps = 10000) {
     let cur = expr;
     for (let i = 0; i < maxSteps; i++) {
         const step = applyOnce(cur, rules);
@@ -291,7 +350,7 @@ function normalize(expr, rules, maxSteps = 1000) {
 }
 
 /* Normalization with step trace for debugger UIs */
-function normalizeWithTrace(expr, rules, maxSteps = 1000) {
+function normalizeWithTrace(expr, rules, maxSteps = 10000) {
     let cur = expr;
     const trace = [];
     for (let i = 0; i < maxSteps; i++) {

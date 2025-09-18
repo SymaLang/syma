@@ -100,6 +100,7 @@ function foldPrimitive(op, args) {
         case "FreshId": return foldFreshId(args);
         case "Random": return foldRandom(args);
         case "ParseNum": return foldParseNum(args);
+        case "Debug": return foldDebug(args);
     }
 
     return null;
@@ -571,6 +572,48 @@ function foldParseNum(args) {
         }
     }
     return null;
+}
+
+/**
+ * Debug logging: Debug[label?, value] -> value (side effect: console.log)
+ * Quick and dirty debugging - logs to console and passes through the value
+ * Unlike Print effect, this happens immediately during normalization
+ */
+function foldDebug(args) {
+    if (args.length === 0) return null;
+
+    // Debug[value] - just log the value
+    if (args.length === 1) {
+        const value = args[0];
+        console.log("[DEBUG]", formatDebugValue(value));
+        return value; // Pass through
+    }
+
+    // Debug[label, value] - log with label
+    if (args.length >= 2) {
+        const label = isStr(args[0]) ? args[0].v : formatDebugValue(args[0]);
+        const value = args[1];
+        console.log(`[DEBUG ${label}]`, formatDebugValue(value));
+        return value; // Return the value, not the label
+    }
+
+    return null;
+}
+
+/**
+ * Helper to format values for debug output
+ */
+function formatDebugValue(node) {
+    if (isStr(node)) return `"${node.v}"`;
+    if (isNum(node)) return node.v;
+    if (isSym(node)) return node.v;
+    if (isCall(node) && isSym(node.h)) {
+        // Simple representation for calls
+        const args = node.a.map(formatDebugValue).join(", ");
+        return `${node.h.v}[${args}]`;
+    }
+    // Fallback to JSON for complex structures
+    return JSON.stringify(node);
 }
 
 

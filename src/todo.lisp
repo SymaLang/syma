@@ -44,16 +44,16 @@
     ;; --- Lifters (push Apply through shells) ---
     ;; Updated to handle Program with Effects
     (R "LiftApplyThroughProgram"
-       (Apply (Var act) (Program (Var app) (Var eff)))
-       (Program (Apply (Var act) (Var app)) (Var eff)))
+       (Apply act_ (Program app_ eff_))
+       (Program (Apply act_ app_) eff_))
 
     (R "LiftApplyThroughApp"
-       (Apply (Var act) (App (Var st) (Var ui)))
-       (App (Apply (Var act) (Var st)) (Var ui)))
+       (Apply act_ (App st_ ui_))
+       (App (Apply act_ st_) ui_))
 
     (R "LiftApplyThroughState"
-       (Apply (Var act) (State (Var s)))
-       (State (Apply (Var act) (Var s))))
+       (Apply act_ (State s_))
+       (State (Apply act_ s_)))
 
     ;; --- Domain: structure ---
     ;; Item := (Item (Id n) (Title "…") (Done True|False))
@@ -63,51 +63,51 @@
     ;; Skip empty titles
     (R "AddTodoWithTitle/Empty"
        (Apply (AddTodoWithTitle (Str ""))
-         (Var state))
-       (Var state))
+         state_)
+       state_)
 
     (R "AddTodoWithTitle"
-       (Apply (AddTodoWithTitle (Var title))
-         (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var f))))
+       (Apply (AddTodoWithTitle title_)
+         (TodoState (NextId n_) (Items items___) (Filter f_)))
        (TodoState
-         (NextId (Add (Var n) 1))
+         (NextId (Add n_ 1))
          (Items
-           (Var ___)
-           (Item (Id (Var n)) (Title (Var title)) (Done False)))
-         (Filter (Var f))))
+           items___
+           (Item (Id n_) (Title title_) (Done False)))
+         (Filter f_)))
 
     ;; --- Add single todo with default title ---
     (R "AddTodo"
        (Apply AddTodo
-         (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var f))))
+         (TodoState (NextId n_) (Items items___) (Filter f_)))
        (TodoState
-         (NextId (Add (Var n) 1))
+         (NextId (Add n_ 1))
          (Items
-           (Var ___)
-           (Item (Id (Var n)) (Title (Str "Task ")) (Done False)))
-         (Filter (Var f))))
+           items___
+           (Item (Id n_) (Title (Str "Task ")) (Done False)))
+         (Filter f_)))
 
     ;; --- Add 3 todos (macro via composition) ---
     (R "Add3-1"
-       (Apply Add3 (Var st))
-       (Apply Add3-2 (Apply AddTodo (Var st))))
+       (Apply Add3 st_)
+       (Apply Add3-2 (Apply AddTodo st_)))
     (R "Add3-2"
-       (Apply Add3-2 (Var st))
-       (Apply Add3-3 (Apply AddTodo (Var st))))
+       (Apply Add3-2 st_)
+       (Apply Add3-3 (Apply AddTodo st_)))
     (R "Add3-3"
-       (Apply Add3-3 (Var st))
-       (Apply AddTodo (Var st)))
+       (Apply Add3-3 st_)
+       (Apply AddTodo st_))
 
     ;; --- Toggle by id ---
     (R "Toggle"
-       (Apply (Toggle (Var id))
-         (TodoState (NextId (Var n)) (Items (Var before___) (Item (Id (Var id)) (Title (Var t)) (Done (Var d))) (Var after___)) (Filter (Var f))))
+       (Apply (Toggle id_)
+         (TodoState (NextId n_) (Items before___ (Item (Id id_) (Title t_) (Done d_)) after___) (Filter f_)))
        (TodoState
-         (NextId (Var n))
-         (Items (Var before___)
-                (Item (Id (Var id)) (Title (Var t)) (Done (Flip (Var d))))
-                (Var after___))
-         (Filter (Var f))))
+         (NextId n_)
+         (Items before___
+                (Item (Id id_) (Title t_) (Done (Flip d_)))
+                after___)
+         (Filter f_)))
 
     ;; Flip True/False
     (R "FlipTrue"  (Flip True)  False)
@@ -115,40 +115,40 @@
 
     ;; --- Remove by id ---
     (R "Remove"
-       (Apply (Remove (Var id))
-         (TodoState (NextId (Var n)) (Items (Var before___) (Item (Id (Var id)) (Title (Var t)) (Done (Var d))) (Var after___)) (Filter (Var f))))
+       (Apply (Remove id_)
+         (TodoState (NextId n_) (Items before___ (Item (Id id_) (Title t_) (Done d_)) after___) (Filter f_)))
        (TodoState
-         (NextId (Var n))
-         (Items (Var before___) (Var after___))
-         (Filter (Var f))))
+         (NextId n_)
+         (Items before___ after___)
+         (Filter f_)))
 
     ;; --- Set filter ---
     (R "SetFilter"
-       (Apply (SetFilter (Var flt))
-         (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var _))))
-       (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var flt))))
+       (Apply (SetFilter flt_)
+         (TodoState (NextId n_) (Items rest___) (Filter _)))
+       (TodoState (NextId n_) (Items rest___) (Filter flt_)))
 
     ;; --- Effects demo: Timer ---
     ;; TestTimer is a no-op at the state level
     (R "TestTimer/State"
-       (Apply TestTimer (Var state))
-       (Var state))
+       (Apply TestTimer state_)
+       state_)
 
     ;; TestTimer action enqueues a timer effect at Program level (high priority to match before lifters)
     (R "TestTimer/Enqueue"
-       (Apply TestTimer (Program (Var app) (Effects (Pending (Var p___)) (Var inbox))))
+       (Apply TestTimer (Program app_ (Effects (Pending p___) inbox_)))
        (Program
-         (Var app)
+         app_
          (Effects
-           (Pending (Var p___) (Timer (FreshId) (Delay 2000)))
-           (Var inbox)))
+           (Pending p___ (Timer (FreshId) (Delay 2000)))
+           inbox_))
        10)  ; High priority to match before lifters
 
     ;; When timer completes, add a demo todo with custom title
     (R "TimerComplete/Process"
        (Program
          (App (Var state) (Var ui))
-         (Effects (Var pending) (Inbox (TimerComplete (Var id) (Var _)) (Var rest___))))
+         (Effects (Var pending) (Inbox (TimerComplete (Var id) _) (Var rest___))))
        (Program
          (Apply (AddTodoWithTitle (Str "Timer completed!")) (App (Var state) (Var ui)))
          (Effects (Var pending) (Inbox (Var rest___)))))
@@ -173,7 +173,7 @@
     (R "PrintComplete/Process"
        (Program
          (Var app)
-         (Effects (Var pending) (Inbox (PrintComplete (Var _) (Var _)) (Var rest___))))
+         (Effects (Var pending) (Inbox (PrintComplete _ _) (Var rest___))))
        (Program
          (Var app)
          (Effects (Var pending) (Inbox (Var rest___)))))
@@ -183,30 +183,30 @@
     ;; Count of active items (for header)
     (R "ShowLeftCount/Empty"
        (/@ (Show LeftCount)
-           (App (State (TodoState (NextId (Var _)) (Items) (Filter (Var _)))) (Var _)))
+           (App (State (TodoState (NextId _) (Items) (Filter _))) _))
        0)
 
     (R "ShowLeftCount/NonEmpty"
        (/@ (Show LeftCount)
-           (App (State (TodoState (NextId (Var _)) (Items (Var ___)) (Filter (Var _)))) (Var _)))
-       (CountActive (Var ___)))
+           (App (State (TodoState (NextId _) (Items rest___) (Filter _))) _))
+       (CountActive rest___))
 
     ;; CountActive over a list (linear recursion)
     (R "CountActive/Nil"
        (CountActive)
        0)
     (R "CountActive/Cons-Active"
-       (CountActive (Item (Id (Var _)) (Title (Var _)) (Done False)) (Var rest___))
+       (CountActive (Item (Id _) (Title _) (Done False)) (Var rest___))
        (Add 1 (CountActive (Var rest___))))
     (R "CountActive/Cons-Done"
-       (CountActive (Item (Id (Var _)) (Title (Var _)) (Done True)) (Var rest___))
+       (CountActive (Item (Id _) (Title _) (Done True)) (Var rest___))
        (CountActive (Var rest___)))
 
     ;; RenderTodos → expand into concrete UI (Ul …)
     (R "RenderTodos"
        (/@ (RenderTodos)
-           (App (State (TodoState (NextId (Var _)) (Items (Var ___)) (Filter (Var flt)))) (Var _)))
-       (Div :class "space-y-2" (RenderList (Var flt) (Var ___))))
+           (App (State (TodoState (NextId _) (Items rest___) (Filter (Var flt)))) _))
+       (Div :class "space-y-2" (RenderList (Var flt) rest___)))
 
     ;; RenderList dispatch on filter
     ;; Handle empty list case first
@@ -215,16 +215,16 @@
        (Div :class "text-center py-8 text-gray-400" "No items yet"))
 
     (R "RenderList/All"
-       (RenderList All (Var items___))
-       (RenderItems (Var items___)))
+       (RenderList All items___)
+       (RenderItems items___))
 
     (R "RenderList/Active"
-       (RenderList Active (Var items___))
-       (RenderItems (FilterActive (Var items___))))
+       (RenderList Active items___)
+       (RenderItems (FilterActive items___)))
 
     (R "RenderList/Done"
-       (RenderList Done (Var items___))
-       (RenderItems (FilterDone (Var items___))))
+       (RenderList Done items___)
+       (RenderItems (FilterDone items___)))
 
     ;; Filtering fused into RenderItems so results splice in-place
     (R "RenderItems/FilterActive-Nil"
@@ -234,7 +234,7 @@
        (RenderItems (FilterActive (Item (Id (Var i)) (Title (Var t)) (Done False)) (Var rest___)))
        (RenderItems (Item (Id (Var i)) (Title (Var t)) (Done False)) (FilterActive (Var rest___))))
     (R "RenderItems/FilterActive-Skip"
-       (RenderItems (FilterActive (Item (Id (Var _)) (Title (Var _)) (Done True)) (Var rest___)))
+       (RenderItems (FilterActive (Item (Id _) (Title _) (Done True)) (Var rest___)))
        (RenderItems (FilterActive (Var rest___))))
 
     (R "RenderItems/FilterDone-Nil"
@@ -244,7 +244,7 @@
        (RenderItems (FilterDone (Item (Id (Var i)) (Title (Var t)) (Done True)) (Var rest___)))
        (RenderItems (Item (Id (Var i)) (Title (Var t)) (Done True)) (FilterDone (Var rest___))))
     (R "RenderItems/FilterDone-Skip"
-       (RenderItems (FilterDone (Item (Id (Var _)) (Title (Var _)) (Done False)) (Var rest___)))
+       (RenderItems (FilterDone (Item (Id _) (Title _) (Done False)) (Var rest___)))
        (RenderItems (FilterDone (Var rest___))))
 
     ;; Turn a (proper) list of Item[...] into rows
@@ -264,18 +264,18 @@
        (Span))  ; Empty span - just a terminator for recursion
 
     ;; Tiny If that chooses between two Strs based on True/False
-    (R "If/True"  (If True  (Var a) (Var b)) (Var a))
-    (R "If/False" (If False (Var a) (Var b)) (Var b))
+    (R "If/True"  (If True  a_ b_) a_)
+    (R "If/False" (If False a_ b_) b_)
 
     ;; ---------- Show primitives ----------
     (R "ShowCount"
        (/@ (Show Count)
-           (App (State (TodoState (NextId (Var _)) (Items (Var ___)) (Filter (Var _)))) (Var _)))
-       (Length (Var ___)))
+           (App (State (TodoState (NextId _) (Items rest___) (Filter _))) _))
+       (Length (Var rest___)))
 
     ;; list length
     (R "Length/Nil" (Length) 0)
-    (R "Length/Cons" (Length (Var _) (Var rest___)) (Add 1 (Length (Var rest___))))
+    (R "Length/Cons" (Length _ (Var rest___)) (Add 1 (Length (Var rest___))))
 
   )
 

@@ -42,20 +42,32 @@ Calls can be nested arbitrarily to represent complex expressions.
 
 ### Basic Variables
 
-The language uses pattern variables for matching and binding values in rules:
+The language uses pattern variables for matching and binding values in rules. There are two syntaxes available:
 
+**Explicit syntax:**
 ```lisp
-(Var name)
+(Var name)   ; Pattern variable that binds to "name"
 ```
 
-This represents a pattern variable that matches any expression and binds it to `name`. Variables are used in rule patterns to capture values that can be referenced in the replacement.
+**Shorthand syntax:**
+```lisp
+name_        ; Equivalent to (Var name)
+```
+
+Variables are used in rule patterns to capture values that can be referenced in the replacement.
 
 ### Wildcard Patterns
 
 The special variable `_` acts as a wildcard that matches any value without binding:
 
+**Explicit syntax:**
 ```lisp
-(Var _)  ; Matches any single expression, discards the value
+(Var _)      ; Matches any single expression, discards the value
+```
+
+**Shorthand syntax:**
+```lisp
+_            ; Equivalent to (Var _)
 ```
 
 This is useful when you need to match a structure but don't care about certain values.
@@ -64,21 +76,38 @@ This is useful when you need to match a structure but don't care about certain v
 
 Rest variables match zero or more elements in a sequence:
 
+**Explicit syntax:**
 ```lisp
-(Var xs___)  ; Using the triple underscore suffix
-; or
-(VarRest xs)  ; Explicit rest variable
+(Var xs___)  ; Rest variable using triple underscore suffix
+(VarRest xs) ; Alternative explicit form
+(Var ___)    ; Wildcard rest (matches any sequence without binding)
 ```
 
-For wildcards that match any sequence:
-
+**Shorthand syntax:**
 ```lisp
-(Var ___)    ; Matches any sequence without binding
+xs___        ; Equivalent to (Var xs___) or (VarRest xs)
+___          ; Equivalent to (Var ___) - wildcard rest
 ```
 
-Example pattern matching a list with rest variables:
+### Examples
+
+Pattern matching with mixed syntax:
 ```lisp
-(Items (Var first) (Var rest___))  ; Matches first item and rest of the list
+;; These are equivalent:
+(R "Rule1"
+   (Apply (Toggle (Var id))
+      (TodoState (NextId (Var n)) (Items (Var before___) (Item (Id (Var id))) (Var after___))))
+   ...)
+
+(R "Rule1"
+   (Apply (Toggle id_)
+      (TodoState (NextId n_) (Items before___ (Item (Id id_)) after___)))
+   ...)
+
+;; Mix and match as needed for clarity:
+(Items first_ rest___)           ; First item and rest of list
+(Filter _)                        ; Don't care about filter value
+(State _ (Items ___) active_)    ; Wildcard, any items, capture active
 ```
 
 ---
@@ -187,6 +216,7 @@ The runtime provides a comprehensive standard library of primitive operations th
 - `(Random)` → random number between 0 and 1
 - `(Random min max)` → random number in range
 - `(ParseNum str)` → parse string to number (remains symbolic if invalid)
+- `(Debug label? value)` → logs to console and returns value (for debugging)
 
 ### Note on Lists
 

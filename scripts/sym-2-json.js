@@ -18,6 +18,11 @@
  * Special cases:
  *   - (Var name) → Call(Sym("Var"), [Str(name)])
  *     The `name` can be a symbol or a string; it is stored as Str in the AST.
+ *   - Shorthand syntax:
+ *     - n_ → (Var "n")     - regular pattern variable
+ *     - _ → (Var "_")      - wildcard
+ *     - xs___ → (VarRest "xs") - rest pattern
+ *     - ___ → (VarRest "_")    - wildcard rest
  *
  * Usage:
  *   node sym-2-json.js input.sym [--out out.json] [--pretty]
@@ -182,6 +187,14 @@ function parse(tokens) {
 
     if (tok.t === '(') {
       eat(); // '('
+
+      // Check for empty list ()
+      if (peek() && peek().t === ')') {
+        eat(); // ')'
+        // Return empty list as just Nil symbol
+        return { k: 'Sym', v: 'Nil' };
+      }
+
       const head = parseExpr();
       const args = [];
       while (true) {
@@ -249,14 +262,39 @@ function desugarTagProps(node) {
 function postprocess(node) {
   if (!node || typeof node !== 'object') return node;
 
+  // Handle shorthand for variables: n_ => (Var "n"), xs___ => (VarRest "xs")
+  if (node.k === 'Sym') {
+    const v = node.v;
+
+    // Check for rest variable shorthand: xs___ => (VarRest "xs")
+    // Special case: ___ alone becomes (VarRest "_")
+    if (v === '___') {
+      return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: '_' } ] };
+    } else if (v.endsWith('___')) {
+      const base = v.slice(0, -3);
+      return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: base } ] };
+    }
+
+    // Check for regular variable shorthand: n_ => (Var "n")
+    // Special case: _ alone becomes (Var "_")
+    if (v === '_') {
+      return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: '_' } ] };
+    } else if (v.endsWith('_') && !v.endsWith('___')) {
+      const base = v.slice(0, -1);
+      return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: base } ] };
+    }
+
+    return node;
+  }
+
   if (node.k === 'Call') {
     const head = postprocess(node.h);
-    const args = node.a.map(postprocess);
 
-    // (Var name) sugar: ensure inner is Str
+    // Special handling for (Var ...) - process the argument WITHOUT recursive postprocess
+    // to avoid transforming symbols inside (Var ...)
     if (head.k === 'Sym' && head.v === 'Var') {
-      if (args.length !== 1) die('(Var ...) expects exactly one argument');
-      const nameExpr = args[0];
+      if (node.a.length !== 1) die('(Var ...) expects exactly one argument');
+      const nameExpr = node.a[0]; // Use raw argument, not processed
       let nameStr;
       if (nameExpr.k === 'Str') nameStr = nameExpr.v;
       else if (nameExpr.k === 'Sym') nameStr = nameExpr.v;
@@ -270,6 +308,8 @@ function postprocess(node) {
       return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: nameStr } ] };
     }
 
+    // For all other calls, process arguments normally
+    const args = node.a.map(postprocess);
     return { k: 'Call', h: head, a: args };
   }
 
