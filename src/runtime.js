@@ -107,6 +107,63 @@ function extractRules(universe) {
 
 /* --------------------- Pattern matching ---------------------- */
 
+// Backtracking matcher for argument vectors with multiple VarRest
+function matchArgsWithRest(pArgs, tArgs, env) {
+    // Fast path: no VarRest
+    const hasRest = pArgs.some(pa => isVarRest(pa));
+    if (!hasRest) {
+        if (pArgs.length !== tArgs.length) return null;
+        let e = env;
+        for (let i = 0; i < pArgs.length; i++) {
+            e = match(pArgs[i], tArgs[i], e);
+            if (!e) return null;
+        }
+        return e;
+    }
+
+    // Find first VarRest index
+    const idx = pArgs.findIndex(pa => isVarRest(pa));
+    const prefix = pArgs.slice(0, idx);
+    const restVar = pArgs[idx];
+    const suffix = pArgs.slice(idx + 1);
+
+    // The suffix must match the tail; compute minimal tail length
+    const minTail = suffix.reduce((n, pat) => n + (isVarRest(pat) ? 0 : 1), 0);
+    if (tArgs.length < prefix.length + minTail) return null;
+
+    // Match prefix
+    let e = env;
+    for (let i = 0; i < prefix.length; i++) {
+        e = match(prefix[i], tArgs[i], e);
+        if (!e) return null;
+    }
+
+    // Try all possible splits for this rest var, from shortest to longest slice
+    const name = restVar.a[0].v;
+    for (let take = 0; take <= (tArgs.length - prefix.length - minTail); take++) {
+        // Candidate binding for this VarRest
+        const middle = tArgs.slice(prefix.length, prefix.length + take);
+        // Match suffix against the remaining tail
+        const tail = tArgs.slice(prefix.length + take);
+
+        // First ensure repeated binding consistency if already present
+        let e1 = e;
+        if (Object.prototype.hasOwnProperty.call(e1, name)) {
+            const bound = e1[name];
+            if (!Array.isArray(bound) || !arrEq(bound, middle)) {
+                continue; // inconsistent, try next take
+            }
+        } else {
+            e1 = { ...e1, [name]: middle };
+        }
+
+        // Now match the suffix against tail, using recursion that allows more VarRest later
+        const e2 = matchArgsWithRest(suffix, tail, e1);
+        if (e2) return e2; // success down this branch
+    }
+    return null; // no split worked
+}
+
 /* Env: plain object mapping var name -> Expr */
 function match(pat, subj, env = {}) {
     // Pattern variable?
@@ -122,54 +179,11 @@ function match(pat, subj, env = {}) {
         return deq(pat, subj) ? env : null;
     }
     // Calls
-    // Calls
     if (isCall(pat)) {
         if (!isCall(subj)) return null;
-        // Heads must match first
         const env1 = match(pat.h, subj.h, env);
         if (!env1) return null;
-
-        const pArgs = pat.a, tArgs = subj.a;
-        // Look for a VarRest in the pattern args
-        const restIdx = pArgs.findIndex(pa => isVarRest(pa));
-        if (restIdx === -1) {
-            if (pArgs.length !== tArgs.length) return null;
-            let e = env1;
-            for (let i = 0; i < pArgs.length; i++) {
-                e = match(pArgs[i], tArgs[i], e);
-                if (!e) return null;
-            }
-            return e;
-        }
-
-        // With one VarRest: split prefix / rest / suffix
-        const prefix = pArgs.slice(0, restIdx);
-        const restVar = pArgs[restIdx];
-        const suffix = pArgs.slice(restIdx + 1);
-
-        if (tArgs.length < prefix.length + suffix.length) return null;
-
-        let e = env1;
-        // Match prefix
-        for (let i = 0; i < prefix.length; i++) {
-            e = match(prefix[i], tArgs[i], e);
-            if (!e) return null;
-        }
-        // Match suffix (from the end)
-        for (let i = 0; i < suffix.length; i++) {
-            const p = suffix[suffix.length - 1 - i];
-            const t = tArgs[tArgs.length - 1 - i];
-            e = match(p, t, e);
-            if (!e) return null;
-        }
-        // Bind the middle slice to the rest var
-        const name = restVar.a[0].v;
-        const middle = tArgs.slice(prefix.length, tArgs.length - suffix.length);
-        if (Object.prototype.hasOwnProperty.call(e, name)) {
-            if (!arrEq(e[name], middle)) return null;
-            return e;
-        }
-        return { ...e, [name]: middle };
+        return matchArgsWithRest(pat.a, subj.a, env1);
     }
     throw new Error("match: unknown pattern node");
 }
