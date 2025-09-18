@@ -134,24 +134,63 @@ The runtime uses an outermost-first strategy:
 
 ### Built-in Primitives
 
-The runtime provides primitive operations that are folded during normalization:
+The runtime provides a comprehensive standard library of primitive operations that are folded during normalization:
 
-**Arithmetic:**
-- `(Add num1 num2)` → sum of two numbers
-- `(Sub num1 num2)` → difference of two numbers
-- `(Mul num1 num2)` → product of two numbers
-- `(Div num1 num2)` → quotient (returns unreduced for division by zero)
+**Arithmetic Operations:**
+- `(Add n1 n2)` → sum of two numbers
+- `(Sub n1 n2)` → difference of two numbers
+- `(Mul n1 n2)` → product of two numbers
+- `(Div n1 n2)` → quotient (remains symbolic for division by zero)
+- `(Mod n1 n2)` → remainder (modulo)
+- `(Pow n1 n2)` → n1 raised to power n2
+- `(Sqrt n)` → square root (remains symbolic for negative numbers)
+- `(Abs n)` → absolute value
+- `(Min n1 n2 ...)` → minimum of all arguments
+- `(Max n1 n2 ...)` → maximum of all arguments
+- `(Floor n)` → round down to integer
+- `(Ceil n)` → round up to integer
+- `(Round n)` → round to nearest integer
 
 **String Operations:**
-- `(Concat str1 str2 ...)` → concatenates strings/numbers into a string
+- `(Concat s1 s2 ...)` → concatenates strings/numbers into a string
 - `(ToString value)` → converts value to string
+- `(ToUpper str)` → converts to uppercase
+- `(ToLower str)` → converts to lowercase
+- `(Trim str)` → removes leading/trailing whitespace
+- `(StrLen str)` → length of string
+- `(Substring str start end?)` → extract substring
+- `(IndexOf str search)` → find position of substring (-1 if not found)
+- `(Replace str search replacement)` → replace first occurrence
+
+**Comparison Operations:**
+- `(Eq a b)` → equality check, returns `True` or `False`
+- `(Neq a b)` → inequality check
+- `(Lt n1 n2)` → less than (numbers)
+- `(Gt n1 n2)` → greater than (numbers)
+- `(Lte n1 n2)` → less than or equal
+- `(Gte n1 n2)` → greater than or equal
+
+**Boolean Operations:**
+- `(And b1 b2)` → logical AND of `True`/`False` symbols
+- `(Or b1 b2)` → logical OR
+- `(Not b)` → logical NOT
+
+**Type Checking:**
+- `(IsNum value)` → returns `True` or `False`
+- `(IsStr value)` → checks if string
+- `(IsSym value)` → checks if symbol
+- `(IsTrue value)` → checks if symbol `True`
+- `(IsFalse value)` → checks if symbol `False`
 
 **Utilities:**
 - `(FreshId)` → generates a unique identifier string
+- `(Random)` → random number between 0 and 1
+- `(Random min max)` → random number in range
+- `(ParseNum str)` → parse string to number (remains symbolic if invalid)
 
 ### Note on Lists
 
-Lists in this language are not a primitive type. Instead, they are represented as sequences of arguments within calls. List operations like counting, filtering, and mapping are handled through symbolic rules and pattern matching with rest variables `(Var rest___)`. This keeps the primitive layer minimal while providing full list manipulation power through the rewrite system.
+Lists in this language are not a primitive type. Instead, they are represented as sequences of arguments within calls. List operations like counting, filtering, and mapping are handled through symbolic rules and pattern matching with rest variables `(Var rest___)`. This keeps the core language minimal while providing full list manipulation power through the rewrite system.
 
 ---
 
