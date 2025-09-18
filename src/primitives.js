@@ -101,6 +101,7 @@ function foldPrimitive(op, args) {
         case "Random": return foldRandom(args);
         case "ParseNum": return foldParseNum(args);
         case "Debug": return foldDebug(args);
+        case "CharFromCode": return foldCharFromCode(args);
     }
 
     return null;
@@ -597,6 +598,21 @@ function foldDebug(args) {
         return value; // Return the value, not the label
     }
 
+    return null;
+}
+
+/**
+ * Convert ASCII code to character: CharFromCode[Num] -> Str(char)
+ * Converts an ASCII/Unicode code point to its character representation
+ */
+function foldCharFromCode(args) {
+    if (args.length === 1 && isNum(args[0])) {
+        const code = args[0].v;
+        // Handle valid ASCII/Unicode range
+        if (code >= 0 && code <= 0x10FFFF) {
+            return Str(String.fromCharCode(code));
+        }
+    }
     return null;
 }
 

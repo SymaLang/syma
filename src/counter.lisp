@@ -8,20 +8,13 @@
           (P "Value: " (Show Count))
           (Button :onClick Inc :class "btn" "Increment")))))
   (Rules
-    (R "LiftApplyThroughApp"
-       (Apply (Var act) (App (Var st) (Var ui)))
-       (App (Apply (Var act) (Var st)) (Var ui)))
+    (R "LiftApplyThroughProgramAndApp"
+       (Apply act_ (Program (App st_ ui_) eff_))
+       (Program (App (Apply act_ st_) ui_) eff_))
     (R "Inc"
-       (Apply Inc (State (Count (Var n))))
-       (State (Count (Add (Var n) 1))))
+       (Apply Inc (State (Count n_)))
+       (State (Count (Add n_ 1))))
     (R "ShowCount"
-       (/@ (Show Count) (App (State (Count (Var n))) _))
-       (Var n)))
-  (RuleRules
-    ;; Meta-rule: patch Inc to add 2 instead of 1
-    (R "PatchIncAdd"
-       (R "Inc" (Var lhs)
-          (State (Count (Add (Var n) 1))))
-       (R "Inc" (Var lhs)
-          (State (Count (Add (Var n) 2)))))
-  ))
+       (/@ (Show Count) (App (State (Count n_)) _))
+       n_))
+    )

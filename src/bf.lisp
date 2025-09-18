@@ -9,9 +9,9 @@
           Nil         ; Right of the current cell (empty)
           0           ; Instruction Pointer
 ;          "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++." ; This prints 'A'
-          "++++++++++[>++++++<-]>+++++." ; This should also print 'A', now it prints
+;          "++++++++++[>++++++<-]>+++++." ; This should also print 'A', now it prints
 ;           "++++++[->++++++++++[->+<]<]>>+++++." ; Also 'A', but with nested loops
-;           "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." ; Hello World!
+           "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++." ; Hello World!
           ""          ; Output collected
         )
         )
@@ -232,26 +232,6 @@
        (FindMatchingBracketBack code_ (Sub pos_ dir_) dir_ depth_)
        -100)
 
-    ;; --- Helper: Convert ASCII code to character ---
-    (R "CharFromCode/Space" (CharFromCode 32) " ")
-    (R "CharFromCode/Exclaim" (CharFromCode 33) "!")
-    (R "CharFromCode/Comma" (CharFromCode 44) ",")
-    (R "CharFromCode/Period" (CharFromCode 46) ".")
-    (R "CharFromCode/H" (CharFromCode 72) "H")
-    (R "CharFromCode/W" (CharFromCode 87) "W")
-    (R "CharFromCode/d" (CharFromCode 100) "d")
-    (R "CharFromCode/e" (CharFromCode 101) "e")
-    (R "CharFromCode/l" (CharFromCode 108) "l")
-    (R "CharFromCode/o" (CharFromCode 111) "o")
-    (R "CharFromCode/r" (CharFromCode 114) "r")
-    (R "CharFromCode/A" (CharFromCode 65) "A")
-    (R "CharFromCode/B" (CharFromCode 66) "B")
-    (R "CharFromCode/Other" (CharFromCode code_) (Concat "[" (Concat (ToString code_) "]")) -100)
-
-    ;; --- List helpers ---
-    ;; Cons should remain symbolic, not try to create a Call with a number as head
-    ;; We'll leave Cons as-is for the runtime to handle
-
     ;; --- UI Projections ---
     (R "ShowTape"
        (/@ (Show Tape) (App (State (BFState left_ curr_ right_ _ _ _)) _))
@@ -295,12 +275,4 @@
     (R "And/False1" (And False _) False)
     (R "And/False2" (And _ False) False)
   ) ;; End Rules
-
-  ;; Optional: meta-rules to tweak UI or behavior live
-  (RuleRules
-    ;; Example: make Remove into a no-op by rewriting the Remove rule RHS
-    ;; (R "NoDelete"
-    ;;    (R "Remove" (Var lhs) (Var rhs))
-    ;;    (R "Remove" (Var lhs) (Var lhs)))
-  )
 )

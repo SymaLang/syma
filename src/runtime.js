@@ -382,6 +382,24 @@ function getProgram(universe) {
     return node;
 }
 
+/**
+ * Ensure Program has Effects structure for backward compatibility
+ * If Program[App[...]] found, enrich to Program[App[...], Effects[Pending[], Inbox[]]]
+ */
+function enrichProgramWithEffects(universe) {
+    const prog = getProgram(universe);
+
+    // Check if Effects already exists
+    const hasEffects = prog.a.some(n => isCall(n) && isSym(n.h) && n.h.v === "Effects");
+    if (hasEffects) return universe;
+
+    // Add Effects[Pending[], Inbox[]] to Program
+    const enrichedProg = clone(prog);
+    enrichedProg.a.push(Call(Sym("Effects"), Call(Sym("Pending")), Call(Sym("Inbox"))));
+
+    return setProgram(universe, enrichedProg);
+}
+
 function getProgramApp(universe) {
     const prog = getProgram(universe);
     // Program might contain [App[...]] or [App[...], Effects[...]]
@@ -652,6 +670,9 @@ async function boot(universeOrUrl, mountSelector = "#app") {
         uni = universeOrUrl;
     }
 
+    // Enrich Program with Effects if missing (for backward compatibility)
+    uni = enrichProgramWithEffects(uni);
+
     GLOBAL_UNIVERSE = uni;
     GLOBAL_RULES = extractRules(uni);
 
@@ -685,6 +706,8 @@ async function boot(universeOrUrl, mountSelector = "#app") {
     return {
         universe: GLOBAL_UNIVERSE,
         reload: () => {
+            // Re-enrich in case the reloaded version doesn't have Effects
+            uni = enrichProgramWithEffects(uni);
             GLOBAL_UNIVERSE = uni;
             GLOBAL_RULES = extractRules(uni);
             renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
