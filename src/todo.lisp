@@ -27,6 +27,7 @@
                     :class "px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors" "Add")
             (Button :onClick Add3 :class "px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors" "Add 3")
             (Button :onClick TestTimer :class "px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors" "Test Timer")
+            (Button :onClick TestPrint :class "px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors" "Test Print")
             (Span :class "px-4 py-2 text-gray-600 font-medium" "Active: " (Show LeftCount)))
           ;; The list is rendered by projecting a symbolic node that rules expand to real UI
           (Project (RenderTodos))
@@ -150,6 +151,31 @@
          (Effects (Var pending) (Inbox (TimerComplete (Var id) (Var _)) (Var rest___))))
        (Program
          (Apply (AddTodoWithTitle (Str "Timer completed!")) (App (Var state) (Var ui)))
+         (Effects (Var pending) (Inbox (Var rest___)))))
+
+    ;; --- Print effect demo ---
+    ;; TestPrint is a no-op at the state level
+    (R "TestPrint/State"
+       (Apply TestPrint (Var state))
+       (Var state))
+
+    ;; TestPrint action enqueues a print effect at Program level
+    (R "TestPrint/Enqueue"
+       (Apply TestPrint (Program (App (State (TodoState (Var n) (Items (Var items___)) (Var f))) (Var ui)) (Effects (Pending (Var p___)) (Var inbox))))
+       (Program
+         (App (State (TodoState (Var n) (Items (Var items___)) (Var f))) (Var ui))
+         (Effects
+           (Pending (Var p___) (Print (FreshId) (Message (Concat "Todo list has " (Length (Var items___)) " items"))))
+           (Var inbox)))
+       10)  ; High priority to match before lifters
+
+    ;; When print completes, just consume the response
+    (R "PrintComplete/Process"
+       (Program
+         (Var app)
+         (Effects (Var pending) (Inbox (PrintComplete (Var _) (Var _)) (Var rest___))))
+       (Program
+         (Var app)
          (Effects (Var pending) (Inbox (Var rest___)))))
 
     ;; ---------- Projection layer ----------

@@ -176,6 +176,42 @@ function processRandom(req) {
 }
 
 /**
+ * Process Print effect - output to console
+ */
+function processPrint(req) {
+    // Print[id, Message[...]]
+    const [id, message] = req.a;
+    if (!id) return null;
+
+    // Extract message content
+    let output = "";
+    if (message && isCall(message) && isSym(message.h) && message.h.v === "Message") {
+        if (message.a[0]) {
+            if (isStr(message.a[0])) {
+                output = message.a[0].v;
+            } else if (isNum(message.a[0])) {
+                output = String(message.a[0].v);
+            } else if (isSym(message.a[0])) {
+                output = message.a[0].v;
+            } else {
+                // For complex structures, convert to readable format
+                output = JSON.stringify(symbolicToJs(message.a[0]), null, 2);
+            }
+        }
+    }
+
+    // Output to console
+    console.log(`[PRINT ${new Date().toISOString()}]`, output);
+
+    // PrintComplete[id, Success]
+    return Call(
+        Sym("PrintComplete"),
+        id,
+        Sym("Success")
+    );
+}
+
+/**
  * Convert symbolic headers to JS object
  */
 function extractHeaders(headersNode) {
@@ -281,6 +317,10 @@ export function createEffectsProcessor(getProgramFn, setProgramFn, onUpdate) {
 
                     case "RandRequest":
                         response = processRandom(req);
+                        break;
+
+                    case "Print":
+                        response = processPrint(req);
                         break;
 
                     case "Timer":

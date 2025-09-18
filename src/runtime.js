@@ -10,6 +10,7 @@
 import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from './ast-helpers.js';
 import { createEventHandler, handleBinding, clearInput, getInputValue } from './events.js';
 import { createEffectsProcessor, freshId } from './effects-processor.js';
+import { foldPrims } from './primitives.js';
 
 /* -------- Dev trace toggle -------- */
 // Enable tracing via:
@@ -278,24 +279,6 @@ function applyOnceTrace(expr, rules) {
     return { changed: false, expr, rule: null, path: null, before: null, after: null };
 }
 
-function foldPrims(node) {
-    if (isCall(node)) {
-        const h = foldPrims(node.h);
-        const a = node.a.map(foldPrims);
-        // Host arithmetic: Add[Num, Num] -> Num(sum)
-        if (isSym(h) && h.v === "Add" && a.length === 2 && isNum(a[0]) && isNum(a[1])) {
-            return Num(a[0].v + a[1].v);
-        }
-        // Generate fresh ID
-        if (isSym(h) && h.v === "FreshId" && a.length === 0) {
-            return freshId();
-        }
-        return {k: K.Call, h, a};
-    }
-    // atoms unchanged
-    if (isSym(node) || isNum(node) || isStr(node)) return node;
-    throw new Error("foldPrims: unknown node");
-}
 
 function normalize(expr, rules, maxSteps = 1000) {
     let cur = expr;

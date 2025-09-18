@@ -132,11 +132,26 @@ The runtime uses an outermost-first strategy:
 3. Apply the highest-priority matching rule
 4. Repeat until fixed point (no rules match)
 
-### Built-in Operations
+### Built-in Primitives
 
 The runtime provides primitive operations that are folded during normalization:
-- `(Add num1 num2)` → evaluates to the sum
+
+**Arithmetic:**
+- `(Add num1 num2)` → sum of two numbers
+- `(Sub num1 num2)` → difference of two numbers
+- `(Mul num1 num2)` → product of two numbers
+- `(Div num1 num2)` → quotient (returns unreduced for division by zero)
+
+**String Operations:**
+- `(Concat str1 str2 ...)` → concatenates strings/numbers into a string
+- `(ToString value)` → converts value to string
+
+**Utilities:**
 - `(FreshId)` → generates a unique identifier string
+
+### Note on Lists
+
+Lists in this language are not a primitive type. Instead, they are represented as sequences of arguments within calls. List operations like counting, filtering, and mapping are handled through symbolic rules and pattern matching with rest variables `(Var rest___)`. This keeps the primitive layer minimal while providing full list manipulation power through the rewrite system.
 
 ---
 
