@@ -6,20 +6,22 @@ export default defineConfig({
     plugins: [
         tailwindcss(),
         symaPlugin({
-            compiler: 'scripts/sym-2-json.js',
+            entryModule: 'App/Main',
+            modulesDir: 'src/modules',
+            compiler: 'scripts/syma-modules.js',
             pretty: true
         })
     ],
     server: {
         watch: {
-            // Watch for changes in .lisp files
+            // Watch for changes in .syma module files
             usePolling: false,
             interval: 100
         }
     },
     optimizeDeps: {
-        // Exclude .lisp files from dependency optimization
-        exclude: ['*.lisp']
+        // Exclude virtual modules from dependency optimization
+        exclude: ['virtual:*']
     },
     build: {
         target: 'esnext',

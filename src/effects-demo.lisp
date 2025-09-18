@@ -134,8 +134,7 @@
               (Div :class "max-h-40 overflow-y-auto p-3 bg-gray-50 rounded font-mono text-xs"
                 (Project (RenderLog))))))))
 
-    ;; Effects lane for I/O
-    (Effects (Pending) (Inbox)))
+  )
 
   ;; ========= Rules =========
   (Rules
