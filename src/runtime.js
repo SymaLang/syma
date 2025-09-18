@@ -14,6 +14,20 @@ const K = {
     Str:  "Str",
     Call: "Call"
 };
+/* -------- Dev trace toggle -------- */
+// Enable tracing via:
+//   1) window.SYMA_DEV_TRACE = true
+//   2) or URL query ?trace (any value)
+// Tracing prints a step-by-step rewrite log (rule, path, before -> after).
+const SYMA_DEV_TRACE = (() => {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        if (q.has('trace')) return true;
+        if (typeof window !== 'undefined' && window.SYMA_DEV_TRACE === true) return true;
+    } catch (_) {}
+    return false;
+})();
+
 const Sym  = v => ({k:K.Sym, v});
 const Num  = v => ({k:K.Num, v});
 const Str  = v => ({k:K.Str, v});
@@ -142,6 +156,35 @@ function applyOnce(expr, rules) {
     return {changed:false, expr};
 }
 
+/* Tracing variant: track rule name + path of rewrite */
+function applyOnceTrace(expr, rules) {
+    // Try current node
+    for (const r of rules) {
+        const env = match(r.lhs, expr, {});
+        if (env) {
+            const out = subst(r.rhs, env);
+            return { changed: true, expr: out, rule: r.name, path: [], before: expr, after: out };
+        }
+    }
+    // Try children (pre-order)
+    if (isCall(expr)) {
+        for (let i = 0; i < expr.a.length; i++) {
+            const child = expr.a[i];
+            const res = applyOnceTrace(child, rules);
+            if (res.changed) {
+                const next = clone(expr);
+                next.a[i] = res.expr;
+                // Prefix the path with this child index
+                res.path = [i, ...res.path];
+                res.before = child;       // subtree before
+                res.after  = res.expr;    // subtree after at that path
+                return { changed: true, expr: next, rule: res.rule, path: res.path, before: res.before, after: res.after };
+            }
+        }
+    }
+    return { changed: false, expr, rule: null, path: null, before: null, after: null };
+}
+
 function foldPrims(node) {
     if (isCall(node)) {
         const h = foldPrims(node.h);
@@ -167,6 +210,32 @@ function normalize(expr, rules, maxSteps=1000) {
     throw new Error("normalize: exceeded maxSteps (possible non-termination)");
 }
 
+/* Normalization with step trace for debugger UIs */
+function normalizeWithTrace(expr, rules, maxSteps = 1000) {
+    let cur = expr;
+    const trace = [];
+    for (let i = 0; i < maxSteps; i++) {
+        const step = applyOnceTrace(cur, rules);
+        cur = foldPrims(step.expr);
+        if (!step.changed) return { result: cur, trace };
+        // Human-friendly snapshot of *this* rewrite
+        trace.push({
+            i,
+            rule: step.rule,
+            path: step.path,
+            before: step.before,
+            after: step.after
+        });
+    }
+    throw new Error("normalizeWithTrace: exceeded maxSteps (possible non-termination)");
+}
+
+/* Pretty formatter for console use */
+function formatStep(step) {
+    const pathStr = Array.isArray(step.path) ? `[${step.path.join(".")}]` : "[]";
+    return `#${step.i} ${step.rule || "<host/prim>"} ${pathStr}: ${show(step.before)} -> ${show(step.after)}`;
+}
+
 /* --------------------- Universe plumbing --------------------- */
 function getProgram(universe) {
     const node = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v==="Program");
@@ -188,7 +257,18 @@ function setProgram(universe, newProg) {
 function dispatch(universe, rules, actionTerm) {
     const prog = getProgram(universe);
     const applied = Call(Sym("Apply"), actionTerm, prog);
-    const newProg = normalize(applied, rules);
+    let newProg;
+    if (SYMA_DEV_TRACE) {
+        const { result, trace } = normalizeWithTrace(applied, rules);
+        try {
+            console.groupCollapsed?.(`[SYMA TRACE] dispatch ${show(actionTerm)}`);
+            trace.forEach(step => console.log(formatStep(step)));
+            console.groupEnd?.();
+        } catch (_) {}
+        newProg = result;
+    } else {
+        newProg = normalize(applied, rules);
+    }
     return setProgram(universe, newProg);
 }
 
@@ -273,7 +353,18 @@ function renderTextPart(part, state) {
         const appCtx = Call(Sym("App"), state, Sym("_"));
         const annotated = Call(Sym("/@"), part, appCtx); // “apply in context” idiom
         // Let rules reduce it; if it doesn't become Str/Num, complain
-        const reduced = normalize(annotated, GLOBAL_RULES); // GLOBAL_RULES captured at boot
+        const reduced = (() => {
+            if (SYMA_DEV_TRACE) {
+                const { result, trace } = normalizeWithTrace(annotated, GLOBAL_RULES);
+                try {
+                    console.groupCollapsed?.(`[SYMA TRACE] project ${show(part)}`);
+                    trace.forEach(step => console.log(formatStep(step)));
+                    console.groupEnd?.();
+                } catch (_) {}
+                return result;
+            }
+            return normalize(annotated, GLOBAL_RULES);
+        })();
         if (isStr(reduced)) return document.createTextNode(reduced.v);
         if (isNum(reduced)) return document.createTextNode(String(reduced.v));
         // If your rules emit Call(Str[...]) etc., adjust here
@@ -311,8 +402,15 @@ async function boot(universeJsonUrl, mountSelector="#app") {
     renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
 }
 
+/* Helper to trace the exact projector path for Show[...] terms */
+function traceProjection(part, state) {
+    const appCtx = Call(Sym("App"), state, Sym("_"));
+    const annotated = Call(Sym("/@"), part, appCtx);
+    return normalizeWithTrace(annotated, GLOBAL_RULES);
+}
+
 /* --------------------- Expose API ---------------------------- */
-window.SymbolicHost = { boot, show, dispatch, normalize };
+window.SymbolicHost = { boot, show, dispatch, normalize, normalizeWithTrace, formatStep, traceProjection };
 
 Object.defineProperty(window, "GLOBAL_UNIVERSE", {
     get: () => GLOBAL_UNIVERSE
@@ -321,5 +419,12 @@ Object.defineProperty(window, "GLOBAL_RULES", {
     get: () => GLOBAL_RULES
 });
 
+// Dynamic toggle for trace in console: SymbolicHost.setTrace(true/false)
+function setTrace(v) {
+    try { window.SYMA_DEV_TRACE = !!v; } catch (_) {}
+    // No re-render here; next dispatch/projection will honor it.
+    return !!v;
+}
+window.SymbolicHost = { ...window.SymbolicHost, setTrace };
 
 export { boot, show, dispatch };

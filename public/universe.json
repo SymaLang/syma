@@ -52,7 +52,7 @@
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "VStack"
+                    "v": "HStack"
                   },
                   "a": [
                     {

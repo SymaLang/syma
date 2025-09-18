@@ -3,7 +3,7 @@
     (App
       (State (Count 0))
       (UI
-        (VStack
+        (HStack
           (Text "Value: " (Show Count))
           (Button "Increment" (OnClick Inc))))))
   (Rules
