@@ -148,7 +148,11 @@ function matchArgsWithRest(pArgs, tArgs, env) {
 
         // First ensure repeated binding consistency if already present
         let e1 = e;
-        if (Object.prototype.hasOwnProperty.call(e1, name)) {
+        // Treat (VarRest "_") as wildcard - matches any sequence without binding
+        if (name === "_") {
+            // Skip binding for wildcard, just continue matching
+            e1 = e;
+        } else if (Object.prototype.hasOwnProperty.call(e1, name)) {
             const bound = e1[name];
             if (!Array.isArray(bound) || !arrEq(bound, middle)) {
                 continue; // inconsistent, try next take
@@ -169,6 +173,10 @@ function match(pat, subj, env = {}) {
     // Pattern variable?
     if (isVar(pat)) {
         const name = pat.a[0].v;
+        // Treat (Var "_") as wildcard - matches anything without binding
+        if (name === "_") {
+            return env; // Match succeeds without binding
+        }
         if (env.hasOwnProperty(name)) {
             return deq(env[name], subj) ? env : null;
         }
@@ -191,11 +199,15 @@ function match(pat, subj, env = {}) {
 function subst(expr, env) {
     if (isVar(expr)) {
         const name = expr.a[0].v;
+        // Wildcard _ should never appear in RHS, but handle gracefully
+        if (name === "_") throw new Error("subst: wildcard _ cannot be used in replacement");
         if (!(name in env)) throw new Error(`subst: unbound var ${name}`);
         return env[name];
     }
     if (isVarRest(expr)) {
         const name = expr.a[0].v;
+        // Wildcard ___ should never appear in RHS, but handle gracefully
+        if (name === "_") throw new Error("subst: wildcard ___ cannot be used in replacement");
         const seq = env[name] || [];
         if (!Array.isArray(seq)) throw new Error(`subst: VarRest ${name} expected sequence`);
         // Recursively substitute inside the sequence

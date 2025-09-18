@@ -262,6 +262,7 @@ function postprocess(node) {
       else if (nameExpr.k === 'Sym') nameStr = nameExpr.v;
       else die('(Var name) expects symbol or string');
       // Support rest-variable shorthand: (Var xs___) => (VarRest "xs")
+      // Also support (Var ___) => (VarRest "_") for wildcard rest
       if (nameStr.endsWith('___')) {
         const base = nameStr.slice(0, -3);
         return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: base } ] };
