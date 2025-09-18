@@ -217,6 +217,7 @@ const isSym  = n => n && n.k === K.Sym;
 const isNum  = n => n && n.k === K.Num;
 const isStr  = n => n && n.k === K.Str;
 const isCall = n => n && n.k === K.Call;
+
 /**
  * Post-parse fixups so the AST matches runtime conventions:
  *  - (Var x) → Call(Sym("Var"), [Str(x)]) with x coerced to Str
@@ -256,11 +257,16 @@ function postprocess(node) {
     if (head.k === 'Sym' && head.v === 'Var') {
       if (args.length !== 1) die('(Var ...) expects exactly one argument');
       const nameExpr = args[0];
-      let str;
-      if (nameExpr.k === 'Str') str = nameExpr;
-      else if (nameExpr.k === 'Sym') str = { k: 'Str', v: nameExpr.v };
+      let nameStr;
+      if (nameExpr.k === 'Str') nameStr = nameExpr.v;
+      else if (nameExpr.k === 'Sym') nameStr = nameExpr.v;
       else die('(Var name) expects symbol or string');
-      return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [str] };
+      // Support rest-variable shorthand: (Var xs___) => (VarRest "xs")
+      if (nameStr.endsWith('___')) {
+        const base = nameStr.slice(0, -3);
+        return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: base } ] };
+      }
+      return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: nameStr } ] };
     }
 
     return { k: 'Call', h: head, a: args };

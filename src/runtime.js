@@ -46,6 +46,12 @@ const clone = n => JSON.parse(JSON.stringify(n));
 /* Structural deep equality */
 const deq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+const Splice  = (items) => ({ __splice: true, items });
+const isSplice = (x) => x && x.__splice === true && Array.isArray(x.items);
+const arrEq   = (A, B) =>
+    Array.isArray(A) && Array.isArray(B) &&
+    A.length === B.length && A.every((x,i)=>deq(x,B[i]));
+
 /* Pretty (for debugging) */
 const show = n => {
     if (isSym(n)) return n.v;
@@ -59,6 +65,8 @@ const show = n => {
 /* We expect: Rules[...] where each rule is R[name:Str, lhs:Expr, rhs:Expr, prio?:Num] */
 const isR = n => isCall(n) && isSym(n.h) && n.h.v === "R";
 const isVar = n => isCall(n) && isSym(n.h) && n.h.v === "Var" && n.a.length === 1 && isStr(n.a[0]);
+const isVarRest = n =>
+    isCall(n) && isSym(n.h) && n.h.v === "VarRest" && n.a.length === 1 && isStr(n.a[0]);
 
 // --- Meta-rule helpers ---
 function findSection(universe, name) {
@@ -69,7 +77,6 @@ function findSection(universe, name) {
 function extractRulesFromNode(rulesNode) {
     if (!rulesNode || !isCall(rulesNode) || !isSym(rulesNode.h) || (rulesNode.h.v !== "Rules" && rulesNode.h.v !== "RuleRules"))
         throw new Error("extractRulesFromNode: expected Rules[...] or RuleRules[...] node");
-
     const rs = [];
     for (const r of rulesNode.a) {
         if (!isR(r)) throw new Error(`Rules must contain R[...] entries; found ${show(r)}`);
@@ -115,17 +122,54 @@ function match(pat, subj, env = {}) {
         return deq(pat, subj) ? env : null;
     }
     // Calls
+    // Calls
     if (isCall(pat)) {
         if (!isCall(subj)) return null;
+        // Heads must match first
         const env1 = match(pat.h, subj.h, env);
         if (!env1) return null;
-        if (pat.a.length !== subj.a.length) return null;
+
+        const pArgs = pat.a, tArgs = subj.a;
+        // Look for a VarRest in the pattern args
+        const restIdx = pArgs.findIndex(pa => isVarRest(pa));
+        if (restIdx === -1) {
+            if (pArgs.length !== tArgs.length) return null;
+            let e = env1;
+            for (let i = 0; i < pArgs.length; i++) {
+                e = match(pArgs[i], tArgs[i], e);
+                if (!e) return null;
+            }
+            return e;
+        }
+
+        // With one VarRest: split prefix / rest / suffix
+        const prefix = pArgs.slice(0, restIdx);
+        const restVar = pArgs[restIdx];
+        const suffix = pArgs.slice(restIdx + 1);
+
+        if (tArgs.length < prefix.length + suffix.length) return null;
+
         let e = env1;
-        for (let i = 0; i < pat.a.length; i++) {
-            e = match(pat.a[i], subj.a[i], e);
+        // Match prefix
+        for (let i = 0; i < prefix.length; i++) {
+            e = match(prefix[i], tArgs[i], e);
             if (!e) return null;
         }
-        return e;
+        // Match suffix (from the end)
+        for (let i = 0; i < suffix.length; i++) {
+            const p = suffix[suffix.length - 1 - i];
+            const t = tArgs[tArgs.length - 1 - i];
+            e = match(p, t, e);
+            if (!e) return null;
+        }
+        // Bind the middle slice to the rest var
+        const name = restVar.a[0].v;
+        const middle = tArgs.slice(prefix.length, tArgs.length - suffix.length);
+        if (Object.prototype.hasOwnProperty.call(e, name)) {
+            if (!arrEq(e[name], middle)) return null;
+            return e;
+        }
+        return { ...e, [name]: middle };
     }
     throw new Error("match: unknown pattern node");
 }
@@ -136,9 +180,23 @@ function subst(expr, env) {
         if (!(name in env)) throw new Error(`subst: unbound var ${name}`);
         return env[name];
     }
+    if (isVarRest(expr)) {
+        const name = expr.a[0].v;
+        const seq = env[name] || [];
+        if (!Array.isArray(seq)) throw new Error(`subst: VarRest ${name} expected sequence`);
+        // Recursively substitute inside the sequence
+        return Splice(seq.map(n => subst(n, env)));
+    }
     if (isSym(expr) || isNum(expr) || isStr(expr)) return expr;
     if (isCall(expr)) {
-        return Call(subst(expr.h, env), ...expr.a.map(a => subst(a, env)));
+        const h = subst(expr.h, env);
+        const mapped = expr.a.map(a => subst(a, env));
+        const flat = [];
+        for (const m of mapped) {
+            if (isSplice(m)) flat.push(...m.items);
+            else flat.push(m);
+        }
+        return Call(h, ...flat);
     }
     throw new Error("subst: unknown expr node");
 }
@@ -170,40 +228,63 @@ function applyOnce(expr, rules) {
     return {changed: false, expr};
 }
 
-/* Tracing variant: track rule name + path of rewrite */
+/* Tracing variant: track rule name + path of rewrite (iterative, pre-order) */
 function applyOnceTrace(expr, rules) {
-    // Try current node
-    for (const r of rules) {
-        const env = match(r.lhs, expr, {});
-        if (env) {
-            const out = subst(r.rhs, env);
-            return {changed: true, expr: out, rule: r.name, path: [], before: expr, after: out};
+    // Work items hold: parentRef, keyInParent, node, path (array of 'h' or arg index)
+    const work = [{ parent: null, key: null, node: expr, path: [] }];
+    while (work.length) {
+        const { parent, key, node, path } = work.shift();
+        // Try rules at this node
+        for (const r of rules) {
+            const env = match(r.lhs, node, {});
+            if (env) {
+                const out = subst(r.rhs, env);
+                if (parent === null) {
+                    return {
+                        changed: true,
+                        expr: out,
+                        rule: r.name,
+                        path,
+                        before: node,
+                        after: out
+                    };
+                } else {
+                    // write in place into a cloned top-level expr
+                    const root = clone(expr);
+                    // navigate to parent along path excluding last step
+                    let cursor = root;
+                    for (let i = 0; i < path.length - 1; i++) {
+                        const p = path[i];
+                        cursor = (p === 'h') ? cursor.h : cursor.a[p];
+                    }
+                    const last = path[path.length - 1];
+                    if (last === undefined) {
+                        // path points to root
+                        return {
+                            changed: true, expr: out, rule: r.name, path, before: node, after: out
+                        };
+                    }
+                    if (last === 'h') cursor.h = out; else cursor.a[last] = out;
+                    return {
+                        changed: true,
+                        expr: root,
+                        rule: r.name,
+                        path,
+                        before: node,
+                        after: out
+                    };
+                }
+            }
         }
-    }
-    // Try children (pre-order)
-    if (isCall(expr)) {
-        for (let i = 0; i < expr.a.length; i++) {
-            const child = expr.a[i];
-            const res = applyOnceTrace(child, rules);
-            if (res.changed) {
-                const next = clone(expr);
-                next.a[i] = res.expr;
-                // Prefix the path with this child index
-                res.path = [i, ...res.path];
-                res.before = child;       // subtree before
-                res.after = res.expr;    // subtree after at that path
-                return {
-                    changed: true,
-                    expr: next,
-                    rule: res.rule,
-                    path: res.path,
-                    before: res.before,
-                    after: res.after
-                };
+        // Enqueue children (pre-order: head, then args)
+        if (isCall(node)) {
+            work.push({ parent: node, key: 'h', node: node.h, path: path.concat('h') });
+            for (let i = 0; i < node.a.length; i++) {
+                work.push({ parent: node, key: i, node: node.a[i], path: path.concat(i) });
             }
         }
     }
-    return {changed: false, expr, rule: null, path: null, before: null, after: null};
+    return { changed: false, expr, rule: null, path: null, before: null, after: null };
 }
 
 function foldPrims(node) {
@@ -301,6 +382,37 @@ function dispatch(universe, rules, actionTerm) {
 
 /* Supports: App[ State[...], UI[ ... ]] with VStack, HStack, Text, Button[Str, OnClick->action] */
 
+// ---- Debug helpers for /@ projection failures ----
+function tryMatchBool(pat, subj) {
+    try { return match(pat, subj, {}) !== null; } catch (_) { return false; }
+}
+function explainProjectionFailure(annotated, rules) {
+    // annotated is /@[part, App[State[...], _]]
+    const out = [];
+    const lhsCandidates = rules.filter(r => isCall(r.lhs) && isSym(r.lhs.h) && r.lhs.h.v === "/@");
+    for (const r of lhsCandidates) {
+        const pat = r.lhs;
+        const headOK = true; // filtered by "/@"
+        const arityOK = isCall(pat) && isCall(annotated) && pat.a.length === annotated.a.length;
+        let partOK = false, ctxOK = false;
+        if (arityOK) {
+            // Check first arg (the Show[...] part) in isolation
+            partOK = tryMatchBool(pat.a[0], annotated.a[0]);
+            // Check second arg (the App[State[..], _]) in isolation
+            ctxOK = tryMatchBool(pat.a[1], annotated.a[1]);
+        }
+        out.push({
+            rule: r.name,
+            headOK,
+            arityOK,
+            partOK,
+            ctxOK,
+            lhs: show(r.lhs)
+        });
+    }
+    return out;
+}
+
 function splitPropsAndChildren(node) {
     if (!isCall(node)) return {props: null, children: []};
     if (node.a.length && isCall(node.a[0]) && isSym(node.a[0].h) && node.a[0].h.v === "Props") {
@@ -328,9 +440,40 @@ function renderUniverseToDOM(universe, mount, onDispatch) {
     mount.appendChild(renderUI(ui, state, onDispatch));
 }
 
+// Normalize a symbolic UI node under current App/State context and return a UI node
+function projectUI(node, state) {
+    // Build /@ node: (/@ node (App state _))
+    const annotated = Call(Sym("/@"), node, Call(Sym("App"), state, Sym("_")));
+    const currentRules = extractRules(GLOBAL_UNIVERSE);
+    const reduced = SYMA_DEV_TRACE
+        ? normalizeWithTrace(annotated, currentRules).result
+        : normalize(annotated, currentRules);
+    return reduced;
+}
+
 function renderUI(node, state, onDispatch) {
     if (!isCall(node) || !isSym(node.h)) throw new Error(`UI node must be Call; got ${show(node)}`);
     const tag = node.h.v;
+
+    if (tag === "/@") {
+        const currentRules = extractRules(GLOBAL_UNIVERSE);
+        const reduced = SYMA_DEV_TRACE
+            ? normalizeWithTrace(node, currentRules).result
+            : normalize(node, currentRules);
+        return renderUI(reduced, state, onDispatch);
+    }
+
+    if (tag === "Project") {
+        if (node.a.length !== 1) throw new Error("Project[...] expects exactly one child expression");
+        const rendered = projectUI(node.a[0], state);
+        // The result may be a Text-like atom or another UI call
+        if (isStr(rendered) || isNum(rendered) || isSym(rendered)) {
+            const span = document.createElement("span");
+            span.appendChild(renderTextPart(rendered, state));
+            return span;
+        }
+        return renderUI(rendered, state, onDispatch);
+    }
 
     if (tag === "UI") {
         if (node.a.length !== 1) throw new Error("UI[...] must wrap exactly one subtree");
@@ -363,6 +506,7 @@ function renderUI(node, state, onDispatch) {
     return el;
 }
 
+
 function renderTextPart(part, state) {
     // Two cases:
     // 1) literal Str / Num
@@ -392,6 +536,20 @@ function renderTextPart(part, state) {
         if (isStr(reduced)) return document.createTextNode(reduced.v);
         if (isNum(reduced)) return document.createTextNode(String(reduced.v));
         // If your rules emit Call(Str[...]) etc., adjust here
+        try {
+            const currentRules = extractRules(GLOBAL_UNIVERSE);
+            const hints = explainProjectionFailure(annotated, currentRules)
+                .filter(h => h.headOK)
+                .slice(0, 8);
+            console.groupCollapsed?.(`[SYMA HINT] /@ failed for ${show(part)} in context; result=${show(reduced)}`);
+            console.log("Annotated:", show(annotated));
+            if (hints.length === 0) {
+                console.log("No /@ rules found. Ensure a rule like (R \"ShowX\" (/@ (Show X) (App (State ...) _)) ... ) exists.");
+            } else {
+                console.table(hints);
+            }
+            console.groupEnd?.();
+        } catch (_) {}
         throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
     }
 
