@@ -1,0 +1,22 @@
+(Module Examples/Counter
+  (Export)
+
+  (Program
+    (App
+      (State (Count 0))
+      (UI
+        (Div :class "card"
+          (H1 "Counter")
+          (P "Value: " (Show Count))
+          (Button :onClick Inc :class "btn" "Increment")))))
+
+  (Rules
+    (R "LiftApplyThroughProgramAndApp"
+       (Apply act_ (Program (App st_ ui_) eff_))
+       (Program (App (Apply act_ st_) ui_) eff_))
+    (R "Inc"
+       (Apply Inc (State (Count n_)))
+       (State (Count (Add n_ 1))))
+    (R "ShowCount"
+       (/@ (Show Count) (App (State (Count n_)) _))
+       n_)))

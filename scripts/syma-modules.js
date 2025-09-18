@@ -166,19 +166,32 @@ class SymbolQualifier {
                       'Substring', 'IndexOf', 'Replace', 'Eq', 'Neq', 'Lt', 'Gt',
                       'Lte', 'Gte', 'And', 'Or', 'Not', 'IsNum', 'IsStr', 'IsSym',
                       'IsTrue', 'IsFalse', 'FreshId', 'Random', 'ParseNum', 'Debug',
-                      'If', 'Cons', 'IsNil',
+                      'If', 'Cons', 'IsNil', 'CharFromCode',
                       // Special forms that are part of the language
                       'R', 'Universe', 'Program', 'Rules', 'RuleRules', 'App', 'State',
-                      'UI', 'Apply', 'Bundle', 'Module', 'Import', 'Export', 'Defs',
+                      'UI', 'Apply', 'Bundle', 'Module', 'Import', 'Export', 'Defs', 'Effects',
+                      'Var', 'VarRest', '/@',
                       // Runtime operators
                       'Show', 'Project', 'Input',
+                      // Event action combinators
+                      'Seq', 'When', 'PreventDefault', 'StopPropagation', 'KeyIs',
+                      'ClearInput', 'SetInput',
                       // HTML tags - MUST remain unqualified for DOM
                       'Div', 'Span', 'H1', 'H2', 'H3', 'P', 'Button', 'Input', 'Ul', 'Li', 'Fragment',
                       'A', 'Section', 'Header', 'Footer', 'Nav', 'Main', 'Article', 'Aside',
                       'Form', 'Label', 'Select', 'Option', 'Textarea', 'Table', 'Tr', 'Td', 'Th',
                       'Img', 'Video', 'Audio', 'Canvas', 'Svg', 'Path',
                       // Tag helper symbols
-                      'KV', 'Props'];
+                      'KV', 'Props',
+                      // Effect terms
+                      'Pending', 'Inbox', 'Timer', 'Delay', 'TimerComplete', 'Print', 'Message',
+                      'PrintComplete', 'AnimationFrame', 'AnimationFrameComplete', 'Now',
+                      'StorageSet', 'StorageGet', 'StorageDel', 'Store', 'Local', 'Session',
+                      'Key', 'Value', 'StorageSetComplete', 'StorageGetComplete', 'StorageDelComplete',
+                      'Found', 'Missing', 'Ok', 'ClipboardWrite', 'ClipboardRead', 'Text',
+                      'ClipboardWriteComplete', 'ClipboardReadComplete', 'Navigate', 'Url',
+                      'NavigateComplete', 'ReadLocation', 'ReadLocationComplete', 'Location',
+                      'Path', 'RandRequest', 'RandResponse'];
     if (builtins.includes(sym)) return sym;
 
     // Is it exported by an open import?
@@ -189,8 +202,10 @@ class SymbolQualifier {
       }
     }
 
-    // Otherwise, qualify with current module
-    return `${this.module.name}/${sym}`;
+    // Otherwise, it's a local symbol - keep it unqualified!
+    // Local symbols within a module should remain unqualified
+    // so that pattern matching in rules works correctly
+    return sym;
   }
 
   resolveAlias(sym) {
@@ -205,6 +220,54 @@ class SymbolQualifier {
       }
     }
     return sym;
+  }
+
+  // Special handling for event handler expressions
+  qualifyEventHandler(node) {
+    if (!node) return node;
+
+    if (isSym(node)) {
+      // Action names in event handlers should not be qualified
+      return node;
+    }
+
+    if (isCall(node)) {
+      const head = node.h;
+
+      // Common event handler combinators
+      if (isSym(head)) {
+        const headName = head.v;
+
+        // These combinators take actions as arguments
+        if (headName === 'Seq' || headName === 'When' || headName === 'If' ||
+            headName === 'PreventDefault' || headName === 'StopPropagation') {
+          // First argument might be a condition (for When/If) or action
+          if (headName === 'When' || headName === 'If') {
+            // When/If: first arg is condition, rest are actions
+            return Call(
+              head,
+              this.qualify(node.a[0]), // Condition gets qualified
+              ...node.a.slice(1).map(a => this.qualifyEventHandler(a))
+            );
+          } else {
+            // Other combinators: all args are actions
+            return Call(head, ...node.a.map(a => this.qualifyEventHandler(a)));
+          }
+        }
+
+        // Input-related actions
+        if (headName === 'ClearInput' || headName === 'SetInput') {
+          return node; // Keep as-is
+        }
+
+        // This is an action call - don't qualify the head
+        return Call(head, ...node.a.map(a => this.qualify(a)));
+      }
+
+      return Call(this.qualifyEventHandler(head), ...node.a.map(a => this.qualifyEventHandler(a)));
+    }
+
+    return this.qualify(node);
   }
 
   qualify(node) {
@@ -232,6 +295,43 @@ class SymbolQualifier {
           node.a[0], // Keep rule name as-is
           ...node.a.slice(1).map(a => this.qualify(a))
         );
+      }
+
+      // Special case: Apply action names (first arg) should not be qualified
+      if (isSym(node.h) && node.h.v === 'Apply' && node.a.length >= 1) {
+        const firstArg = node.a[0];
+        // If the first arg is a symbol or a call with symbol head, don't qualify it
+        if (isSym(firstArg)) {
+          return Call(
+            this.qualify(node.h),
+            firstArg, // Keep action name as-is
+            ...node.a.slice(1).map(a => this.qualify(a))
+          );
+        } else if (isCall(firstArg) && isSym(firstArg.h)) {
+          // For calls like (AddTodoWithTitle ...), keep the head unqualified
+          return Call(
+            this.qualify(node.h),
+            Call(firstArg.h, ...firstArg.a.map(a => this.qualify(a))),
+            ...node.a.slice(1).map(a => this.qualify(a))
+          );
+        }
+      }
+
+      // Special case: KV nodes for event handlers - don't qualify the action value
+      if (isSym(node.h) && node.h.v === 'KV' && node.a.length >= 2) {
+        const [key, value] = node.a;
+        if (isStr(key) && (key.v === 'onClick' || key.v === 'onKeydown' || key.v === 'onSubmit' ||
+                          key.v === 'onChange' || key.v === 'onInput' || key.v === 'onFocus' ||
+                          key.v === 'onBlur')) {
+          // For event handlers, don't qualify the action if it's a symbol or has a symbol head
+          if (isSym(value)) {
+            return Call(this.qualify(node.h), key, value);
+          } else if (isCall(value)) {
+            // For complex event handlers like (When ...), recursively handle but preserve action names
+            return Call(this.qualify(node.h), key, this.qualifyEventHandler(value));
+          }
+          return Call(this.qualify(node.h), key, this.qualify(value));
+        }
       }
 
       return Call(this.qualify(node.h), ...node.a.map(a => this.qualify(a)));
@@ -596,7 +696,7 @@ function postprocess(node) {
       return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: base } ] };
     }
 
-    // Check for regular variable shorthand
+      // Check for regular variable shorthand
     if (v === '_') {
       return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: '_' } ] };
     } else if (v.endsWith('_') && !v.endsWith('___')) {
@@ -610,20 +710,23 @@ function postprocess(node) {
   if (node.k === 'Call') {
     const head = postprocess(node.h);
 
-    // Special handling for (Var ...)
-    if (head.k === 'Sym' && head.v === 'Var') {
-      if (node.a.length !== 1) die('(Var ...) expects exactly one argument');
+    // Special handling for (Var ...) and (VarRest ...)
+    if (head.k === 'Sym' && (head.v === 'Var' || head.v === 'VarRest')) {
+      if (node.a.length !== 1) die(`(${head.v} ...) expects exactly one argument`);
       const nameExpr = node.a[0];
       let nameStr;
       if (nameExpr.k === 'Str') nameStr = nameExpr.v;
       else if (nameExpr.k === 'Sym') nameStr = nameExpr.v;
-      else die('(Var name) expects symbol or string');
+      else die(`(${head.v} name) expects symbol or string`);
 
-      if (nameStr.endsWith('___')) {
+      // Handle triple underscore in explicit Var
+      if (head.v === 'Var' && nameStr.endsWith('___')) {
         const base = nameStr.slice(0, -3);
         return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: base } ] };
       }
-      return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: nameStr } ] };
+
+      // Always convert to string argument
+      return { k: 'Call', h: { k: 'Sym', v: head.v }, a: [ { k: 'Str', v: nameStr } ] };
     }
 
     const args = node.a.map(postprocess);

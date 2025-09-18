@@ -5,10 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "VITE_DEMO_MODE=true vite",
     "build": "vite build",
     "preview": "vite preview",
     "compile": "node scripts/syma-modules.js src/modules/*.syma --bundle --entry App/Main --out public/universe.json --pretty",
-    "watch": "nodemon --watch 'src/modules/**/*.syma' --ext syma --exec 'npm run compile'"
+    "watch": "nodemon --watch 'src/modules/**/*.syma' --ext syma --exec 'npm run compile'",
+    "demo:counter": "node scripts/syma-modules.js src/demos/counter.syma --bundle --entry Demo/Counter --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:todo": "node scripts/syma-modules.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:effects": "node scripts/syma-modules.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:bf": "node scripts/syma-modules.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "build:demo:counter": "node scripts/syma-modules.js src/demos/counter.syma --bundle --entry Demo/Counter --out public/universe.json --pretty",
+    "build:demo:todo": "node scripts/syma-modules.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty",
+    "build:demo:effects": "node scripts/syma-modules.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty",
+    "build:demo:bf": "node scripts/syma-modules.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty"
   },
   "devDependencies": {
     "@rollup/pluginutils": "^5.3.0",

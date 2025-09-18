@@ -1,8 +1,8 @@
-# Symbolic S-Expression Language Documentation
+# Syma Symbolic S-Expression Language Documentation
 
 ## 1. Introduction
 
-This document describes a symbolic language based on S-expressions. The language uses symbolic expressions (S-expressions) as its core syntax and compiles these expressions into a JSON Abstract Syntax Tree (AST) representation. It is designed to express programs, rules, and transformations in a concise and symbolic manner. The language supports atoms, function calls, special forms, pattern matching with wildcards, a module system for code organization, and a structured universe of programs and rules that can be normalized by applying rewrite rules repeatedly.
+This document describes Syma — a symbolic language based on S-expressions. The language uses symbolic expressions (S-expressions) as its core syntax and compiles these expressions into a JSON Abstract Syntax Tree (AST) representation. It is designed to express programs, rules, and transformations in a concise and symbolic manner. The language supports atoms, function calls, special forms, pattern matching with wildcards, a module system for code organization, and a structured universe of programs and rules that can be normalized by applying rewrite rules repeatedly.
 
 ---
 
@@ -565,23 +565,31 @@ This shows each rule application with the matched pattern and replacement.
 
 ### File Extensions
 
-- `.lisp` or `.sym` - Source files in S-expression syntax
+- `.syma` - Source files in S-expression syntax (module format)
+- `.lisp` or `.sym` - Legacy source files (non-module format)
 - `.json` - Compiled AST representation
 
 ### Compilation
 
 Convert source to AST:
 ```bash
-node scripts/sym-2-json.js input.lisp --out output.json --pretty
+# For single files (backward compatibility)
+node scripts/syma-modules.js input.syma --out output.json --pretty
+
+# Bundle modules into a Universe
+node scripts/syma-modules.js src/modules/*.syma --bundle --entry App/Main --out universe.json
 ```
 
 ---
 
 ## 15. Module Compilation
 
-The module system uses a separate compiler that handles bundling and symbol qualification:
+The `syma-modules.js` compiler handles both single files and module bundling:
 
 ```bash
+# Single file mode (backward compatibility for non-module files)
+node scripts/syma-modules.js input.syma --out output.json --pretty
+
 # Bundle modules into a Universe
 node scripts/syma-modules.js src/modules/*.syma --bundle --entry App/Main --out universe.json
 
