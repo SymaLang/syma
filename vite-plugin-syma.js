@@ -32,7 +32,7 @@ export default function symaPlugin(options = {}) {
     async function parseModuleInfo(filePath) {
         const content = await fs.readFile(filePath, 'utf-8');
 
-        const moduleMatch = content.match(/\(Module\s+([A-Za-z0-9/_-]+)/);
+        const moduleMatch = content.match(/\{Module\s+([A-Za-z0-9/_-]+)/);
         if (!moduleMatch) {
             throw new Error(`${filePath} is not a valid module file`);
         }
@@ -40,7 +40,7 @@ export default function symaPlugin(options = {}) {
         const moduleName = moduleMatch[1];
         const imports = [];
 
-        const importRegex = /\(Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+open)?\)/g;
+        const importRegex = /\{Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+open)?\}/g;
         let match;
         while ((match = importRegex.exec(content)) !== null) {
             imports.push(match[1]);

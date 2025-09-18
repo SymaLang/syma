@@ -23,13 +23,13 @@ Atoms represent constant values or symbolic identifiers in the language.
 A **Call** is an S-expression where the first element is the head (function or operator) and the rest are arguments. The syntax is:
 
 ```lisp
-(Head arg1 arg2 …)
+{Head arg1 arg2 …}
 ```
 
 This corresponds to a `Call` node in the JSON AST with a `head` and a list of `args`. For example:
 
 ```lisp
-(Add 1 2)
+{Add 1 2}
 ```
 
 represents a call to `Add` with arguments `1` and `2`.
@@ -46,12 +46,12 @@ The language uses pattern variables for matching and binding values in rules. Th
 
 **Explicit syntax:**
 ```lisp
-(Var name)   ; Pattern variable that binds to "name"
+{Var name}   ; Pattern variable that binds to "name"
 ```
 
 **Shorthand syntax:**
 ```lisp
-name_        ; Equivalent to (Var name)
+name_        ; Equivalent to {Var name}
 ```
 
 Variables are used in rule patterns to capture values that can be referenced in the replacement.
@@ -62,12 +62,12 @@ The special variable `_` acts as a wildcard that matches any value without bindi
 
 **Explicit syntax:**
 ```lisp
-(Var _)      ; Matches any single expression, discards the value
+{Var _}      ; Matches any single expression, discards the value
 ```
 
 **Shorthand syntax:**
 ```lisp
-_            ; Equivalent to (Var _)
+_            ; Equivalent to {Var _}
 ```
 
 This is useful when you need to match a structure but don't care about certain values.
@@ -78,15 +78,15 @@ Rest variables match zero or more elements in a sequence:
 
 **Explicit syntax:**
 ```lisp
-(Var xs___)  ; Rest variable using triple underscore suffix
-(VarRest xs) ; Alternative explicit form
-(Var ___)    ; Wildcard rest (matches any sequence without binding)
+{Var xs...}  ; Rest variable using triple underscore suffix
+{VarRest xs} ; Alternative explicit form
+{Var ...}    ; Wildcard rest (matches any sequence without binding)
 ```
 
 **Shorthand syntax:**
 ```lisp
-xs___        ; Equivalent to (Var xs___) or (VarRest xs)
-___          ; Equivalent to (Var ___) - wildcard rest
+xs...        ; Equivalent to {Var xs...} or {VarRest xs}
+...          ; Equivalent to {Var ...} - wildcard rest
 ```
 
 ### Examples
@@ -94,20 +94,20 @@ ___          ; Equivalent to (Var ___) - wildcard rest
 Pattern matching with mixed syntax:
 ```lisp
 ;; These are equivalent:
-(R "Rule1"
-   (Apply (Toggle (Var id))
-      (TodoState (NextId (Var n)) (Items (Var before___) (Item (Id (Var id))) (Var after___))))
-   ...)
+{R "Rule1"
+   {Apply {Toggle {Var id}}
+      {TodoState {NextId {Var n}} {Items {Var before...} {Item {Id {Var id}}} {Var after...}}}}
+   ...}
 
-(R "Rule1"
-   (Apply (Toggle id_)
-      (TodoState (NextId n_) (Items before___ (Item (Id id_)) after___)))
-   ...)
+{R "Rule1"
+   {Apply {Toggle id_}
+      {TodoState {NextId n_} {Items before... {Item {Id id_}} after...}}}
+   ...}
 
 ;; Mix and match as needed for clarity:
-(Items first_ rest___)           ; First item and rest of list
-(Filter _)                        ; Don't care about filter value
-(State _ (Items ___) active_)    ; Wildcard, any items, capture active
+{Items first_ rest...}           ; First item and rest of list
+{Filter _}                        ; Don't care about filter value
+{State _ {Items ...} active_}    ; Wildcard, any items, capture active
 ```
 
 ---
@@ -119,13 +119,13 @@ Pattern matching with mixed syntax:
 The language supports a module system for organizing code into reusable, composable units:
 
 ```lisp
-(Module Module/Name
-  (Export Symbol1 Symbol2 ...)           ; What this module provides
-  (Import Other/Module as Alias [open])  ; Dependencies
-  (Defs (Name value) ...)                ; Constants/definitions
-  (Program ...)                           ; Main program (entry modules only)
-  (Rules ...)                             ; Transformation rules
-  (RuleRules ...))                        ; Meta-rules (optional)
+{Module Module/Name
+  {Export Symbol1 Symbol2 ...}           ; What this module provides
+  {Import Other/Module as Alias [open]}  ; Dependencies
+  {Defs {Name value} ...}                ; Constants/definitions
+  {Program ...}                           ; Main program (entry modules only)
+  {Rules ...}                             ; Transformation rules
+  {RuleRules ...}}                        ; Meta-rules (optional)
 ```
 
 ### Imports
@@ -134,10 +134,10 @@ Modules can import symbols from other modules:
 
 ```lisp
 ;; Qualified import - symbols accessed as Alias/Name
-(Import Core/KV as KV)  ; Use as: KV/Get, KV/Set
+{Import Core/KV as KV}  ; Use as: KV/Get, KV/Set
 
 ;; Open import - symbols available unqualified
-(Import Core/KV as KV open)  ; Use as: Get, Set
+{Import Core/KV as KV open}  ; Use as: Get, Set
 ```
 
 ### Symbol Qualification
@@ -151,19 +151,19 @@ After compilation, all symbols are qualified with their module namespace:
 ### Module Example
 
 ```lisp
-(Module App/Counter
-  (Import Core/KV as KV open)
+{Module App/Counter
+  {Import Core/KV as KV open}
 
-  (Export InitialState Inc Dec)
+  {Export InitialState Inc Dec}
 
-  (Defs
-    (InitialState
-      (CounterState (KV Count 0))))
+  {Defs
+    {InitialState
+      {CounterState {KV Count 0}}}}
 
-  (Rules
-    (R "Inc"
-       (Apply Inc st_)
-       (Set CounterState Count (Add (Get CounterState Count st_) 1) st_))))
+  {Rules
+    {R "Inc"
+       {Apply Inc st_}
+       {Set CounterState Count {Add {Get CounterState Count st_} 1} st_}}}}
 ```
 
 ---
@@ -173,10 +173,10 @@ After compilation, all symbols are qualified with their module namespace:
 When modules are bundled, they produce a **Universe** structure:
 
 ```lisp
-(Universe
-  (Program …)      ; From entry module
-  (Rules …)        ; Combined from all modules
-  (RuleRules …))   ; Combined meta-rules
+{Universe
+  {Program …}      ; From entry module
+  {Rules …}        ; Combined from all modules
+  {RuleRules …}}   ; Combined meta-rules
 ```
 
 - **Program**: Main program from the entry module
@@ -192,7 +192,7 @@ When modules are bundled, they produce a **Universe** structure:
 Rules define pattern-based transformations:
 
 ```lisp
-(R "Name" pattern replacement priority?)
+{R "Name" pattern replacement priority?}
 ```
 
 - `"Name"`: A string identifier for the rule
@@ -204,9 +204,9 @@ Rules define pattern-based transformations:
 
 Patterns can include:
 - Literal atoms that must match exactly
-- `(Var name)` to capture and bind values
-- `(Var _)` as wildcards
-- `(Var name___)` for rest patterns
+- `{Var name}` to capture and bind values
+- `{Var _}` as wildcards
+- `{Var name...}` for rest patterns
 - Nested structures combining all of the above
 
 ### Normalization Strategy
@@ -222,61 +222,61 @@ The runtime uses an outermost-first strategy:
 The runtime provides a comprehensive standard library of primitive operations that are folded during normalization:
 
 **Arithmetic Operations:**
-- `(Add n1 n2)` → sum of two numbers
-- `(Sub n1 n2)` → difference of two numbers
-- `(Mul n1 n2)` → product of two numbers
-- `(Div n1 n2)` → quotient (remains symbolic for division by zero)
-- `(Mod n1 n2)` → remainder (modulo)
-- `(Pow n1 n2)` → n1 raised to power n2
-- `(Sqrt n)` → square root (remains symbolic for negative numbers)
-- `(Abs n)` → absolute value
-- `(Min n1 n2 ...)` → minimum of all arguments
-- `(Max n1 n2 ...)` → maximum of all arguments
-- `(Floor n)` → round down to integer
-- `(Ceil n)` → round up to integer
-- `(Round n)` → round to nearest integer
+- `{Add n1 n2}` → sum of two numbers
+- `{Sub n1 n2}` → difference of two numbers
+- `{Mul n1 n2}` → product of two numbers
+- `{Div n1 n2}` → quotient (remains symbolic for division by zero)
+- `{Mod n1 n2}` → remainder (modulo)
+- `{Pow n1 n2}` → n1 raised to power n2
+- `{Sqrt n}` → square root (remains symbolic for negative numbers)
+- `{Abs n}` → absolute value
+- `{Min n1 n2 ...}` → minimum of all arguments
+- `{Max n1 n2 ...}` → maximum of all arguments
+- `{Floor n}` → round down to integer
+- `{Ceil n}` → round up to integer
+- `{Round n}` → round to nearest integer
 
 **String Operations:**
-- `(Concat s1 s2 ...)` → concatenates strings/numbers into a string
-- `(ToString value)` → converts value to string
-- `(ToUpper str)` → converts to uppercase
-- `(ToLower str)` → converts to lowercase
-- `(Trim str)` → removes leading/trailing whitespace
-- `(StrLen str)` → length of string
-- `(Substring str start end?)` → extract substring
-- `(IndexOf str search)` → find position of substring (-1 if not found)
-- `(Replace str search replacement)` → replace first occurrence
+- `{Concat s1 s2 ...}` → concatenates strings/numbers into a string
+- `{ToString value}` → converts value to string
+- `{ToUpper str}` → converts to uppercase
+- `{ToLower str}` → converts to lowercase
+- `{Trim str}` → removes leading/trailing whitespace
+- `{StrLen str}` → length of string
+- `{Substring str start end?}` → extract substring
+- `{IndexOf str search}` → find position of substring (-1 if not found)
+- `{Replace str search replacement}` → replace first occurrence
 
 **Comparison Operations:**
-- `(Eq a b)` → equality check, returns `True` or `False`
-- `(Neq a b)` → inequality check
-- `(Lt n1 n2)` → less than (numbers)
-- `(Gt n1 n2)` → greater than (numbers)
-- `(Lte n1 n2)` → less than or equal
-- `(Gte n1 n2)` → greater than or equal
+- `{Eq a b}` → equality check, returns `True` or `False`
+- `{Neq a b}` → inequality check
+- `{Lt n1 n2}` → less than (numbers)
+- `{Gt n1 n2}` → greater than (numbers)
+- `{Lte n1 n2}` → less than or equal
+- `{Gte n1 n2}` → greater than or equal
 
 **Boolean Operations:**
-- `(And b1 b2)` → logical AND of `True`/`False` symbols
-- `(Or b1 b2)` → logical OR
-- `(Not b)` → logical NOT
+- `{And b1 b2}` → logical AND of `True`/`False` symbols
+- `{Or b1 b2}` → logical OR
+- `{Not b}` → logical NOT
 
 **Type Checking:**
-- `(IsNum value)` → returns `True` or `False`
-- `(IsStr value)` → checks if string
-- `(IsSym value)` → checks if symbol
-- `(IsTrue value)` → checks if symbol `True`
-- `(IsFalse value)` → checks if symbol `False`
+- `{IsNum value}` → returns `True` or `False`
+- `{IsStr value}` → checks if string
+- `{IsSym value}` → checks if symbol
+- `{IsTrue value}` → checks if symbol `True`
+- `{IsFalse value}` → checks if symbol `False`
 
 **Utilities:**
-- `(FreshId)` → generates a unique identifier string
-- `(Random)` → random number between 0 and 1
-- `(Random min max)` → random number in range
-- `(ParseNum str)` → parse string to number (remains symbolic if invalid)
-- `(Debug label? value)` → logs to console and returns value (for debugging)
+- `{FreshId}` → generates a unique identifier string
+- `{Random}` → random number between 0 and 1
+- `{Random min max}` → random number in range
+- `{ParseNum str}` → parse string to number (remains symbolic if invalid)
+- `{Debug label? value}` → logs to console and returns value (for debugging)
 
 ### Note on Lists
 
-Lists in this language are not a primitive type. Instead, they are represented as sequences of arguments within calls. List operations like counting, filtering, and mapping are handled through symbolic rules and pattern matching with rest variables `(Var rest___)`. This keeps the core language minimal while providing full list manipulation power through the rewrite system.
+Lists in this language are not a primitive type. Instead, they are represented as sequences of arguments within calls. List operations like counting, filtering, and mapping are handled through symbolic rules and pattern matching with rest variables `{Var rest...}`. This keeps the core language minimal while providing full list manipulation power through the rewrite system.
 
 ---
 
@@ -287,9 +287,9 @@ Lists in this language are not a primitive type. Instead, they are represented a
 The language includes a DSL for defining user interfaces:
 
 ```lisp
-(Div :class "card"
-  (H1 "Title")
-  (Button :onClick ActionName "Click me"))
+{Div :class "card"
+  {H1 "Title"}
+  {Button :onClick ActionName "Click me"}}
 ```
 
 ### Tag Properties
@@ -301,15 +301,15 @@ Properties are specified using `:key value` syntax:
 
 ### Dynamic Content
 
-Use `(Show expression)` to display computed values:
+Use `{Show expression}` to display computed values:
 
 ```lisp
-(Span "Count: " (Show CountValue))
+{Span "Count: " {Show CountValue}}
 ```
 
 ### Projection
 
-The `(Project expression)` form evaluates an expression in the current state context and renders the result as UI.
+The `{Project expression}` form evaluates an expression in the current state context and renders the result as UI.
 
 ---
 
@@ -318,14 +318,14 @@ The `(Project expression)` form evaluates an expression in the current state con
 The projection operator `/@` enables context-aware evaluation:
 
 ```lisp
-(/@ expression context)
+{/@ expression context}
 ```
 
 Common usage in rules:
 ```lisp
-(R "ShowCount"
-  (/@ (Show Count) (App (State ...) (Var _)))
-  (Str "42"))
+{R "ShowCount"
+  {/@ {Show Count} {App {State ...} {Var _}}}
+  {Str "42"}}
 ```
 
 This allows rules to match projections and compute values based on the current application state.
@@ -337,19 +337,19 @@ This allows rules to match projections and compute values based on the current a
 Events are handled through the `Apply` pattern:
 
 ```lisp
-(Apply action state) → new-state
+{Apply action state} → new-state
 ```
 
 The runtime dispatches events by:
-1. Wrapping the action: `(Apply action currentProgram)`
+1. Wrapping the action: `{Apply action currentProgram}`
 2. Normalizing with rules
 3. Updating the UI with the new state
 
 Lifting rules propagate `Apply` through state containers:
 ```lisp
-(R "LiftApplyThroughApp"
-  (Apply (Var act) (App (Var st) (Var ui)))
-  (App (Apply (Var act) (Var st)) (Var ui)))
+{R "LiftApplyThroughApp"
+  {Apply {Var act} {App {Var st} {Var ui}}}
+  {App {Apply {Var act} {Var st}} {Var ui}}}
 ```
 
 ---
@@ -363,11 +363,11 @@ The language supports a purely symbolic effects system where all I/O operations 
 Programs can include an Effects node alongside the main application:
 
 ```lisp
-(Program
-  (App ...)           ; Main application
-  (Effects            ; Effects lane
-    (Pending ...)     ; Outbound effect requests
-    (Inbox ...)))     ; Inbound effect responses
+{Program
+  {App ...}           ; Main application
+  {Effects            ; Effects lane
+    {Pending ...}     ; Outbound effect requests
+    {Inbox ...}}}     ; Inbound effect responses
 ```
 
 ### Effect Flow
@@ -381,115 +381,115 @@ Programs can include an Effects node alongside the main application:
 
 ```lisp
 ;; Enqueue a timer effect
-(R "StartTimer"
-   (Apply StartTimer (Program (Var app) (Effects (Pending (Var p___)) (Var inbox))))
-   (Program
-     (Var app)
-     (Effects
-       (Pending (Var p___) (Timer (FreshId) (Delay 2000)))
-       (Var inbox)))
-   10)  ; High priority to match before lifters
+{R "StartTimer"
+   {Apply StartTimer {Program {Var app} {Effects {Pending {Var p...}} {Var inbox}}}}
+   {Program
+     {Var app}
+     {Effects
+       {Pending {Var p...} {Timer {FreshId} {Delay 2000}}}
+       {Var inbox}}}
+   10}  ; High priority to match before lifters
 
 ;; Process timer completion
-(R "TimerComplete"
-   (Program
-     (App (Var state) (Var ui))
-     (Effects (Var pending) (Inbox (TimerComplete (Var id) (Var _)) (Var rest___))))
-   (Program
-     (Apply DoSomething (App (Var state) (Var ui)))
-     (Effects (Var pending) (Inbox (Var rest___)))))
+{R "TimerComplete"
+   {Program
+     {App {Var state} {Var ui}}
+     {Effects {Var pending} {Inbox {TimerComplete {Var id} {Var _}} {Var rest...}}}}
+   {Program
+     {Apply DoSomething {App {Var state} {Var ui}}}
+     {Effects {Var pending} {Inbox {Var rest...}}}}}
 ```
 
 ### Supported Effect Types
 
 #### Time & Scheduling
 
-- **Timer**: `(Timer id (Delay ms))` → `(TimerComplete id (Now timestamp))`
-- **AnimationFrame**: `(AnimationFrame id)` → `(AnimationFrameComplete id (Now timestamp))`
+- **Timer**: `{Timer id {Delay ms}}` → `{TimerComplete id {Now timestamp}}`
+- **AnimationFrame**: `{AnimationFrame id}` → `{AnimationFrameComplete id {Now timestamp}}`
 
 #### Networking
 
-- **HttpReq**: `(HttpReq id (Method "POST") (Url "/api") (Body data) (Headers ...))` → `(HttpRes id (Status 200) (Json result) (Headers ...))`
-- **WebSocket Connect**: `(WsConnect id (Url "wss://..."))` → `(WsConnectComplete id Opened)`
-- **WebSocket Send**: `(WsSend id (Text "message"))` → `(WsSendComplete id Ack)`
-- **WebSocket Receive**: Appears in inbox as `(WsRecv id (Text "message"))`
-- **WebSocket Close**: `(WsClose id (Code 1000) (Reason ""))` → `(WsCloseComplete id Closed)`
+- **HttpReq**: `{HttpReq id {Method "POST"} {Url "/api"} {Body data} {Headers ...}}` → `{HttpRes id {Status 200} {Json result} {Headers ...}}`
+- **WebSocket Connect**: `{WsConnect id {Url "wss://..."}}` → `{WsConnectComplete id Opened}`
+- **WebSocket Send**: `{WsSend id {Text "message"}}` → `{WsSendComplete id Ack}`
+- **WebSocket Receive**: Appears in inbox as `{WsRecv id {Text "message"}}`
+- **WebSocket Close**: `{WsClose id {Code 1000} {Reason ""}}` → `{WsCloseComplete id Closed}`
 
 #### Storage & Persistence
 
-- **Storage Get**: `(StorageGet id (Store Local|Session) (Key "key"))` → `(StorageGetComplete id (Found value)|Missing)`
-- **Storage Set**: `(StorageSet id (Store Local|Session) (Key "key") (Value data))` → `(StorageSetComplete id Ok)`
-- **Storage Delete**: `(StorageDel id (Store Local|Session) (Key "key"))` → `(StorageDelComplete id Ok)`
+- **Storage Get**: `{StorageGet id {Store Local|Session} {Key "key"}}` → `{StorageGetComplete id {Found value}|Missing}`
+- **Storage Set**: `{StorageSet id {Store Local|Session} {Key "key"} {Value data}}` → `{StorageSetComplete id Ok}`
+- **Storage Delete**: `{StorageDel id {Store Local|Session} {Key "key"}}` → `{StorageDelComplete id Ok}`
 
 #### Clipboard
 
-- **Clipboard Write**: `(ClipboardWrite id (Text "content"))` → `(ClipboardWriteComplete id Ok|Denied)`
-- **Clipboard Read**: `(ClipboardRead id)` → `(ClipboardReadComplete id (Text "content")|Denied)`
+- **Clipboard Write**: `{ClipboardWrite id {Text "content"}}` → `{ClipboardWriteComplete id Ok|Denied}`
+- **Clipboard Read**: `{ClipboardRead id}` → `{ClipboardReadComplete id {Text "content"}|Denied}`
 
 #### Navigation
 
-- **Navigate**: `(Navigate id (Url "/path") (Replace True|False))` → `(NavigateComplete id Ok)`
-- **Read Location**: `(ReadLocation id)` → `(ReadLocationComplete id (Location (Path "/") (Query "?q=1") (Hash "#top")))`
+- **Navigate**: `{Navigate id {Url "/path"} {Replace True|False}}` → `{NavigateComplete id Ok}`
+- **Read Location**: `{ReadLocation id}` → `{ReadLocationComplete id {Location {Path "/"} {Query "?q=1"} {Hash "#top"}}}`
 
 #### Utilities
 
-- **Random**: `(RandRequest id (Min 0) (Max 100))` → `(RandResponse id value)`
-- **Print**: `(Print id (Message "text"))` → `(PrintComplete id Success)`
+- **Random**: `{RandRequest id {Min 0} {Max 100}}` → `{RandResponse id value}`
+- **Print**: `{Print id {Message "text"}}` → `{PrintComplete id Success}`
 
 ### Effect Examples
 
 #### Persistent State with LocalStorage
 ```lisp
 ;; Save user preferences
-(R "SavePrefs"
-   (Apply (SavePrefs theme_ lang_) prog_)
-   (Program prog_
-     (Effects
-       (Pending (StorageSet (FreshId) (Store Local) (Key "prefs")
-                          (Value (Obj (Theme theme_) (Lang lang_)))))
-       (Inbox))))
+{R "SavePrefs"
+   {Apply {SavePrefs theme_ lang_} prog_}
+   {Program prog_
+     {Effects
+       {Pending {StorageSet {FreshId} {Store Local} {Key "prefs"}
+                          {Value {Obj {Theme theme_} {Lang lang_}}}}}
+       {Inbox}}}}
 
 ;; Load preferences on startup
-(R "LoadPrefs"
-   (Apply LoadPrefs prog_)
-   (Program prog_
-     (Effects
-       (Pending (StorageGet (FreshId) (Store Local) (Key "prefs")))
-       (Inbox))))
+{R "LoadPrefs"
+   {Apply LoadPrefs prog_}
+   {Program prog_
+     {Effects
+       {Pending {StorageGet {FreshId} {Store Local} {Key "prefs"}}}
+       {Inbox}}}}
 ```
 
 #### WebSocket Chat Application
 ```lisp
 ;; Connect and handle messages
-(R "ConnectChat"
-   (Apply (Connect url_) prog_)
-   (Program prog_
-     (Effects
-       (Pending (WsConnect (FreshId) (Url url_)))
-       (Inbox))))
+{R "ConnectChat"
+   {Apply {Connect url_} prog_}
+   {Program prog_
+     {Effects
+       {Pending {WsConnect {FreshId} {Url url_}}}
+       {Inbox}}}}
 
-(R "HandleWsMessage"
-   (Program app_ (Effects pending_ (Inbox (WsRecv id_ (Text msg_)) rest___)))
-   (Program
-     (Apply (NewMessage msg_) app_)
-     (Effects pending_ (Inbox rest___))))
+{R "HandleWsMessage"
+   {Program app_ {Effects pending_ {Inbox {WsRecv id_ {Text msg_}} rest...}}}
+   {Program
+     {Apply {NewMessage msg_} app_}
+     {Effects pending_ {Inbox rest...}}}}
 ```
 
 #### Smooth Animation Loop
 ```lisp
 ;; Request next frame for 60fps updates
-(R "AnimLoop"
-   (Apply Animate (Program (App state_ ui_) effects_))
-   (Program (App (Apply UpdateAnimation state_) ui_)
-     (Effects
-       (Pending (AnimationFrame (FreshId)))
-       (Inbox))))
+{R "AnimLoop"
+   {Apply Animate {Program {App state_ ui_} effects_}}
+   {Program {App {Apply UpdateAnimation state_} ui_}
+     {Effects
+       {Pending {AnimationFrame {FreshId}}}
+       {Inbox}}}}
 
-(R "AnimFrameReady"
-   (Program app_ (Effects pending_ (Inbox (AnimationFrameComplete id_ (Now ts_)) rest___)))
-   (Program
-     (Apply Animate app_)  ; Loop continues
-     (Effects pending_ (Inbox rest___))))
+{R "AnimFrameReady"
+   {Program app_ {Effects pending_ {Inbox {AnimationFrameComplete id_ {Now ts_}} rest...}}}
+   {Program
+     {Apply Animate app_}  ; Loop continues
+     {Effects pending_ {Inbox rest...}}}}
 ```
 
 ### Benefits
@@ -507,10 +507,10 @@ Programs can include an Effects node alongside the main application:
 Meta-rules in the `RuleRules` section can transform other rules before they're compiled:
 
 ```lisp
-(RuleRules
-  (R "ModifyRule"
-    (R "OriginalName" (Var lhs) (Var rhs))
-    (R "OriginalName" (Var lhs) (ModifiedRhs ...))))
+{RuleRules
+  {R "ModifyRule"
+    {R "OriginalName" {Var lhs} {Var rhs}}
+    {R "OriginalName" {Var lhs} {ModifiedRhs ...}}}}
 ```
 
 This enables dynamic rule modification and DSL extensions.
@@ -523,32 +523,32 @@ The language provides composable action primitives for handling UI events:
 
 ### Basic Actions
 
-- `(Seq action1 action2 ...)` - Execute actions in sequence
-- `(If condition thenAction elseAction)` - Conditional execution
-- `(When condition action)` - Execute only if condition is true
+- `{Seq action1 action2 ...}` - Execute actions in sequence
+- `{If condition thenAction elseAction}` - Conditional execution
+- `{When condition action}` - Execute only if condition is true
 
 ### Input/Form Actions
 
-- `(Input fieldName)` - Reference input field value
-- `(ClearInput fieldName)` - Clear input field
-- `(SetInput fieldName)` - Set input field value
+- `{Input fieldName}` - Reference input field value
+- `{ClearInput fieldName}` - Clear input field
+- `{SetInput fieldName}` - Set input field value
 
 ### Event Control
 
-- `(PreventDefault action)` - Prevent default browser behavior
-- `(StopPropagation action)` - Stop event bubbling
-- `(KeyIs "Enter")` - Check if specific key was pressed
+- `{PreventDefault action}` - Prevent default browser behavior
+- `{StopPropagation action}` - Stop event bubbling
+- `{KeyIs "Enter"}` - Check if specific key was pressed
 
 ### Example Usage
 
 ```lisp
-(Input :type "text"
-       :value (Input todoInput)
-       :onKeydown (When (KeyIs "Enter")
-                    (PreventDefault
-                      (Seq
-                        (AddTodoWithTitle (Input todoInput))
-                        (ClearInput todoInput)))))
+{Input :type "text"
+       :value {Input todoInput}
+       :onKeydown {When {KeyIs "Enter"}
+                    {PreventDefault
+                      {Seq
+                        {AddTodoWithTitle {Input todoInput}}
+                        {ClearInput todoInput}}}}}
 ```
 
 ---
@@ -614,12 +614,12 @@ During compilation, symbols are transformed based on scope:
 
 Module definitions become rules with high priority (1000):
 ```lisp
-(Defs (InitialState (CounterState ...)))
+{Defs {InitialState {CounterState ...}}}
 ; Becomes:
-(R "App/Counter/InitialState/Def"
+{R "App/Counter/InitialState/Def"
    App/Counter/InitialState
-   (App/Counter/CounterState ...)
-   1000)
+   {App/Counter/CounterState ...}
+   1000}
 ```
 
 ---
@@ -628,76 +628,76 @@ Module definitions become rules with high priority (1000):
 
 ### Core/KV Module
 ```lisp
-(Module Core/KV
-  (Export Get Put Set Patch)
+{Module Core/KV
+  {Export Get Put Set Patch}
 
-  (Rules
-    (R "Get/Here"
-       (Get tag_ key_ (tag_ before___ (KV key_ v_) after___))
-       v_)
+  {Rules
+    {R "Get/Here"
+       {Get tag_ key_ {tag_ before... {KV key_ v_} after...}}
+       v_}
 
-    (R "Set"
-       (Set tag_ key_ v_ st_)
-       (Put tag_ key_ v_ st_))))
+    {R "Set"
+       {Set tag_ key_ v_ st_}
+       {Put tag_ key_ v_ st_}}}}
 ```
 
 ### App/Counter Module
 ```lisp
-(Module App/Counter
-  (Import Core/KV as KV open)
+{Module App/Counter
+  {Import Core/KV as KV open}
 
-  (Export InitialState View Inc Dec)
+  {Export InitialState View Inc Dec}
 
-  (Defs
-    (InitialState
-      (CounterState
-        (KV Count 0)
-        (KV LastAction "None"))))
+  {Defs
+    {InitialState
+      {CounterState
+        {KV Count 0}
+        {KV LastAction "None"}}}}
 
-  (Rules
-    (R "Inc"
-       (Apply Inc st_)
-       (Patch CounterState st_
-         (KV Count (Add (Get CounterState Count st_) 1))
-         (KV LastAction "Incremented")))
+  {Rules
+    {R "Inc"
+       {Apply Inc st_}
+       {Patch CounterState st_
+         {KV Count {Add {Get CounterState Count st_} 1}}
+         {KV LastAction "Incremented"}}}
 
-    (R "View"
-       (/@ (View) (App (State st_) _))
-       (Div :class "card"
-         (H1 "Counter")
-         (Div "Count: " (Show Count))
-         (Button :onClick Inc "+")))
+    {R "View"
+       {/@ {View} {App {State st_} _}}
+       {Div :class "card"
+         {H1 "Counter"}
+         {Div "Count: " {Show Count}}
+         {Button :onClick Inc "+"}}}
 
-    (R "ShowCount"
-       (/@ (Show Count) (App (State st_) _))
-       (Get CounterState Count st_))))
+    {R "ShowCount"
+       {/@ {Show Count} {App {State st_} _}}
+       {Get CounterState Count st_}}}}
 ```
 
 ### App/Main Module
 ```lisp
-(Module App/Main
-  (Import App/Counter as Counter)
+{Module App/Main
+  {Import App/Counter as Counter}
 
-  (Program
-    (App
-      (State Counter/InitialState)
-      (UI (Project (Counter/View)))))
+  {Program
+    {App
+      {State Counter/InitialState}
+      {UI {Project {Counter/View}}}}}
 
-  (Rules
-    (R "LiftApplyThroughProgram"
-       (Apply act_ (Program app_ eff_))
-       (Program (Apply act_ app_) eff_)
-       100)  ; High priority for lifters
+  {Rules
+    {R "LiftApplyThroughProgram"
+       {Apply act_ {Program app_ eff_}}
+       {Program {Apply act_ app_} eff_}
+       100}  ; High priority for lifters
 
-    (R "LiftApplyThroughApp"
-       (Apply act_ (App st_ ui_))
-       (App (Apply act_ st_) ui_)
-       100)
+    {R "LiftApplyThroughApp"
+       {Apply act_ {App st_ ui_}}
+       {App {Apply act_ st_} ui_}
+       100}
 
-    (R "LiftApplyThroughState"
-       (Apply act_ (State s_))
-       (State (Apply act_ s_))
-       100)))
+    {R "LiftApplyThroughState"
+       {Apply act_ {State s_}}
+       {State {Apply act_ s_}}
+       100}}}
 ```
 
 ---

@@ -6,12 +6,12 @@
  * Supports module syntax with imports, exports, and symbol qualification.
  *
  * Module syntax:
- *   (Module Name/Path
- *     (Export ...)
- *     (Import X/Y as Z [open])
- *     (Defs (Name expr) ...)
- *     (Rules ...)
- *     (RuleRules ...))
+ *   {Module Name/Path
+ *     {Export ...}
+ *     {Import X/Y as Z [open]}
+ *     {Defs {Name expr} ...}
+ *     {Rules ...}
+ *     {RuleRules ...}}
  *
  * Usage:
  *   node syma-modules.js input.syma [--out out.json] [--pretty] [--entry Module/Name]
@@ -98,7 +98,7 @@ class Module {
   }
 
   parseImports(nodes) {
-    // Parse (Import X/Y as Z [open])
+    // Parse {Import X/Y as Z [open]}
     let i = 0;
     while (i < nodes.length) {
       const moduleNode = nodes[i++];
@@ -129,7 +129,7 @@ class Module {
   }
 
   parseDefs(nodes) {
-    // Parse (Name expr) pairs
+    // Parse {Name expr} pairs
     for (const def of nodes) {
       if (!isCall(def) || def.a.length !== 1) continue;
       if (!isSym(def.h)) continue;
@@ -291,7 +291,7 @@ class SymbolQualifier {
     }
 
     if (isCall(node)) {
-      // Special case: don't qualify inside (Var ...) or (VarRest ...)
+      // Special case: don't qualify inside {Var ...} or {VarRest ...}
       if (isSym(node.h) && (node.h.v === 'Var' || node.h.v === 'VarRest')) {
         return node;
       }
@@ -317,7 +317,7 @@ class SymbolQualifier {
             ...node.a.slice(1).map(a => this.qualify(a))
           );
         } else if (isCall(firstArg) && isSym(firstArg.h)) {
-          // For calls like (AddTodoWithTitle ...), keep the head unqualified
+          // For calls like {AddTodoWithTitle ...}, keep the head unqualified
           return Call(
             this.qualify(node.h),
             Call(firstArg.h, ...firstArg.a.map(a => this.qualify(a))),
@@ -336,7 +336,7 @@ class SymbolQualifier {
           if (isSym(value)) {
             return Call(this.qualify(node.h), key, value);
           } else if (isCall(value)) {
-            // For complex event handlers like (When ...), recursively handle but preserve action names
+            // For complex event handlers like {When ...}, recursively handle but preserve action names
             return Call(this.qualify(node.h), key, this.qualifyEventHandler(value));
           }
           return Call(this.qualify(node.h), key, this.qualify(value));
@@ -413,7 +413,7 @@ class ModuleLinker {
         const qualName = `${mod.name}/${name}`;
         const qualExpr = qualifier.qualify(expr);
         // Add two rules: one for symbol, one for nullary call
-        // (R "ModName/DefName/Sym" ModName/DefName <expanded-expr>)
+        // {R "ModName/DefName/Sym" ModName/DefName <expanded-expr>}
         const defRuleSym = Call(
           Sym('R'),
           Str(`${qualName}/Def`),
@@ -421,7 +421,7 @@ class ModuleLinker {
           qualExpr,
           Num(1000)  // Very high priority
         );
-        // (R "ModName/DefName/Call" (ModName/DefName) <expanded-expr>)
+        // {R "ModName/DefName/Call" {ModName/DefName} <expanded-expr>}
         const defRuleCall = Call(
           Sym('R'),
           Str(`${qualName}/DefCall`),
@@ -465,7 +465,7 @@ function tokenize(src, filename = '<input>') {
 
   const isWS = c => c === ' ' || c === '\t' || c === '\n' || c === '\r';
   const isDigit = c => c >= '0' && c <= '9';
-  const isDelim = c => c === '(' || c === ')' || c === '"' || c === ';';
+  const isDelim = c => c === '{' || c === '}' || c === '"' || c === ';';
 
   const pos = () => ({ line, col, index: i, file: filename });
 
@@ -490,7 +490,7 @@ function tokenize(src, filename = '<input>') {
       continue;
     }
 
-    if (c === '(' || c === ')') {
+    if (c === '{' || c === '}') {
       tokens.push({ t: c, pos: startPos });
       advance();
       continue;
@@ -574,7 +574,7 @@ function tokenize(src, filename = '<input>') {
 /* --------------- Parser -------------------- */
 function parse(tokens) {
   let i = 0;
-  const parenStack = [];
+  const braceStack = [];
 
   const peek = () => tokens[i] || null;
   const eat  = () => tokens[i++] || null;
@@ -582,9 +582,9 @@ function parse(tokens) {
   function parseExpr() {
     const tok = peek();
     if (!tok) {
-      if (parenStack.length > 0) {
-        const innermost = parenStack[parenStack.length - 1];
-        die(`Unexpected EOF - unclosed '(' from line ${innermost.pos.line}`, innermost.pos);
+      if (braceStack.length > 0) {
+        const innermost = braceStack[braceStack.length - 1];
+        die(`Unexpected EOF - unclosed '{' from line ${innermost.pos.line}`, innermost.pos);
       }
       die('Unexpected EOF');
     }
@@ -593,20 +593,20 @@ function parse(tokens) {
     if (tok.t === 'str') { eat(); return { k: 'Str', v: tok.v }; }
     if (tok.t === 'sym') { eat(); return { k: 'Sym', v: tok.v }; }
 
-    if (tok.t === ')') {
-      if (parenStack.length === 0) {
-        die('Unexpected closing parenthesis - no matching opening parenthesis', tok.pos);
+    if (tok.t === '}') {
+      if (braceStack.length === 0) {
+        die('Unexpected closing brace - no matching opening brace', tok.pos);
       }
-      die('Unexpected closing parenthesis', tok.pos);
+      die('Unexpected closing brace', tok.pos);
     }
 
-    if (tok.t === '(') {
-      const openParen = eat();
-      parenStack.push(openParen);
+    if (tok.t === '{') {
+      const openBrace = eat();
+      braceStack.push(openBrace);
 
-      if (peek() && peek().t === ')') {
-        const closeParen = eat();
-        parenStack.pop();
+      if (peek() && peek().t === '}') {
+        const closeBrace = eat();
+        braceStack.pop();
         return { k: 'Sym', v: 'Nil' };
       }
 
@@ -616,22 +616,22 @@ function parse(tokens) {
         const t = peek();
 
         if (!t) {
-          let msg = 'Unterminated list - missing closing parenthesis';
-          if (parenStack.length > 1) {
-            msg += '\n\nLikely issue: Check these unclosed parentheses (most recent first):';
-            for (let i = parenStack.length - 1; i >= Math.max(0, parenStack.length - 3); i--) {
-              const p = parenStack[i];
+          let msg = 'Unterminated list - missing closing brace';
+          if (braceStack.length > 1) {
+            msg += '\n\nLikely issue: Check these unclosed braces (most recent first):';
+            for (let i = braceStack.length - 1; i >= Math.max(0, braceStack.length - 3); i--) {
+              const p = braceStack[i];
               const lineContent = SOURCE_TEXT.split('\n')[p.pos.line - 1];
               const preview = lineContent ? lineContent.substring(p.pos.col - 1, Math.min(p.pos.col + 40, lineContent.length)) : '';
               msg += `\n  Line ${p.pos.line}, col ${p.pos.col}: ${preview.trim()}`;
             }
           }
-          const reportPos = parenStack[parenStack.length - 1].pos;
+          const reportPos = braceStack[braceStack.length - 1].pos;
           die(msg, reportPos);
         }
-        if (t.t === ')') {
+        if (t.t === '}') {
           eat();
-          parenStack.pop();
+          braceStack.pop();
           break;
         }
         args.push(parseExpr());
@@ -645,21 +645,21 @@ function parse(tokens) {
   const exprs = [];
   while (i < tokens.length) {
     const tok = peek();
-    if (tok && tok.t === ')') {
-      die('Unexpected closing parenthesis - no matching opening parenthesis', tok.pos);
+    if (tok && tok.t === '}') {
+      die('Unexpected closing brace - no matching opening brace', tok.pos);
     }
     exprs.push(parseExpr());
   }
 
-  if (parenStack.length > 0) {
-    let msg = 'Unclosed parentheses detected:';
-    for (let i = 0; i < parenStack.length; i++) {
-      const p = parenStack[i];
+  if (braceStack.length > 0) {
+    let msg = 'Unclosed braces detected:';
+    for (let i = 0; i < braceStack.length; i++) {
+      const p = braceStack[i];
       const lineContent = SOURCE_TEXT.split('\n')[p.pos.line - 1];
       const preview = lineContent ? lineContent.substring(p.pos.col - 1, p.pos.col + 20).replace(/\n/g, ' ') : '';
       msg += `\n  Line ${p.pos.line}, col ${p.pos.col}: ${preview}`;
     }
-    const lastOpened = parenStack[parenStack.length - 1];
+    const lastOpened = braceStack[braceStack.length - 1];
     die(msg, lastOpened.pos);
   }
 
@@ -698,9 +698,9 @@ function postprocess(node) {
     const v = node.v;
 
     // Check for rest variable shorthand
-    if (v === '___') {
+    if (v === '...') {
       return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: '_' } ] };
-    } else if (v.endsWith('___')) {
+    } else if (v.endsWith('...')) {
       const base = v.slice(0, -3);
       return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: base } ] };
     }
@@ -708,7 +708,7 @@ function postprocess(node) {
       // Check for regular variable shorthand
     if (v === '_') {
       return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: '_' } ] };
-    } else if (v.endsWith('_') && !v.endsWith('___')) {
+    } else if (v.endsWith('_') && !v.endsWith('...')) {
       const base = v.slice(0, -1);
       return { k: 'Call', h: { k: 'Sym', v: 'Var' }, a: [ { k: 'Str', v: base } ] };
     }
@@ -719,17 +719,17 @@ function postprocess(node) {
   if (node.k === 'Call') {
     const head = postprocess(node.h);
 
-    // Special handling for (Var ...) and (VarRest ...)
+    // Special handling for {Var ...} and {VarRest ...}
     if (head.k === 'Sym' && (head.v === 'Var' || head.v === 'VarRest')) {
-      if (node.a.length !== 1) die(`(${head.v} ...) expects exactly one argument`);
+      if (node.a.length !== 1) die(`{${head.v} ...} expects exactly one argument`);
       const nameExpr = node.a[0];
       let nameStr;
       if (nameExpr.k === 'Str') nameStr = nameExpr.v;
       else if (nameExpr.k === 'Sym') nameStr = nameExpr.v;
-      else die(`(${head.v} name) expects symbol or string`);
+      else die(`{${head.v} name} expects symbol or string`);
 
       // Handle triple underscore in explicit Var
-      if (head.v === 'Var' && nameStr.endsWith('___')) {
+      if (head.v === 'Var' && nameStr.endsWith('...')) {
         const base = nameStr.slice(0, -3);
         return { k: 'Call', h: { k: 'Sym', v: 'VarRest' }, a: [ { k: 'Str', v: base } ] };
       }

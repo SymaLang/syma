@@ -1,6 +1,0 @@
-;; HTML UI tags module (placeholder)
-(Module UI/HTML
-  ;; HTML tags are built-ins, not exported from here
-  ;; This module exists for future UI utilities/helpers
-
-  (Rules))
