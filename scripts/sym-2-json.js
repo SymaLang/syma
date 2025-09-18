@@ -213,6 +213,10 @@ function parse(tokens) {
   function checkIndentationMismatch(tok) {
     if (!tok || !tok.pos || parenStack.length === 0) return null;
 
+    // Only check indentation for specific patterns that are likely errors
+    // Don't check if we're in deeply nested structures (common in UI code)
+    if (parenStack.length > 3) return null;
+
     // Check if this token's indentation suggests missing closes
     // If we have nested parens and see a token at or before the parent's column,
     // it likely means the child should have been closed
@@ -223,13 +227,19 @@ function parse(tokens) {
       // If this token is at the same line as an open paren, it's probably fine
       if (tok.pos.line === current.pos.line) continue;
 
-      // If this token's column is <= parent's column, the current list might be missing a close
-      if (tok.pos.col <= parent.pos.col + 2) {  // +2 for some indent tolerance
-        return {
-          likelyMissing: current,
-          newToken: tok,
-          parent: parent
-        };
+      // Only flag if there's a significant indentation mismatch
+      // This needs to be very conservative to avoid false positives
+      // Only check if token is at or BEFORE the grandparent's column (2 levels up)
+      const grandparent = i > 1 ? parenStack[i - 2] : null;
+      if (grandparent && tok.pos.col <= grandparent.pos.col) {
+        // And only if the current list started on a different line than its parent
+        if (current.pos.line !== parent.pos.line) {
+          return {
+            likelyMissing: current,
+            newToken: tok,
+            parent: parent
+          };
+        }
       }
     }
     return null;
@@ -275,31 +285,17 @@ function parse(tokens) {
       while (true) {
         const t = peek();
 
-        // Check for indentation that suggests a missing close paren
+        // Disabled indentation checking - it causes too many false positives
+        // with valid nested UI structures. The parser will still catch
+        // actual missing parens at EOF or when hitting unexpected tokens.
+        /*
         if (t && (t.t === '(' || t.t === 'sym')) {
           const mismatch = checkIndentationMismatch(t);
           if (mismatch) {
-            // This token is likely meant to be a sibling, not a child
-            const suspect = mismatch.likelyMissing;
-            let msg = `Likely missing ')' before this position`;
-            msg += `\n\nThe '(' at line ${suspect.pos.line}, col ${suspect.pos.col} appears to be unclosed.`;
-            msg += `\nThe ${t.t === '(' ? '(' : 'symbol'} at line ${t.pos.line}, col ${t.pos.col} is at an unexpected indentation level.`;
-
-            // Show the line with the likely unclosed paren
-            const suspectLine = SOURCE_TEXT.split('\n')[suspect.pos.line - 1];
-            if (suspectLine) {
-              msg += `\n\nLikely unclosed: line ${suspect.pos.line}`;
-              msg += `\n  ${suspectLine.trim()}`;
-
-              // Try to highlight where the close paren might be missing
-              if (suspectLine.includes('(') && !suspectLine.trim().endsWith(')')) {
-                msg += `\n\nHint: This line may be missing a ')' at the end`;
-              }
-            }
-
-            die(msg, t.pos);
+            // ... indentation-based error reporting ...
           }
         }
+        */
 
         if (!t) {
           // When we hit EOF, try to determine which paren is most likely missing its close

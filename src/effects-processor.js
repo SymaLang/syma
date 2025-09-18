@@ -75,6 +75,27 @@ function updateEffects(program, processedId, response) {
 }
 
 /**
+ * Helper to remove async effects from pending immediately
+ */
+function removeFromPending(program, effectId, effectType, setProgramFn) {
+    const prog = clone(program);
+    const effectsNode = findEffects(prog);
+    if (!effectsNode) return;
+
+    const pending = effectsNode.a[0];
+    if (!isCall(pending)) return;
+
+    // Filter out this specific effect
+    pending.a = pending.a.filter(r => {
+        if (!isCall(r) || !isSym(r.h) || r.h.v !== effectType) return true;
+        if (r.a[0] && deq(r.a[0], effectId)) return false;
+        return true;
+    });
+
+    setProgramFn(prog);
+}
+
+/**
  * Process HttpReq effect - perform actual HTTP request
  */
 async function processHttpReq(req) {
@@ -158,20 +179,22 @@ function processTimer(req, insertResponse) {
  * Process Random effect - generate random number
  */
 function processRandom(req) {
-    // RandRequest[id, Min[n], Max[m]]
+    // RandRequest[id, Min[n], Max[m]] but Min/Max are actually direct numbers
     const [id, min, max] = req.a;
     if (!id) return null;
 
-    const minVal = min && isCall(min) && min.a[0] && isNum(min.a[0]) ? min.a[0].v : 0;
-    const maxVal = max && isCall(max) && max.a[0] && isNum(max.a[0]) ? max.a[0].v : 1;
+    // The min and max come through as direct Num objects
+    const minVal = min && isNum(min) ? min.v : 0;
+    const maxVal = max && isNum(max) ? max.v : 1;
 
-    const randVal = Math.random() * (maxVal - minVal) + minVal;
+    // Generate integer in range [minVal, maxVal] inclusive
+    const randVal = Math.floor(Math.random() * (maxVal - minVal + 1)) + minVal;
 
     // RandResponse[id, Num[value]]
     return Call(
         Sym("RandResponse"),
         id,
-        Num(Math.floor(randVal))
+        Num(randVal)
     );
 }
 
@@ -209,6 +232,385 @@ function processPrint(req) {
         id,
         Sym("Success")
     );
+}
+
+/**
+ * Process Storage effects - LocalStorage/SessionStorage
+ */
+function processStorageGet(req) {
+    // StorageGet[id, Store[Local|Session], Key[str]]
+    const [id, store, key] = req.a;
+    if (!id || !store || !key) return null;
+
+    const storageType = store && isCall(store) && store.a[0] && isSym(store.a[0])
+        ? store.a[0].v : "Local";
+    const storage = storageType === "Session" ? sessionStorage : localStorage;
+
+    const keyStr = key && isCall(key) && key.a[0] && isStr(key.a[0])
+        ? key.a[0].v : "";
+
+    try {
+        const value = storage.getItem(keyStr);
+        if (value !== null) {
+            // Try to parse as JSON, fall back to string
+            try {
+                const parsed = JSON.parse(value);
+                return Call(
+                    Sym("StorageGetComplete"),
+                    id,
+                    Call(Sym("Found"), jsToSymbolic(parsed))
+                );
+            } catch {
+                return Call(
+                    Sym("StorageGetComplete"),
+                    id,
+                    Call(Sym("Found"), Str(value))
+                );
+            }
+        } else {
+            return Call(
+                Sym("StorageGetComplete"),
+                id,
+                Sym("Missing")
+            );
+        }
+    } catch (error) {
+        return Call(
+            Sym("StorageGetComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
+}
+
+function processStorageSet(req) {
+    // StorageSet[id, Store[Local|Session], Key[str], Value[any]]
+    const [id, store, key, value] = req.a;
+    if (!id || !store || !key) return null;
+
+    const storageType = store && isCall(store) && store.a[0] && isSym(store.a[0])
+        ? store.a[0].v : "Local";
+    const storage = storageType === "Session" ? sessionStorage : localStorage;
+
+    const keyStr = key && isCall(key) && key.a[0] && isStr(key.a[0])
+        ? key.a[0].v : "";
+
+    try {
+        // Extract value content
+        let valueToStore = "";
+        if (value && isCall(value) && value.a[0]) {
+            const val = value.a[0];
+            if (isStr(val) || isNum(val) || isSym(val)) {
+                valueToStore = isStr(val) ? val.v : String(val.v);
+            } else {
+                valueToStore = JSON.stringify(symbolicToJs(val));
+            }
+        }
+
+        storage.setItem(keyStr, valueToStore);
+
+        return Call(
+            Sym("StorageSetComplete"),
+            id,
+            Sym("Ok")
+        );
+    } catch (error) {
+        return Call(
+            Sym("StorageSetComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
+}
+
+function processStorageDel(req) {
+    // StorageDel[id, Store[Local|Session], Key[str]]
+    const [id, store, key] = req.a;
+    if (!id || !store || !key) return null;
+
+    const storageType = store && isCall(store) && store.a[0] && isSym(store.a[0])
+        ? store.a[0].v : "Local";
+    const storage = storageType === "Session" ? sessionStorage : localStorage;
+
+    const keyStr = key && isCall(key) && key.a[0] && isStr(key.a[0])
+        ? key.a[0].v : "";
+
+    try {
+        storage.removeItem(keyStr);
+
+        return Call(
+            Sym("StorageDelComplete"),
+            id,
+            Sym("Ok")
+        );
+    } catch (error) {
+        return Call(
+            Sym("StorageDelComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
+}
+
+/**
+ * Process Clipboard effects
+ */
+async function processClipboardWrite(req) {
+    // ClipboardWrite[id, Text[str]]
+    const [id, text] = req.a;
+    if (!id || !text) return null;
+
+    const textStr = text && isCall(text) && text.a[0] && isStr(text.a[0])
+        ? text.a[0].v : "";
+
+    try {
+        await navigator.clipboard.writeText(textStr);
+        return Call(
+            Sym("ClipboardWriteComplete"),
+            id,
+            Sym("Ok")
+        );
+    } catch (error) {
+        return Call(
+            Sym("ClipboardWriteComplete"),
+            id,
+            Sym("Denied")
+        );
+    }
+}
+
+async function processClipboardRead(req) {
+    // ClipboardRead[id]
+    const [id] = req.a;
+    if (!id) return null;
+
+    try {
+        const text = await navigator.clipboard.readText();
+        return Call(
+            Sym("ClipboardReadComplete"),
+            id,
+            Call(Sym("Text"), Str(text))
+        );
+    } catch (error) {
+        return Call(
+            Sym("ClipboardReadComplete"),
+            id,
+            Sym("Denied")
+        );
+    }
+}
+
+/**
+ * Process AnimationFrame effect
+ */
+function processAnimationFrame(req, insertResponse) {
+    // AnimationFrame[id]
+    const [id] = req.a;
+    if (!id) return;
+
+    requestAnimationFrame((timestamp) => {
+        insertResponse(Call(
+            Sym("AnimationFrameComplete"),
+            id,
+            Call(Sym("Now"), Num(timestamp))
+        ));
+    });
+}
+
+/**
+ * WebSocket connection management
+ */
+const webSockets = new Map(); // id -> WebSocket instance
+
+function processWsConnect(req, insertResponse) {
+    // WsConnect[id, Url["wss://..."], Protocols[...], Headers[...]]
+    const [id, url, protocols, headers] = req.a;
+    if (!id || !url) return;
+
+    const urlStr = url && isCall(url) && url.a[0] && isStr(url.a[0])
+        ? url.a[0].v : "";
+
+    try {
+        const ws = new WebSocket(urlStr);
+        webSockets.set(id, ws);
+
+        ws.onopen = () => {
+            insertResponse(Call(
+                Sym("WsConnectComplete"),
+                id,
+                Sym("Opened")
+            ));
+        };
+
+        ws.onmessage = (event) => {
+            // Insert message as a new inbox item
+            insertResponse(Call(
+                Sym("WsRecv"),
+                id,
+                Call(Sym("Text"), Str(event.data))
+            ));
+        };
+
+        ws.onerror = (error) => {
+            insertResponse(Call(
+                Sym("WsError"),
+                id,
+                Call(Sym("Error"), Str("WebSocket error"))
+            ));
+        };
+
+        ws.onclose = (event) => {
+            webSockets.delete(id);
+            insertResponse(Call(
+                Sym("WsClose"),
+                id,
+                Call(Sym("Closed"),
+                     Call(Sym("Code"), Num(event.code)),
+                     Call(Sym("Reason"), Str(event.reason || "")))
+            ));
+        };
+    } catch (error) {
+        return Call(
+            Sym("WsConnectComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
+}
+
+function processWsSend(req) {
+    // WsSend[id, Text[str] | Binary[bytes]]
+    const [id, data] = req.a;
+    if (!id || !data) return null;
+
+    const ws = webSockets.get(id);
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return Call(
+            Sym("WsSendComplete"),
+            id,
+            Call(Sym("Error"), Str("WebSocket not open"))
+        );
+    }
+
+    try {
+        if (isCall(data) && isSym(data.h)) {
+            if (data.h.v === "Text" && data.a[0] && isStr(data.a[0])) {
+                ws.send(data.a[0].v);
+            } else if (data.h.v === "Binary") {
+                // For binary, we'd need to handle Uint8Array conversion
+                // For now, just send as text
+                ws.send(JSON.stringify(symbolicToJs(data.a[0])));
+            }
+        }
+
+        return Call(
+            Sym("WsSendComplete"),
+            id,
+            Sym("Ack")
+        );
+    } catch (error) {
+        return Call(
+            Sym("WsSendComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
+}
+
+function processWsClose(req) {
+    // WsClose[id, Code[n], Reason[str]]
+    const [id, code, reason] = req.a;
+    if (!id) return null;
+
+    const ws = webSockets.get(id);
+    if (!ws) {
+        return Call(
+            Sym("WsCloseComplete"),
+            id,
+            Sym("AlreadyClosed")
+        );
+    }
+
+    const codeNum = code && isCall(code) && code.a[0] && isNum(code.a[0])
+        ? code.a[0].v : 1000;
+    const reasonStr = reason && isCall(reason) && reason.a[0] && isStr(reason.a[0])
+        ? reason.a[0].v : "";
+
+    try {
+        ws.close(codeNum, reasonStr);
+        webSockets.delete(id);
+
+        return Call(
+            Sym("WsCloseComplete"),
+            id,
+            Sym("Closed")
+        );
+    } catch (error) {
+        return Call(
+            Sym("WsCloseComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
+}
+
+/**
+ * Process Navigation effects
+ */
+function processNavigate(req) {
+    // Navigate[id, Url[str], Replace[True|False]]
+    const [id, url, replace] = req.a;
+    if (!id || !url) return null;
+
+    const urlStr = url && isCall(url) && url.a[0] && isStr(url.a[0])
+        ? url.a[0].v : "";
+    const shouldReplace = replace && isCall(replace) && replace.a[0] && isSym(replace.a[0])
+        ? replace.a[0].v === "True" : false;
+
+    try {
+        if (shouldReplace) {
+            window.history.replaceState(null, "", urlStr);
+        } else {
+            window.history.pushState(null, "", urlStr);
+        }
+
+        return Call(
+            Sym("NavigateComplete"),
+            id,
+            Sym("Ok")
+        );
+    } catch (error) {
+        return Call(
+            Sym("NavigateComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
+}
+
+function processReadLocation(req) {
+    // ReadLocation[id]
+    const [id] = req.a;
+    if (!id) return null;
+
+    try {
+        const location = window.location;
+        return Call(
+            Sym("ReadLocationComplete"),
+            id,
+            Call(Sym("Location"),
+                Call(Sym("Path"), Str(location.pathname)),
+                Call(Sym("Query"), Str(location.search)),
+                Call(Sym("Hash"), Str(location.hash))
+            )
+        );
+    } catch (error) {
+        return Call(
+            Sym("ReadLocationComplete"),
+            id,
+            Call(Sym("Error"), Str(error.message))
+        );
+    }
 }
 
 /**
@@ -323,35 +725,80 @@ export function createEffectsProcessor(getProgramFn, setProgramFn, onUpdate) {
                         response = processPrint(req);
                         break;
 
+                    // Storage effects
+                    case "StorageGet":
+                        response = processStorageGet(req);
+                        break;
+
+                    case "StorageSet":
+                        response = processStorageSet(req);
+                        break;
+
+                    case "StorageDel":
+                        response = processStorageDel(req);
+                        break;
+
+                    // Clipboard effects
+                    case "ClipboardWrite":
+                        response = await processClipboardWrite(req);
+                        break;
+
+                    case "ClipboardRead":
+                        response = await processClipboardRead(req);
+                        break;
+
+                    // Navigation effects
+                    case "Navigate":
+                        response = processNavigate(req);
+                        break;
+
+                    case "ReadLocation":
+                        response = processReadLocation(req);
+                        break;
+
+                    // WebSocket effects (async)
+                    case "WsConnect":
+                        const wsId = req.a[0];
+                        removeFromPending(program, wsId, "WsConnect", setProgramFn);
+                        processWsConnect(req, (wsResponse) => {
+                            const updatedProgram = updateEffects(getProgramFn(), wsId, wsResponse);
+                            setProgramFn(updatedProgram);
+                            onUpdate();
+                            processEffects();
+                        });
+                        continue;
+
+                    case "WsSend":
+                        response = processWsSend(req);
+                        break;
+
+                    case "WsClose":
+                        response = processWsClose(req);
+                        break;
+
+                    // Timer effect (async)
                     case "Timer":
-                        // Timer is async, handle separately
-                        // Remove from pending immediately to avoid duplicate processing
                         const timerID = req.a[0];
-
-                        // Remove this timer from pending
-                        const progWithoutTimer = clone(program);
-                        const effectsNode = findEffects(progWithoutTimer);
-                        if (effectsNode) {
-                            const pending = effectsNode.a[0];
-                            if (isCall(pending)) {
-                                // Filter out this specific timer
-                                pending.a = pending.a.filter(r => {
-                                    if (!isCall(r) || !isSym(r.h) || r.h.v !== "Timer") return true;
-                                    if (r.a[0] && deq(r.a[0], timerID)) return false;
-                                    return true;
-                                });
-                            }
-                        }
-                        setProgramFn(progWithoutTimer);
-
+                        removeFromPending(program, timerID, "Timer", setProgramFn);
                         processTimer(req, (timerResponse) => {
-                            // Add the response to inbox when timer completes
                             const updatedProgram = updateEffects(getProgramFn(), timerID, timerResponse);
                             setProgramFn(updatedProgram);
                             onUpdate();
-                            processEffects(); // Check for more effects
+                            processEffects();
                         });
-                        continue; // Don't wait for timer
+                        continue;
+
+                    // AnimationFrame effect (async)
+                    case "AnimationFrame":
+                        const frameId = req.a[0];
+                        removeFromPending(program, frameId, "AnimationFrame", setProgramFn);
+                        processAnimationFrame(req, (frameResponse) => {
+                            const updatedProgram = updateEffects(getProgramFn(), frameId, frameResponse);
+                            setProgramFn(updatedProgram);
+                            onUpdate();
+                            processEffects();
+                        });
+                        continue;
 
                     default:
                         // Unknown effect type - skip

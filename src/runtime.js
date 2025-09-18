@@ -1,13 +1,13 @@
 /*****************************************************************
- * Symbolic Host Runtime (minimal, no stubs)
+ * Symbolic Host Runtime (no stubs)
  * - Load Universe AST
  * - Compile Rules (Var[...] patterns)
  * - Normalize Program via Rules + Strategy (outermost-first)
- * - Render tiny UI subset to DOM
+ * - Render UI to DOM
  * - Event bridge: Apply[action, Program] + Normalize
  ******************************************************************/
 
-import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from './ast-helpers.js';
+import { Sym, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from './ast-helpers.js';
 import { clearInput, getInputValue } from './events.js';
 import { createEffectsProcessor, freshId } from './effects-processor.js';
 import { foldPrims } from './primitives.js';
@@ -434,8 +434,6 @@ function dispatch(universe, rules, actionTerm) {
     }
     return setProgram(universe, newProg);
 }
-
-/* --------------------- Projector Setup --------------------- */
 
 /* --------------------- Boot glue ----------------------------- */
 let GLOBAL_UNIVERSE = null;

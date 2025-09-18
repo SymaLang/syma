@@ -346,9 +346,95 @@ Programs can include an Effects node alongside the main application:
 
 ### Supported Effect Types
 
+#### Time & Scheduling
+
 - **Timer**: `(Timer id (Delay ms))` → `(TimerComplete id (Now timestamp))`
+- **AnimationFrame**: `(AnimationFrame id)` → `(AnimationFrameComplete id (Now timestamp))`
+
+#### Networking
+
 - **HttpReq**: `(HttpReq id (Method "POST") (Url "/api") (Body data) (Headers ...))` → `(HttpRes id (Status 200) (Json result) (Headers ...))`
-- **RandRequest**: `(RandRequest id (Min 0) (Max 100))` → `(RandResponse id value)`
+- **WebSocket Connect**: `(WsConnect id (Url "wss://..."))` → `(WsConnectComplete id Opened)`
+- **WebSocket Send**: `(WsSend id (Text "message"))` → `(WsSendComplete id Ack)`
+- **WebSocket Receive**: Appears in inbox as `(WsRecv id (Text "message"))`
+- **WebSocket Close**: `(WsClose id (Code 1000) (Reason ""))` → `(WsCloseComplete id Closed)`
+
+#### Storage & Persistence
+
+- **Storage Get**: `(StorageGet id (Store Local|Session) (Key "key"))` → `(StorageGetComplete id (Found value)|Missing)`
+- **Storage Set**: `(StorageSet id (Store Local|Session) (Key "key") (Value data))` → `(StorageSetComplete id Ok)`
+- **Storage Delete**: `(StorageDel id (Store Local|Session) (Key "key"))` → `(StorageDelComplete id Ok)`
+
+#### Clipboard
+
+- **Clipboard Write**: `(ClipboardWrite id (Text "content"))` → `(ClipboardWriteComplete id Ok|Denied)`
+- **Clipboard Read**: `(ClipboardRead id)` → `(ClipboardReadComplete id (Text "content")|Denied)`
+
+#### Navigation
+
+- **Navigate**: `(Navigate id (Url "/path") (Replace True|False))` → `(NavigateComplete id Ok)`
+- **Read Location**: `(ReadLocation id)` → `(ReadLocationComplete id (Location (Path "/") (Query "?q=1") (Hash "#top")))`
+
+#### Utilities
+
+- **Random**: `(RandRequest id (Min 0) (Max 100))` → `(RandResponse id value)`
+- **Print**: `(Print id (Message "text"))` → `(PrintComplete id Success)`
+
+### Effect Examples
+
+#### Persistent State with LocalStorage
+```lisp
+;; Save user preferences
+(R "SavePrefs"
+   (Apply (SavePrefs theme_ lang_) prog_)
+   (Program prog_
+     (Effects
+       (Pending (StorageSet (FreshId) (Store Local) (Key "prefs")
+                          (Value (Obj (Theme theme_) (Lang lang_)))))
+       (Inbox))))
+
+;; Load preferences on startup
+(R "LoadPrefs"
+   (Apply LoadPrefs prog_)
+   (Program prog_
+     (Effects
+       (Pending (StorageGet (FreshId) (Store Local) (Key "prefs")))
+       (Inbox))))
+```
+
+#### WebSocket Chat Application
+```lisp
+;; Connect and handle messages
+(R "ConnectChat"
+   (Apply (Connect url_) prog_)
+   (Program prog_
+     (Effects
+       (Pending (WsConnect (FreshId) (Url url_)))
+       (Inbox))))
+
+(R "HandleWsMessage"
+   (Program app_ (Effects pending_ (Inbox (WsRecv id_ (Text msg_)) rest___)))
+   (Program
+     (Apply (NewMessage msg_) app_)
+     (Effects pending_ (Inbox rest___))))
+```
+
+#### Smooth Animation Loop
+```lisp
+;; Request next frame for 60fps updates
+(R "AnimLoop"
+   (Apply Animate (Program (App state_ ui_) effects_))
+   (Program (App (Apply UpdateAnimation state_) ui_)
+     (Effects
+       (Pending (AnimationFrame (FreshId)))
+       (Inbox))))
+
+(R "AnimFrameReady"
+   (Program app_ (Effects pending_ (Inbox (AnimationFrameComplete id_ (Now ts_)) rest___)))
+   (Program
+     (Apply Animate app_)  ; Loop continues
+     (Effects pending_ (Inbox rest___))))
+```
 
 ### Benefits
 
@@ -356,6 +442,7 @@ Programs can include an Effects node alongside the main application:
 - **Inspectable**: Effect history is visible in the AST
 - **Testable**: Mock effects by directly manipulating inbox
 - **Composable**: Rules can transform, retry, or cancel effects
+- **Complete**: Comprehensive coverage of browser APIs and I/O operations
 
 ---
 
