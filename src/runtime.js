@@ -8,18 +8,16 @@
  ******************************************************************/
 
 import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from './ast-helpers.js';
-import { createEventHandler, handleBinding, clearInput, getInputValue } from './events.js';
+import { clearInput, getInputValue } from './events.js';
 import { createEffectsProcessor, freshId } from './effects-processor.js';
 import { foldPrims } from './primitives.js';
 import {
     isTraceEnabled,
     setTrace as debugSetTrace,
     formatStep,
-    logDispatchTrace,
-    logProjectionTrace,
-    explainProjectionFailure,
-    logProjectionFailure
+    logDispatchTrace
 } from './debug.js';
+import { ProjectorFactory } from './projectors/index.js';
 
 /* -------- Dev trace toggle -------- */
 const SYMA_DEV_TRACE = isTraceEnabled();
@@ -437,166 +435,14 @@ function dispatch(universe, rules, actionTerm) {
     return setProgram(universe, newProg);
 }
 
-/* --------------------- Minimal DOM projector ------------------ */
-
-/* Supports: App[ State[...], UI[ ... ]] with VStack, HStack, Text, Button[Str, OnClick->action] */
-
-
-function splitPropsAndChildren(node) {
-    if (!isCall(node)) return {props: null, children: []};
-    if (node.a.length && isCall(node.a[0]) && isSym(node.a[0].h) && node.a[0].h.v === "Props") {
-        const propsNode = node.a[0];
-        const children = node.a.slice(1);
-        const props = {};
-        for (const kv of propsNode.a) {
-            if (!isCall(kv) || !isSym(kv.h) || kv.h.v !== "KV" || kv.a.length !== 2 || !isStr(kv.a[0])) {
-                throw new Error(`Props expects KV[str, value]; got ${show(kv)}`);
-            }
-            props[kv.a[0].v] = kv.a[1];
-        }
-        return {props, children};
-    }
-    return {props: null, children: node.a};
-}
-
-function renderUniverseToDOM(universe, mount, onDispatch) {
-    mount.innerHTML = ""; // simple full replace (can optimize with keyed diff)
-    const app = getProgramApp(universe);
-    if (!isCall(app) || !isSym(app.h) || app.h.v !== "App")
-        throw new Error("Program must contain App[state, ui]");
-
-    const [state, ui] = app.a;
-    mount.appendChild(renderUI(ui, state, onDispatch));
-}
-
-// Normalize a symbolic UI node under current App/State context and return a UI node
-function projectUI(node, state) {
-    // Build /@ node: (/@ node (App state _))
-    const annotated = Call(Sym("/@"), node, Call(Sym("App"), state, Sym("_")));
-    const currentRules = extractRules(GLOBAL_UNIVERSE);
-    const reduced = SYMA_DEV_TRACE
-        ? normalizeWithTrace(annotated, currentRules).result
-        : normalize(annotated, currentRules);
-    return reduced;
-}
-
-function renderUI(node, state, onDispatch) {
-    if (!isCall(node) || !isSym(node.h)) throw new Error(`UI node must be Call; got ${show(node)}`);
-    const tag = node.h.v;
-
-    if (tag === "/@") {
-        const currentRules = extractRules(GLOBAL_UNIVERSE);
-        const reduced = SYMA_DEV_TRACE
-            ? normalizeWithTrace(node, currentRules).result
-            : normalize(node, currentRules);
-        return renderUI(reduced, state, onDispatch);
-    }
-
-    if (tag === "Project") {
-        if (node.a.length !== 1) throw new Error("Project[...] expects exactly one child expression");
-        const rendered = projectUI(node.a[0], state);
-        // The result may be a Text-like atom or another UI call
-        if (isStr(rendered) || isNum(rendered) || isSym(rendered)) {
-            const span = document.createElement("span");
-            span.appendChild(renderTextPart(rendered, state));
-            return span;
-        }
-        return renderUI(rendered, state, onDispatch);
-    }
-
-    if (tag === "UI") {
-        if (node.a.length !== 1) throw new Error("UI[...] must wrap exactly one subtree");
-        return renderUI(node.a[0], state, onDispatch);
-    }
-
-    const {props, children} = splitPropsAndChildren(node);
-    const el = document.createElement(tag.toLowerCase());
-
-    if (props) {
-        for (const [k, v] of Object.entries(props)) {
-            // Handle ALL events generically - any prop starting with "on"
-            if (k.startsWith("on")) {
-                const eventName = k.slice(2).toLowerCase(); // onClick -> click, onMouseOver -> mouseover
-                el.addEventListener(eventName, createEventHandler(v, onDispatch));
-                continue;
-            }
-
-            // Handle two-way bindings (e.g., bind-value, bind-checked)
-            if (k.startsWith("bind-")) {
-                const bindingType = k.slice(5); // bind-value -> value
-                handleBinding(el, bindingType, v, onDispatch);
-                continue;
-            }
-
-            // Regular attributes
-            if (isStr(v) || isNum(v)) {
-                el.setAttribute(k, isStr(v) ? v.v : String(v.v));
-            } else if (isSym(v)) {
-                el.setAttribute(k, v.v);
-            } else {
-                // For complex values, might be a binding expression
-                if (isCall(v) && isSym(v.h) && v.h.v === "Input") {
-                    // Special handling for (Input fieldName) in attributes
-                    handleBinding(el, k, v, onDispatch);
-                } else {
-                    el.setAttribute(k, JSON.stringify(v));
-                }
-            }
-        }
-    }
-
-    for (const ch of children) {
-        // strings/numbers/Show[...] become text; Calls recurse
-        if (isStr(ch) || isNum(ch) || (isCall(ch) && isSym(ch.h) && ch.h.v === "Show") || isSym(ch)) {
-            el.appendChild(renderTextPart(ch, state));
-        } else {
-            el.appendChild(renderUI(ch, state, onDispatch));
-        }
-    }
-    return el;
-}
-
-
-function renderTextPart(part, state) {
-    // Two cases:
-    // 1) literal Str / Num
-    // 2) symbolic Show[...] that needs to normalize under (App[State, _])
-    if (isStr(part)) return document.createTextNode(part.v);
-    if (isNum(part)) return document.createTextNode(String(part.v));
-
-    if (isCall(part) && isSym(part.h) && part.h.v === "Show") {
-        // Build a tiny projection context: Show[x] /@ App[State, _] -> Str[...]
-        const appCtx = Call(Sym("App"), state, Sym("_"));
-        const annotated = Call(Sym("/@"), part, appCtx); // “apply in context” idiom
-        // Let rules reduce it; if it doesn't become Str/Num, complain
-        const reduced = (() => {
-            const currentRules = extractRules(GLOBAL_UNIVERSE);
-            if (SYMA_DEV_TRACE) {
-                const {result, trace} = normalizeWithTrace(annotated, currentRules);
-                logProjectionTrace(part, trace);
-                return result;
-            }
-            return normalize(annotated, currentRules);
-        })();
-        if (isStr(reduced)) return document.createTextNode(reduced.v);
-        if (isNum(reduced)) return document.createTextNode(String(reduced.v));
-        // If your rules emit Call(Str[...]) etc., adjust here
-        const currentRules = extractRules(GLOBAL_UNIVERSE);
-        logProjectionFailure(part, annotated, reduced, currentRules);
-        throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
-    }
-
-    // If plain Sym leaks here, stringify it
-    if (isSym(part)) return document.createTextNode(part.v);
-
-    throw new Error(`Unsupported Text part: ${show(part)}`);
-}
+/* --------------------- Projector Setup --------------------- */
 
 /* --------------------- Boot glue ----------------------------- */
 let GLOBAL_UNIVERSE = null;
 let GLOBAL_RULES = null;
+let GLOBAL_PROJECTOR = null;
 
-async function boot(universeOrUrl, mountSelector = "#app") {
+async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom") {
     let uni;
 
     // Check if it's a URL string or a direct AST object
@@ -619,14 +465,30 @@ async function boot(universeOrUrl, mountSelector = "#app") {
     const mount = document.querySelector(mountSelector);
     if (!mount) throw new Error(`Mount not found: ${mountSelector}`);
 
+    // Create and initialize projector
+    GLOBAL_PROJECTOR = ProjectorFactory.create(projectorType, {
+        mount,
+        onDispatch: null, // Will be set after defining dispatchAction
+        options: {
+            universe: GLOBAL_UNIVERSE,
+            normalize,
+            normalizeWithTrace,
+            extractRules
+        }
+    });
+
     const dispatchAction = (action) => {
         // Inject Apply[action, Program] normalization
         GLOBAL_UNIVERSE = dispatch(GLOBAL_UNIVERSE, GLOBAL_RULES, action);
-        renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
+        GLOBAL_PROJECTOR.universe = GLOBAL_UNIVERSE;
+        GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
     };
 
-    // Initial render (if your rules expect pre-normalization, do it here too)
-    renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
+    // Set the dispatch handler
+    GLOBAL_PROJECTOR.onDispatch = dispatchAction;
+
+    // Initial render
+    GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
 
     // Create effects processor to handle symbolic effects
     const effectsProcessor = createEffectsProcessor(
@@ -638,33 +500,39 @@ async function boot(universeOrUrl, mountSelector = "#app") {
         },
         () => {
             // Re-render after effects update
-            renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
+            GLOBAL_PROJECTOR.universe = GLOBAL_UNIVERSE;
+            GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
         }
     );
 
-    // Return a handle for HMR
+    // Return a handle for HMR and testing
     return {
         universe: GLOBAL_UNIVERSE,
+        projector: GLOBAL_PROJECTOR,
         reload: () => {
             // Re-enrich in case the reloaded version doesn't have Effects
             uni = enrichProgramWithEffects(uni);
             GLOBAL_UNIVERSE = uni;
             GLOBAL_RULES = extractRules(uni);
-            renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
+            GLOBAL_PROJECTOR.universe = GLOBAL_UNIVERSE;
+            GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
         },
         effectsProcessor
     };
 }
 
-/* Helper to trace the exact projector path for Show[...] terms */
-function traceProjection(part, state) {
-    const appCtx = Call(Sym("App"), state, Sym("_"));
-    const annotated = Call(Sym("/@"), part, appCtx);
-    return normalizeWithTrace(annotated, extractRules(GLOBAL_UNIVERSE));
-}
-
 /* --------------------- Expose API ---------------------------- */
-window.SymbolicHost = {boot, show, dispatch, normalize, normalizeWithTrace, formatStep, traceProjection, freshId};
+window.SymbolicHost = {
+    boot,
+    show,
+    dispatch,
+    normalize,
+    normalizeWithTrace,
+    formatStep,
+    freshId,
+    getProjector: () => GLOBAL_PROJECTOR,
+    getProjectorTypes: () => ProjectorFactory.getAvailable()
+};
 
 Object.defineProperty(window, "GLOBAL_UNIVERSE", {
     get: () => GLOBAL_UNIVERSE
@@ -672,9 +540,12 @@ Object.defineProperty(window, "GLOBAL_UNIVERSE", {
 Object.defineProperty(window, "GLOBAL_RULES", {
     get: () => GLOBAL_RULES
 });
+Object.defineProperty(window, "GLOBAL_PROJECTOR", {
+    get: () => GLOBAL_PROJECTOR
+});
 
 // Dynamic toggle for trace in console: SymbolicHost.setTrace(true/false)
 const setTrace = debugSetTrace;
 window.SymbolicHost = {...window.SymbolicHost, setTrace};
 
-export {boot, show, dispatch, clearInput, getInputValue, freshId};
+export {boot, show, dispatch, normalize, extractRules, clearInput, getInputValue, freshId};
