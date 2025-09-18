@@ -25,7 +25,7 @@
 
           ;; General status
           "None"     ;; LastEffect
-          ()         ;; EffectLog (empty list)
+          Nil        ;; EffectLog (empty list)
           ))  ; List of effect results
 
       (UI
@@ -181,8 +181,8 @@
          (Effects pending_ (Inbox rest___))))
 
     (R "StorageSaved"
-       (Apply StorageSaved (EffectsDemo stored_ status_ rest___))
-       (EffectsDemo stored_ "Saved!" rest___))
+       (Apply StorageSaved (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_))
+       (EffectsDemo stored_ "Saved!" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Saved" (Cons "Storage: Value saved" log_)))
 
     (R "LoadFromStorage/Enqueue"
        (Apply LoadFromStorage (Program app_ (Effects (Pending p___) inbox_)))
@@ -194,17 +194,17 @@
        10)
 
     (R "StorageGet/Found"
-       (Program (App (State (EffectsDemo stored_ status_ rest___)) ui_)
+       (Program (App (State (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (StorageGetComplete id_ (Found value_)) rest2___)))
        (Program
-         (App (State (EffectsDemo value_ "Loaded!" rest___)) ui_)
+         (App (State (EffectsDemo value_ "Loaded!" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Loaded" (Cons (Concat "Storage: Loaded " value_) log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "StorageGet/Missing"
-       (Program (App (State (EffectsDemo stored_ status_ rest___)) ui_)
+       (Program (App (State (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (StorageGetComplete id_ Missing) rest2___)))
        (Program
-         (App (State (EffectsDemo "" "No stored value" rest___)) ui_)
+         (App (State (EffectsDemo "" "No stored value" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Not found" (Cons "Storage: No value found" log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "ClearStorage/Enqueue"
@@ -217,10 +217,10 @@
        10)
 
     (R "StorageDel/Complete"
-       (Program (App (State (EffectsDemo stored_ status_ rest___)) ui_)
+       (Program (App (State (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (StorageDelComplete id_ Ok) rest2___)))
        (Program
-         (App (State (EffectsDemo "" "Cleared!" rest___)) ui_)
+         (App (State (EffectsDemo "" "Cleared!" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Cleared" (Cons "Storage: Value cleared" log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Clipboard Effects ---
@@ -234,10 +234,10 @@
        10)
 
     (R "ClipboardWrite/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ rest___)) ui_)
+       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (ClipboardWriteComplete id_ Ok) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ "Copied!" rest___)) ui_)
+         (App (State (EffectsDemo sv_ ss_ ct_ "Copied!" aa_ af_ ax_ rn_ cp_ "Clipboard: Copied" (Cons "Clipboard: Text copied" log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "PasteFromClipboard/Enqueue"
@@ -250,10 +250,10 @@
        10)
 
     (R "ClipboardRead/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ rest___)) ui_)
+       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (ClipboardReadComplete id_ (Text text_)) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ text_ "Pasted!" rest___)) ui_)
+         (App (State (EffectsDemo sv_ ss_ text_ "Pasted!" aa_ af_ ax_ rn_ cp_ "Clipboard: Pasted" (Cons (Concat "Clipboard: Pasted " text_) log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Animation Effects ---
@@ -310,77 +310,86 @@
     ;; --- Random Effects ---
     (R "GenerateRandom/Enqueue"
        (Apply (GenerateRandom min_ max_) (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         app_
-         (Effects
-           (Pending p___ (RandRequest (FreshId) min_ max_))
-           inbox_))
+       (Enqueue (RandRequest min_ max_) (Program app_ (Effects (Pending p___) inbox_)))
        10)
 
     (R "RandResponse/Process"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ rest___)) ui_)
+       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (RandResponse id_ value_) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ value_ rest___)) ui_)
+         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ value_ cp_ (Concat "Random: " (ToString value_)) (Cons (Concat "Random: Generated " (ToString value_)) log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Navigation Effects ---
     (R "NavigateTo/Enqueue"
        (Apply (NavigateTo path_) (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         app_
-         (Effects
-           (Pending p___ (Navigate (FreshId) (Url path_) (Replace False)))
-           inbox_))
+       (Enqueue (Navigate (Url path_)) (Program app_ (Effects (Pending p___) inbox_)))
        10)
 
     (R "Navigate/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ rest___)) ui_)
+       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (NavigateComplete id_ Ok) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ rest___)) ui_)
+         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ "Navigation: Complete" (Cons "Navigation: URL updated" log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "ReadCurrentLocation/Enqueue"
        (Apply ReadCurrentLocation (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         app_
-         (Effects
-           (Pending p___ (ReadLocation (FreshId)))
-           inbox_))
+       (Enqueue ReadLocation (Program app_ (Effects (Pending p___) inbox_)))
        10)
 
     (R "ReadLocation/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ rest___)) ui_)
+       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
                 (Effects pending_ (Inbox (ReadLocationComplete id_ (Location (Path path_) _ _)) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ path_ le_ rest___)) ui_)
+         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ path_ (Concat "Location: " path_) (Cons (Concat "Location: Read " path_) log_))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Timer Effect ---
     (R "DelayedAction/Enqueue"
        (Apply DelayedAction (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         (Apply (UpdateLastEffect "Timer started...") app_)
-         (Effects
-           (Pending p___ (Timer (FreshId) (Delay 2000)))
-           inbox_))
+       (Enqueue (Timer (Delay 2000))
+                (Program (Apply (UpdateLastEffect "Timer started...") app_)
+                         (Effects (Pending p___) inbox_)))
        10)
 
     (R "Timer/Complete"
-       (Program app_ (Effects pending_ (Inbox (TimerComplete id_ _) rest___)))
+       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+                (Effects pending_ (Inbox (TimerComplete id_ _) rest___)))
        (Program
-         (Apply (UpdateLastEffect "Timer completed!") app_)
+         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ "Timer completed!" (Cons "Timer: 2s delay completed" log_))) ui_)
          (Effects pending_ (Inbox rest___))))
 
     ;; --- Helper Rules ---
     (R "UpdateLastEffect"
-       (Apply (UpdateLastEffect msg_) (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ rest___))
-       (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ msg_ rest___))
+       (Apply (UpdateLastEffect msg_) (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_))
+       (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ msg_ log_))
 
     (R "SetStorageStatus"
        (Apply (SetStorageStatus status_) (EffectsDemo sv_ ss_ rest___))
        (EffectsDemo sv_ status_ rest___))
+
+    ;; Generic enqueue rule - takes an effect term and inserts FreshId as first arg
+    ;; Pattern: (Enqueue (EffectKind ...args) program-context)
+    ;; Result: Adds (EffectKind (FreshId) ...args) to pending
+    (R "Enqueue/Generic"
+       (Enqueue (kind_ args___) (Program app_ (Effects (Pending p___) inbox_)))
+       (Program
+         app_
+         (Effects
+           (Pending p___ (kind_ (FreshId) args___))
+           inbox_))
+       100)  ; Very high priority to fire immediately
+
+    ;; Special case for effects with no arguments (just the ID)
+    (R "Enqueue/NoArgs"
+       (Enqueue effectKind_ (Program app_ (Effects (Pending p___) inbox_)))
+       (Program
+         app_
+         (Effects
+           (Pending p___ (effectKind_ (FreshId)))
+           inbox_))
+       99)  ; Slightly lower than Generic but still very high
 
     ;; --- UI Projections ---
     (R "ShowStoredValue"
@@ -446,21 +455,21 @@
        "Start Animation")
 
     (R "RenderLog"
-       (/@ (RenderLog) (App (State (EffectsDemo _ _ _ _ _ _ _ _ _ _ log___)) _))
-       (If (IsEmpty log___) "No effects triggered yet" (RenderLogItems log___)))
+       (/@ (RenderLog) (App (State (EffectsDemo _ _ _ _ _ _ _ _ _ _ log_)) _))
+       (If (IsNil log_) "No effects triggered yet" (RenderLogItems log_)))
 
     (R "RenderLogItems/Cons"
-       (RenderLogItems item_ rest___)
-       (Div
-         (P item_)
-         (RenderLogItems rest___)))
+       (RenderLogItems (Cons item_ rest_))
+       (Div :class "text-xs"
+         (P :class "mb-1" item_)
+         (RenderLogItems rest_)))
 
-    (R "RenderLogItems/Empty"
-       (RenderLogItems)
+    (R "RenderLogItems/Nil"
+       (RenderLogItems Nil)
        "")
 
-    (R "IsEmpty/True" (IsEmpty) True)
-    (R "IsEmpty/False" (IsEmpty _ ___) False)
+    (R "IsNil/Nil" (IsNil Nil) True)
+    (R "IsNil/Cons" (IsNil (Cons _ _)) False)
 
     ;; Conditionals
     (R "If/True"  (If True  a_ b_) a_)
