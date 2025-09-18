@@ -3,9 +3,10 @@
     (App
       (State (Count 0))
       (UI
-        (HStack
-          (Text "Value: " (Show Count))
-          (Button "Increment" (OnClick Inc))))))
+        (Div :class "card"
+              (H1 "Counter")
+              (P "Value: " (Show Count))
+              (Button :onClick Inc :class "btn" "Increment")))))
   (Rules
     (R "LiftApplyThroughApp"
        (Apply (Var act) (App (Var st) (Var ui)))

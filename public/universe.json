@@ -52,14 +52,53 @@
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "HStack"
+                    "v": "Div"
                   },
                   "a": [
                     {
                       "k": "Call",
                       "h": {
                         "k": "Sym",
-                        "v": "Text"
+                        "v": "Props"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "KV"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "class"
+                            },
+                            {
+                              "k": "Str",
+                              "v": "card"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "H1"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "Counter"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "P"
                       },
                       "a": [
                         {
@@ -89,21 +128,51 @@
                       },
                       "a": [
                         {
-                          "k": "Str",
-                          "v": "Increment"
-                        },
-                        {
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "OnClick"
+                            "v": "Props"
                           },
                           "a": [
                             {
-                              "k": "Sym",
-                              "v": "Inc"
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "KV"
+                              },
+                              "a": [
+                                {
+                                  "k": "Str",
+                                  "v": "onClick"
+                                },
+                                {
+                                  "k": "Sym",
+                                  "v": "Inc"
+                                }
+                              ]
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "KV"
+                              },
+                              "a": [
+                                {
+                                  "k": "Str",
+                                  "v": "class"
+                                },
+                                {
+                                  "k": "Str",
+                                  "v": "btn"
+                                }
+                              ]
                             }
                           ]
+                        },
+                        {
+                          "k": "Str",
+                          "v": "Increment"
                         }
                       ]
                     }

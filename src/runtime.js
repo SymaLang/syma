@@ -275,6 +275,23 @@ function dispatch(universe, rules, actionTerm) {
 /* --------------------- Minimal DOM projector ------------------ */
 /* Supports: App[ State[...], UI[ ... ]] with VStack, HStack, Text, Button[Str, OnClick->action] */
 
+function splitPropsAndChildren(node) {
+    if (!isCall(node)) return { props: null, children: [] };
+    if (node.a.length && isCall(node.a[0]) && isSym(node.a[0].h) && node.a[0].h.v === "Props") {
+        const propsNode = node.a[0];
+        const children = node.a.slice(1);
+        const props = {};
+        for (const kv of propsNode.a) {
+            if (!isCall(kv) || !isSym(kv.h) || kv.h.v !== "KV" || kv.a.length !== 2 || !isStr(kv.a[0])) {
+                throw new Error(`Props expects KV[str, value]; got ${show(kv)}`);
+            }
+            props[kv.a[0].v] = kv.a[1];
+        }
+        return { props, children };
+    }
+    return { props: null, children: node.a };
+}
+
 function renderUniverseToDOM(universe, mount, onDispatch) {
     mount.innerHTML = ""; // simple full replace (can optimize with keyed diff)
     const prog = getProgram(universe);
@@ -318,27 +335,36 @@ function renderUI(node, state, onDispatch) {
         return span;
     }
 
-    if (tag === "Button") {
-        const [label, meta] = node.a;
-        const btn = document.createElement("button");
-        btn.appendChild(renderTextPart(label, state));
+    {
+        const { props, children } = splitPropsAndChildren(node);
+        const el = document.createElement(tag.toLowerCase());
 
-        // Expect OnClick[action]
-        let action = null;
-        if (meta && isCall(meta) && isSym(meta.h) && meta.h.v==="OnClick") {
-            if (meta.a.length!==1) throw new Error("OnClick must have exactly one action argument");
-            action = meta.a[0];
-        } else {
-            throw new Error(`Button missing OnClick[...] meta: ${show(node)}`);
+        if (props) {
+            for (const [k, v] of Object.entries(props)) {
+                if (k === "onClick") {
+                    el.onclick = () => onDispatch(v); // v is an action term
+                    continue;
+                }
+                if (isStr(v) || isNum(v)) el.setAttribute(k, isStr(v) ? v.v : String(v.v));
+                else if (isSym(v)) el.setAttribute(k, v.v);
+                else el.setAttribute(k, JSON.stringify(v));
+            }
         }
 
-        btn.onclick = () => onDispatch(action);
-        return btn;
+        for (const ch of children) {
+            // strings/numbers/Show[...] become text; Calls recurse
+            if (isStr(ch) || isNum(ch) || (isCall(ch) && isSym(ch.h) && ch.h.v==="Show") || isSym(ch)) {
+                el.appendChild(renderTextPart(ch, state));
+            } else {
+                el.appendChild(renderUI(ch, state, onDispatch));
+            }
+        }
+        return el;
     }
 
     // Allow custom UI terms that reduce to primitives via rules before projection.
     // If something non-primitive leaked here, that's a modeling error:
-    throw new Error(`Unknown UI tag: ${tag}`);
+    // throw new Error(`Unknown UI tag: ${tag}`);
 }
 
 function renderTextPart(part, state) {

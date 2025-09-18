@@ -206,11 +206,45 @@ function parse(tokens) {
 }
 
 /* --------------- Normalization passes --------------- */
+/* --------------- AST helpers ----------------------- */
+const K = { Sym: 'Sym', Num: 'Num', Str: 'Str', Call: 'Call' };
+const Sym  = v => ({ k: K.Sym,  v });
+const Num  = v => ({ k: K.Num,  v });
+const Str  = v => ({ k: K.Str,  v });
+const Call = (h, ...a) => ({ k: K.Call, h, a });
+
+const isSym  = n => n && n.k === K.Sym;
+const isNum  = n => n && n.k === K.Num;
+const isStr  = n => n && n.k === K.Str;
+const isCall = n => n && n.k === K.Call;
 /**
  * Post-parse fixups so the AST matches runtime conventions:
  *  - (Var x) → Call(Sym("Var"), [Str(x)]) with x coerced to Str
  *  - Convert (Rules ...) / (R ...) etc. left as Calls — runtime already expects Calls.
  */
+function desugarTagProps(node) {
+  if (isCall(node)) {
+    const head = desugarTagProps(node.h);
+    const args = node.a.map(desugarTagProps);
+    if (isSym(head) && head.v !== "Var") {
+      const kvs = [], children = [];
+      for (let i=0; i<args.length; i++) {
+        const a = args[i];
+        if (isSym(a) && a.v.startsWith(":")) {
+          const key = a.v.slice(1);
+          const val = args[++i];
+          kvs.push(Call(Sym("KV"), Str(key), val));
+        } else {
+          children.push(a);
+        }
+      }
+      if (kvs.length) return Call(head, Call(Sym("Props"), ...kvs), ...children);
+    }
+    return Call(head, ...args);
+  }
+  return node;
+}
+
 function postprocess(node) {
   if (!node || typeof node !== 'object') return node;
 
@@ -247,7 +281,7 @@ function die(msg) {
   try {
     const src = await readSource();
     const tokens = tokenize(src);
-    const ast = postprocess(parse(tokens));
+    const ast = desugarTagProps(postprocess(parse(tokens)));
     const json = pretty ? JSON.stringify(ast, null, 2) : JSON.stringify(ast);
     if (outFile) {
       fs.writeFileSync(outFile, json);
