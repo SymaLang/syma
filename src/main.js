@@ -1,3 +1,4 @@
+import '../app.css';
 import { boot } from "./runtime.js";
 import universe from "./todo.lisp";
 

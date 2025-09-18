@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* Custom styles and component classes */
+@layer utilities {
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-in-out;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

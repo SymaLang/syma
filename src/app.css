@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom component classes using Tailwind */
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+    @apply bg-syma-500 text-white hover:bg-syma-600 active:bg-syma-700;
+    @apply focus:outline-none focus:ring-2 focus:ring-syma-400 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+    @apply bg-gray-200 text-gray-800 hover:bg-gray-300 active:bg-gray-400;
+    @apply focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2;
+  }
+
+  .input-field {
+    @apply px-3 py-2 rounded-lg border border-gray-300;
+    @apply focus:outline-none focus:ring-2 focus:ring-syma-400 focus:border-transparent;
+    @apply placeholder-gray-400;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-lg p-6;
+    @apply border border-gray-100;
+  }
+
+  .todo-item {
+    @apply flex items-center gap-3 p-3 rounded-lg;
+    @apply hover:bg-gray-50 transition-colors duration-150;
+  }
+
+  .todo-done {
+    @apply opacity-60 line-through;
+  }
+
+  .filter-btn {
+    @apply px-3 py-1.5 rounded-md text-sm font-medium;
+    @apply text-gray-600 hover:text-gray-900 hover:bg-gray-100;
+    @apply transition-colors duration-150;
+  }
+
+  .filter-btn-active {
+    @apply bg-syma-100 text-syma-700 hover:bg-syma-200;
+  }
+}

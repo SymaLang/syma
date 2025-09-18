@@ -8,11 +8,13 @@
           (Items)                 ; list of Item[id Num, title Str, done Sym[True|False]]
           (Filter All)))          ; All | Active | Done
       (UI
-        (Div :class "card"
-          (H1 "Symbolic Todos")
-          (Div :class "controls"
+        (Div :class "max-w-2xl mx-auto p-6"
+          (Div :class "bg-white rounded-xl shadow-lg p-8"
+            (H1 :class "text-3xl font-bold text-gray-800 mb-6" "Symbolic Todos")
+            (Div :class "flex gap-2 mb-6"
             (Input :type "text"
                    :placeholder "Enter todo title..."
+                   :class "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                    :value (Input todoInput)
                    :onKeydown (When (KeyIs "Enter")
                                 (PreventDefault
@@ -22,20 +24,15 @@
             (Button :onClick (Seq
                               (AddTodoWithTitle (Input todoInput))
                               (ClearInput todoInput))
-                    :class "btn" "Add")
-            (Button :onClick Add3 :class "btn" "Add 3 Tasks")
-            (Span :class "count" "Left: " (Show LeftCount))
-    )
+                    :class "px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors" "Add")
+            (Button :onClick Add3 :class "px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors" "Add 3")
+            (Span :class "px-4 py-2 text-gray-600 font-medium" "Active: " (Show LeftCount)))
           ;; The list is rendered by projecting a symbolic node that rules expand to real UI
           (Project (RenderTodos))
-          (Div :class "filters"
-            (Button :onClick (SetFilter All)  :class "btn" "All")
-            (Button :onClick (SetFilter Active) :class "btn" "Active")
-            (Button :onClick (SetFilter Done) :class "btn" "Done"))
-    )
-    )
-    )
-    )
+          (Div :class "flex gap-2 justify-center mt-6"
+            (Button :onClick (SetFilter All)  :class "px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 transition-colors" "All")
+            (Button :onClick (SetFilter Active) :class "px-4 py-2 rounded-lg text-sm font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors" "Active")
+            (Button :onClick (SetFilter Done) :class "px-4 py-2 rounded-lg text-sm font-medium bg-green-100 hover:bg-green-200 text-green-700 transition-colors" "Done")))))))
 
   ;; ========= Rules =========
   (Rules
@@ -150,18 +147,25 @@
     (R "RenderTodos"
        (/@ (RenderTodos)
            (App (State (TodoState (NextId (Var _)) (Items (Var ___)) (Filter (Var flt)))) (Var _)))
-       (Ul :class "todos" (RenderList (Var flt) (Var ___))))
+       (Div :class "space-y-2" (RenderList (Var flt) (Var ___))))
 
     ;; RenderList dispatch on filter
+    ;; Handle empty list case first
+    (R "RenderList/All-Empty"
+       (RenderList All)
+       (Div :class "text-center py-8 text-gray-400" "No items yet"))
+
     (R "RenderList/All"
-       (RenderList All (Var ___))
-       (RenderItems (Var ___)))
+       (RenderList All (Var items___))
+       (RenderItems (Var items___)))
+
     (R "RenderList/Active"
-       (RenderList Active (Var ___))
-       (RenderItems (FilterActive (Var ___))))
+       (RenderList Active (Var items___))
+       (RenderItems (FilterActive (Var items___))))
+
     (R "RenderList/Done"
-       (RenderList Done (Var ___))
-       (RenderItems (FilterDone (Var ___))))
+       (RenderList Done (Var items___))
+       (RenderItems (FilterDone (Var items___))))
 
     ;; Filtering fused into RenderItems so results splice in-place
     (R "RenderItems/FilterActive-Nil"
@@ -184,19 +188,21 @@
        (RenderItems (FilterDone (Item (Id (Var _)) (Title (Var _)) (Done False)) (Var rest___)))
        (RenderItems (FilterDone (Var rest___))))
 
-    ;; Turn a (proper) list of Item[...] into <li> rows
-    (R "RenderItems/Nil"
-       (RenderItems)
-       (Span :class "empty" "No items"))
+    ;; Turn a (proper) list of Item[...] into rows
+    ;; IMPORTANT: Use higher priority for Cons to match before Nil
     (R "RenderItems/Cons"
        (RenderItems (Item (Id (Var i)) (Title (Var t)) (Done (Var d))) (Var rest___))
-       (Fragment
-         (Li :class "row"
-           (Button :onClick (Toggle (Var i)) :class "toggle" (If (Var d) "✅" "⬜"))
-           (Span :class (If (Var d) "done" "open") (Var t) (Var i))
-           (Button :onClick (Remove (Var i)) :class "remove" "✖"))
-         (RenderItems (Var rest___))))
+       (Div :class "w-full"
+         (Div :class "flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors mb-2"
+           (Button :onClick (Toggle (Var i)) :class "text-2xl" (If (Var d) "✅" "⬜"))
+           (Span :class (If (Var d) "flex-1 line-through text-gray-400" "flex-1 text-gray-700") (Var t))
+           (Button :onClick (Remove (Var i)) :class "text-red-500 hover:text-red-700 text-xl" "×"))
+         (RenderItems (Var rest___)))
+       1)  ; Priority 1 to match before Nil
 
+    (R "RenderItems/Nil"
+       (RenderItems)
+       (Span))  ; Empty span - just a terminator for recursion
 
     ;; Tiny If that chooses between two Strs based on True/False
     (R "If/True"  (If True  (Var a) (Var b)) (Var a))

@@ -105,22 +105,9 @@
                             },
                             {
                               "k": "Str",
-                              "v": "card"
+                              "v": "max-w-2xl mx-auto p-6"
                             }
                           ]
-                        }
-                      ]
-                    },
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "H1"
-                      },
-                      "a": [
-                        {
-                          "k": "Str",
-                          "v": "Symbolic Todos"
                         }
                       ]
                     },
@@ -151,7 +138,7 @@
                                 },
                                 {
                                   "k": "Str",
-                                  "v": "controls"
+                                  "v": "bg-white rounded-xl shadow-lg p-8"
                                 }
                               ]
                             }
@@ -161,7 +148,7 @@
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "Input"
+                            "v": "H1"
                           },
                           "a": [
                             {
@@ -180,146 +167,19 @@
                                   "a": [
                                     {
                                       "k": "Str",
-                                      "v": "type"
+                                      "v": "class"
                                     },
                                     {
                                       "k": "Str",
-                                      "v": "text"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "placeholder"
-                                    },
-                                    {
-                                      "k": "Str",
-                                      "v": "Enter todo title..."
-                                    }
-                                  ]
-                                },
-                                {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "value"
-                                    },
-                                    {
-                                      "k": "Call",
-                                      "h": {
-                                        "k": "Sym",
-                                        "v": "Input"
-                                      },
-                                      "a": [
-                                        {
-                                          "k": "Sym",
-                                          "v": "todoInput"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "onKeydown"
-                                    },
-                                    {
-                                      "k": "Call",
-                                      "h": {
-                                        "k": "Sym",
-                                        "v": "When"
-                                      },
-                                      "a": [
-                                        {
-                                          "k": "Call",
-                                          "h": {
-                                            "k": "Sym",
-                                            "v": "KeyIs"
-                                          },
-                                          "a": [
-                                            {
-                                              "k": "Str",
-                                              "v": "Enter"
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          "k": "Call",
-                                          "h": {
-                                            "k": "Sym",
-                                            "v": "PreventDefault"
-                                          },
-                                          "a": [
-                                            {
-                                              "k": "Call",
-                                              "h": {
-                                                "k": "Sym",
-                                                "v": "Seq"
-                                              },
-                                              "a": [
-                                                {
-                                                  "k": "Call",
-                                                  "h": {
-                                                    "k": "Sym",
-                                                    "v": "AddTodoWithTitle"
-                                                  },
-                                                  "a": [
-                                                    {
-                                                      "k": "Call",
-                                                      "h": {
-                                                        "k": "Sym",
-                                                        "v": "Input"
-                                                      },
-                                                      "a": [
-                                                        {
-                                                          "k": "Sym",
-                                                          "v": "todoInput"
-                                                        }
-                                                      ]
-                                                    }
-                                                  ]
-                                                },
-                                                {
-                                                  "k": "Call",
-                                                  "h": {
-                                                    "k": "Sym",
-                                                    "v": "ClearInput"
-                                                  },
-                                                  "a": [
-                                                    {
-                                                      "k": "Sym",
-                                                      "v": "todoInput"
-                                                    }
-                                                  ]
-                                                }
-                                              ]
-                                            }
-                                          ]
-                                        }
-                                      ]
+                                      "v": "text-3xl font-bold text-gray-800 mb-6"
                                     }
                                   ]
                                 }
                               ]
+                            },
+                            {
+                              "k": "Str",
+                              "v": "Symbolic Todos"
                             }
                           ]
                         },
@@ -327,7 +187,7 @@
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "Button"
+                            "v": "Div"
                           },
                           "a": [
                             {
@@ -346,42 +206,97 @@
                                   "a": [
                                     {
                                       "k": "Str",
-                                      "v": "onClick"
+                                      "v": "class"
+                                    },
+                                    {
+                                      "k": "Str",
+                                      "v": "flex gap-2 mb-6"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Input"
+                              },
+                              "a": [
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Props"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "type"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "text"
+                                        }
+                                      ]
                                     },
                                     {
                                       "k": "Call",
                                       "h": {
                                         "k": "Sym",
-                                        "v": "Seq"
+                                        "v": "KV"
                                       },
                                       "a": [
                                         {
-                                          "k": "Call",
-                                          "h": {
-                                            "k": "Sym",
-                                            "v": "AddTodoWithTitle"
-                                          },
-                                          "a": [
-                                            {
-                                              "k": "Call",
-                                              "h": {
-                                                "k": "Sym",
-                                                "v": "Input"
-                                              },
-                                              "a": [
-                                                {
-                                                  "k": "Sym",
-                                                  "v": "todoInput"
-                                                }
-                                              ]
-                                            }
-                                          ]
+                                          "k": "Str",
+                                          "v": "placeholder"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "Enter todo title..."
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "class"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "value"
                                         },
                                         {
                                           "k": "Call",
                                           "h": {
                                             "k": "Sym",
-                                            "v": "ClearInput"
+                                            "v": "Input"
                                           },
                                           "a": [
                                             {
@@ -391,87 +306,302 @@
                                           ]
                                         }
                                       ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "class"
                                     },
                                     {
-                                      "k": "Str",
-                                      "v": "btn"
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "onKeydown"
+                                        },
+                                        {
+                                          "k": "Call",
+                                          "h": {
+                                            "k": "Sym",
+                                            "v": "When"
+                                          },
+                                          "a": [
+                                            {
+                                              "k": "Call",
+                                              "h": {
+                                                "k": "Sym",
+                                                "v": "KeyIs"
+                                              },
+                                              "a": [
+                                                {
+                                                  "k": "Str",
+                                                  "v": "Enter"
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "k": "Call",
+                                              "h": {
+                                                "k": "Sym",
+                                                "v": "PreventDefault"
+                                              },
+                                              "a": [
+                                                {
+                                                  "k": "Call",
+                                                  "h": {
+                                                    "k": "Sym",
+                                                    "v": "Seq"
+                                                  },
+                                                  "a": [
+                                                    {
+                                                      "k": "Call",
+                                                      "h": {
+                                                        "k": "Sym",
+                                                        "v": "AddTodoWithTitle"
+                                                      },
+                                                      "a": [
+                                                        {
+                                                          "k": "Call",
+                                                          "h": {
+                                                            "k": "Sym",
+                                                            "v": "Input"
+                                                          },
+                                                          "a": [
+                                                            {
+                                                              "k": "Sym",
+                                                              "v": "todoInput"
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "k": "Call",
+                                                      "h": {
+                                                        "k": "Sym",
+                                                        "v": "ClearInput"
+                                                      },
+                                                      "a": [
+                                                        {
+                                                          "k": "Sym",
+                                                          "v": "todoInput"
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
                               ]
                             },
                             {
-                              "k": "Str",
-                              "v": "Add"
-                            }
-                          ]
-                        },
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Button"
-                          },
-                          "a": [
-                            {
                               "k": "Call",
                               "h": {
                                 "k": "Sym",
-                                "v": "Props"
+                                "v": "Button"
                               },
                               "a": [
                                 {
                                   "k": "Call",
                                   "h": {
                                     "k": "Sym",
-                                    "v": "KV"
+                                    "v": "Props"
                                   },
                                   "a": [
                                     {
-                                      "k": "Str",
-                                      "v": "onClick"
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "onClick"
+                                        },
+                                        {
+                                          "k": "Call",
+                                          "h": {
+                                            "k": "Sym",
+                                            "v": "Seq"
+                                          },
+                                          "a": [
+                                            {
+                                              "k": "Call",
+                                              "h": {
+                                                "k": "Sym",
+                                                "v": "AddTodoWithTitle"
+                                              },
+                                              "a": [
+                                                {
+                                                  "k": "Call",
+                                                  "h": {
+                                                    "k": "Sym",
+                                                    "v": "Input"
+                                                  },
+                                                  "a": [
+                                                    {
+                                                      "k": "Sym",
+                                                      "v": "todoInput"
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "k": "Call",
+                                              "h": {
+                                                "k": "Sym",
+                                                "v": "ClearInput"
+                                              },
+                                              "a": [
+                                                {
+                                                  "k": "Sym",
+                                                  "v": "todoInput"
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
                                     },
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "class"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "k": "Str",
+                                  "v": "Add"
+                                }
+                              ]
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Button"
+                              },
+                              "a": [
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Props"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "onClick"
+                                        },
+                                        {
+                                          "k": "Sym",
+                                          "v": "Add3"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "class"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "k": "Str",
+                                  "v": "Add 3"
+                                }
+                              ]
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Span"
+                              },
+                              "a": [
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Props"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "class"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "px-4 py-2 text-gray-600 font-medium"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "k": "Str",
+                                  "v": "Active: "
+                                },
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Show"
+                                  },
+                                  "a": [
                                     {
                                       "k": "Sym",
-                                      "v": "Add3"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "class"
-                                    },
-                                    {
-                                      "k": "Str",
-                                      "v": "btn"
+                                      "v": "LeftCount"
                                     }
                                   ]
                                 }
                               ]
-                            },
-                            {
-                              "k": "Str",
-                              "v": "Add 3 Tasks"
                             }
                           ]
                         },
@@ -479,7 +609,24 @@
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "Span"
+                            "v": "Project"
+                          },
+                          "a": [
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "RenderTodos"
+                              },
+                              "a": []
+                            }
+                          ]
+                        },
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "Div"
                           },
                           "a": [
                             {
@@ -502,275 +649,206 @@
                                     },
                                     {
                                       "k": "Str",
-                                      "v": "count"
+                                      "v": "flex gap-2 justify-center mt-6"
                                     }
                                   ]
                                 }
                               ]
                             },
                             {
-                              "k": "Str",
-                              "v": "Left: "
-                            },
-                            {
                               "k": "Call",
                               "h": {
                                 "k": "Sym",
-                                "v": "Show"
+                                "v": "Button"
                               },
                               "a": [
                                 {
-                                  "k": "Sym",
-                                  "v": "LeftCount"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "Project"
-                      },
-                      "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "RenderTodos"
-                          },
-                          "a": []
-                        }
-                      ]
-                    },
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "Div"
-                      },
-                      "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Props"
-                          },
-                          "a": [
-                            {
-                              "k": "Call",
-                              "h": {
-                                "k": "Sym",
-                                "v": "KV"
-                              },
-                              "a": [
-                                {
-                                  "k": "Str",
-                                  "v": "class"
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Props"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "onClick"
+                                        },
+                                        {
+                                          "k": "Call",
+                                          "h": {
+                                            "k": "Sym",
+                                            "v": "SetFilter"
+                                          },
+                                          "a": [
+                                            {
+                                              "k": "Sym",
+                                              "v": "All"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "class"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 transition-colors"
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 },
                                 {
                                   "k": "Str",
-                                  "v": "filters"
+                                  "v": "All"
                                 }
                               ]
-                            }
-                          ]
-                        },
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Button"
-                          },
-                          "a": [
+                            },
                             {
                               "k": "Call",
                               "h": {
                                 "k": "Sym",
-                                "v": "Props"
+                                "v": "Button"
                               },
                               "a": [
                                 {
                                   "k": "Call",
                                   "h": {
                                     "k": "Sym",
-                                    "v": "KV"
+                                    "v": "Props"
                                   },
                                   "a": [
                                     {
-                                      "k": "Str",
-                                      "v": "onClick"
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "onClick"
+                                        },
+                                        {
+                                          "k": "Call",
+                                          "h": {
+                                            "k": "Sym",
+                                            "v": "SetFilter"
+                                          },
+                                          "a": [
+                                            {
+                                              "k": "Sym",
+                                              "v": "Active"
+                                            }
+                                          ]
+                                        }
+                                      ]
                                     },
                                     {
                                       "k": "Call",
                                       "h": {
                                         "k": "Sym",
-                                        "v": "SetFilter"
+                                        "v": "KV"
                                       },
                                       "a": [
                                         {
-                                          "k": "Sym",
-                                          "v": "All"
+                                          "k": "Str",
+                                          "v": "class"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "px-4 py-2 rounded-lg text-sm font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors"
                                         }
                                       ]
                                     }
                                   ]
                                 },
                                 {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "class"
-                                    },
-                                    {
-                                      "k": "Str",
-                                      "v": "btn"
-                                    }
-                                  ]
+                                  "k": "Str",
+                                  "v": "Active"
                                 }
                               ]
                             },
                             {
-                              "k": "Str",
-                              "v": "All"
-                            }
-                          ]
-                        },
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Button"
-                          },
-                          "a": [
-                            {
                               "k": "Call",
                               "h": {
                                 "k": "Sym",
-                                "v": "Props"
+                                "v": "Button"
                               },
                               "a": [
                                 {
                                   "k": "Call",
                                   "h": {
                                     "k": "Sym",
-                                    "v": "KV"
+                                    "v": "Props"
                                   },
                                   "a": [
                                     {
-                                      "k": "Str",
-                                      "v": "onClick"
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "KV"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "onClick"
+                                        },
+                                        {
+                                          "k": "Call",
+                                          "h": {
+                                            "k": "Sym",
+                                            "v": "SetFilter"
+                                          },
+                                          "a": [
+                                            {
+                                              "k": "Sym",
+                                              "v": "Done"
+                                            }
+                                          ]
+                                        }
+                                      ]
                                     },
                                     {
                                       "k": "Call",
                                       "h": {
                                         "k": "Sym",
-                                        "v": "SetFilter"
+                                        "v": "KV"
                                       },
                                       "a": [
                                         {
-                                          "k": "Sym",
-                                          "v": "Active"
+                                          "k": "Str",
+                                          "v": "class"
+                                        },
+                                        {
+                                          "k": "Str",
+                                          "v": "px-4 py-2 rounded-lg text-sm font-medium bg-green-100 hover:bg-green-200 text-green-700 transition-colors"
                                         }
                                       ]
                                     }
                                   ]
                                 },
                                 {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "class"
-                                    },
-                                    {
-                                      "k": "Str",
-                                      "v": "btn"
-                                    }
-                                  ]
+                                  "k": "Str",
+                                  "v": "Done"
                                 }
                               ]
-                            },
-                            {
-                              "k": "Str",
-                              "v": "Active"
-                            }
-                          ]
-                        },
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Button"
-                          },
-                          "a": [
-                            {
-                              "k": "Call",
-                              "h": {
-                                "k": "Sym",
-                                "v": "Props"
-                              },
-                              "a": [
-                                {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "onClick"
-                                    },
-                                    {
-                                      "k": "Call",
-                                      "h": {
-                                        "k": "Sym",
-                                        "v": "SetFilter"
-                                      },
-                                      "a": [
-                                        {
-                                          "k": "Sym",
-                                          "v": "Done"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "k": "Call",
-                                  "h": {
-                                    "k": "Sym",
-                                    "v": "KV"
-                                  },
-                                  "a": [
-                                    {
-                                      "k": "Str",
-                                      "v": "class"
-                                    },
-                                    {
-                                      "k": "Str",
-                                      "v": "btn"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "k": "Str",
-                              "v": "Done"
                             }
                           ]
                         }
@@ -3482,7 +3560,7 @@
               "k": "Call",
               "h": {
                 "k": "Sym",
-                "v": "Ul"
+                "v": "Div"
               },
               "a": [
                 {
@@ -3505,7 +3583,7 @@
                         },
                         {
                           "k": "Str",
-                          "v": "todos"
+                          "v": "space-y-2"
                         }
                       ]
                     }
@@ -3559,6 +3637,71 @@
           "a": [
             {
               "k": "Str",
+              "v": "RenderList/All-Empty"
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "RenderList"
+              },
+              "a": [
+                {
+                  "k": "Sym",
+                  "v": "All"
+                }
+              ]
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Div"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Props"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "KV"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "class"
+                        },
+                        {
+                          "k": "Str",
+                          "v": "text-center py-8 text-gray-400"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "k": "Str",
+                  "v": "No items yet"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "k": "Call",
+          "h": {
+            "k": "Sym",
+            "v": "R"
+          },
+          "a": [
+            {
+              "k": "Str",
               "v": "RenderList/All"
             },
             {
@@ -3581,7 +3724,7 @@
                   "a": [
                     {
                       "k": "Str",
-                      "v": ""
+                      "v": "items"
                     }
                   ]
                 }
@@ -3603,7 +3746,7 @@
                   "a": [
                     {
                       "k": "Str",
-                      "v": ""
+                      "v": "items"
                     }
                   ]
                 }
@@ -3642,7 +3785,7 @@
                   "a": [
                     {
                       "k": "Str",
-                      "v": ""
+                      "v": "items"
                     }
                   ]
                 }
@@ -3671,7 +3814,7 @@
                       "a": [
                         {
                           "k": "Str",
-                          "v": ""
+                          "v": "items"
                         }
                       ]
                     }
@@ -3712,7 +3855,7 @@
                   "a": [
                     {
                       "k": "Str",
-                      "v": ""
+                      "v": "items"
                     }
                   ]
                 }
@@ -3741,7 +3884,7 @@
                       "a": [
                         {
                           "k": "Str",
-                          "v": ""
+                          "v": "items"
                         }
                       ]
                     }
@@ -4532,66 +4675,6 @@
           "a": [
             {
               "k": "Str",
-              "v": "RenderItems/Nil"
-            },
-            {
-              "k": "Call",
-              "h": {
-                "k": "Sym",
-                "v": "RenderItems"
-              },
-              "a": []
-            },
-            {
-              "k": "Call",
-              "h": {
-                "k": "Sym",
-                "v": "Span"
-              },
-              "a": [
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "Props"
-                  },
-                  "a": [
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "KV"
-                      },
-                      "a": [
-                        {
-                          "k": "Str",
-                          "v": "class"
-                        },
-                        {
-                          "k": "Str",
-                          "v": "empty"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "k": "Str",
-                  "v": "No items"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "k": "Call",
-          "h": {
-            "k": "Sym",
-            "v": "R"
-          },
-          "a": [
-            {
-              "k": "Str",
               "v": "RenderItems/Cons"
             },
             {
@@ -4695,14 +4778,40 @@
               "k": "Call",
               "h": {
                 "k": "Sym",
-                "v": "Fragment"
+                "v": "Div"
               },
               "a": [
                 {
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "Li"
+                    "v": "Props"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "KV"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "class"
+                        },
+                        {
+                          "k": "Str",
+                          "v": "w-full"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Div"
                   },
                   "a": [
                     {
@@ -4725,7 +4834,7 @@
                             },
                             {
                               "k": "Str",
-                              "v": "row"
+                              "v": "flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors mb-2"
                             }
                           ]
                         }
@@ -4793,7 +4902,7 @@
                                 },
                                 {
                                   "k": "Str",
-                                  "v": "toggle"
+                                  "v": "text-2xl"
                                 }
                               ]
                             }
@@ -4878,11 +4987,11 @@
                                     },
                                     {
                                       "k": "Str",
-                                      "v": "done"
+                                      "v": "flex-1 line-through text-gray-400"
                                     },
                                     {
                                       "k": "Str",
-                                      "v": "open"
+                                      "v": "flex-1 text-gray-700"
                                     }
                                   ]
                                 }
@@ -4900,19 +5009,6 @@
                             {
                               "k": "Str",
                               "v": "t"
-                            }
-                          ]
-                        },
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Var"
-                          },
-                          "a": [
-                            {
-                              "k": "Str",
-                              "v": "i"
                             }
                           ]
                         }
@@ -4980,7 +5076,7 @@
                                 },
                                 {
                                   "k": "Str",
-                                  "v": "remove"
+                                  "v": "text-red-500 hover:text-red-700 text-xl"
                                 }
                               ]
                             }
@@ -4988,7 +5084,7 @@
                         },
                         {
                           "k": "Str",
-                          "v": "✖"
+                          "v": "×"
                         }
                       ]
                     }
@@ -5017,6 +5113,39 @@
                   ]
                 }
               ]
+            },
+            {
+              "k": "Num",
+              "v": 1
+            }
+          ]
+        },
+        {
+          "k": "Call",
+          "h": {
+            "k": "Sym",
+            "v": "R"
+          },
+          "a": [
+            {
+              "k": "Str",
+              "v": "RenderItems/Nil"
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "RenderItems"
+              },
+              "a": []
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Span"
+              },
+              "a": []
             }
           ]
         },
