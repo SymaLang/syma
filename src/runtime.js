@@ -7,13 +7,9 @@
  * - Event bridge: Apply[action, Program] + Normalize
  ******************************************************************/
 
-/* --------------------- AST helpers --------------------------- */
-const K = {
-    Sym: "Sym",
-    Num: "Num",
-    Str: "Str",
-    Call: "Call"
-};
+import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from './ast-helpers.js';
+import { createEventHandler, handleBinding, clearInput, getInputValue } from './events.js';
+
 /* -------- Dev trace toggle -------- */
 // Enable tracing via:
 //   1) window.SYMA_DEV_TRACE = true
@@ -28,38 +24,6 @@ const SYMA_DEV_TRACE = (() => {
     }
     return false;
 })();
-
-const Sym = v => ({k: K.Sym, v});
-const Num = v => ({k: K.Num, v});
-const Str = v => ({k: K.Str, v});
-const Call = (h, ...a) => ({k: K.Call, h, a});
-
-/* type guards */
-const isSym = n => n && n.k === K.Sym;
-const isNum = n => n && n.k === K.Num;
-const isStr = n => n && n.k === K.Str;
-const isCall = n => n && n.k === K.Call;
-
-/* Deep clone (small trees, simple) */
-const clone = n => JSON.parse(JSON.stringify(n));
-
-/* Structural deep equality */
-const deq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
-const Splice  = (items) => ({ __splice: true, items });
-const isSplice = (x) => x && x.__splice === true && Array.isArray(x.items);
-const arrEq   = (A, B) =>
-    Array.isArray(A) && Array.isArray(B) &&
-    A.length === B.length && A.every((x,i)=>deq(x,B[i]));
-
-/* Pretty (for debugging) */
-const show = n => {
-    if (isSym(n)) return n.v;
-    if (isNum(n)) return String(n.v);
-    if (isStr(n)) return JSON.stringify(n.v);
-    if (isCall(n)) return `${show(n.h)}[${n.a.map(show).join(", ")}]`;
-    throw new Error("show: unknown node kind");
-};
 
 /* --------------------- Rule extraction ----------------------- */
 /* We expect: Rules[...] where each rule is R[name:Str, lhs:Expr, rhs:Expr, prio?:Num] */
@@ -511,13 +475,34 @@ function renderUI(node, state, onDispatch) {
 
     if (props) {
         for (const [k, v] of Object.entries(props)) {
-            if (k === "onClick") {
-                el.onclick = () => onDispatch(v); // v is an action term
+            // Handle ALL events generically - any prop starting with "on"
+            if (k.startsWith("on")) {
+                const eventName = k.slice(2).toLowerCase(); // onClick -> click, onMouseOver -> mouseover
+                el.addEventListener(eventName, createEventHandler(v, onDispatch));
                 continue;
             }
-            if (isStr(v) || isNum(v)) el.setAttribute(k, isStr(v) ? v.v : String(v.v));
-            else if (isSym(v)) el.setAttribute(k, v.v);
-            else el.setAttribute(k, JSON.stringify(v));
+
+            // Handle two-way bindings (e.g., bind-value, bind-checked)
+            if (k.startsWith("bind-")) {
+                const bindingType = k.slice(5); // bind-value -> value
+                handleBinding(el, bindingType, v, onDispatch);
+                continue;
+            }
+
+            // Regular attributes
+            if (isStr(v) || isNum(v)) {
+                el.setAttribute(k, isStr(v) ? v.v : String(v.v));
+            } else if (isSym(v)) {
+                el.setAttribute(k, v.v);
+            } else {
+                // For complex values, might be a binding expression
+                if (isCall(v) && isSym(v.h) && v.h.v === "Input") {
+                    // Special handling for (Input fieldName) in attributes
+                    handleBinding(el, k, v, onDispatch);
+                } else {
+                    el.setAttribute(k, JSON.stringify(v));
+                }
+            }
         }
     }
 
@@ -639,4 +624,4 @@ function setTrace(v) {
 
 window.SymbolicHost = {...window.SymbolicHost, setTrace};
 
-export {boot, show, dispatch};
+export {boot, show, dispatch, clearInput, getInputValue};

@@ -11,8 +11,19 @@
         (Div :class "card"
           (H1 "Symbolic Todos")
           (Div :class "controls"
-            (Button :onClick AddTodo :class "btn" "Add")
-            (Button :onClick Add3 :class "btn" "Add 3")
+            (Input :type "text"
+                   :placeholder "Enter todo title..."
+                   :value (Input todoInput)
+                   :onKeydown (When (KeyIs "Enter")
+                                (PreventDefault
+                                  (Seq
+                                    (AddTodoWithTitle (Input todoInput))
+                                    (ClearInput todoInput)))))
+            (Button :onClick (Seq
+                              (AddTodoWithTitle (Input todoInput))
+                              (ClearInput todoInput))
+                    :class "btn" "Add")
+            (Button :onClick Add3 :class "btn" "Add 3 Tasks")
             (Span :class "count" "Left: " (Show LeftCount))
     )
           ;; The list is rendered by projecting a symbolic node that rules expand to real UI
@@ -42,7 +53,24 @@
     ;; Item := (Item (Id n) (Title "…") (Done True|False))
     ;; TodoState := (TodoState (NextId n) (Items ...list...) (Filter F))
 
-    ;; --- Add single todo (title = "Task n") ---
+    ;; --- Add single todo with custom title ---
+    ;; Skip empty titles
+    (R "AddTodoWithTitle/Empty"
+       (Apply (AddTodoWithTitle (Str ""))
+         (Var state))
+       (Var state))
+
+    (R "AddTodoWithTitle"
+       (Apply (AddTodoWithTitle (Var title))
+         (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var f))))
+       (TodoState
+         (NextId (Add (Var n) 1))
+         (Items
+           (Var ___)
+           (Item (Id (Var n)) (Title (Var title)) (Done False)))
+         (Filter (Var f))))
+
+    ;; --- Add single todo with default title ---
     (R "AddTodo"
        (Apply AddTodo
          (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var f))))
