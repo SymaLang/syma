@@ -45,11 +45,11 @@
     ;; --- Add single todo (title = "Task n") ---
     (R "AddTodo"
        (Apply AddTodo
-         (TodoState (NextId (Var n)) (Items (Var xs___)) (Filter (Var f))))
+         (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var f))))
        (TodoState
          (NextId (Add (Var n) 1))
          (Items
-           (Var xs___)
+           (Var ___)
            (Item (Id (Var n)) (Title (Str "Task ")) (Done False)))
          (Filter (Var f))))
 
@@ -91,49 +91,49 @@
     ;; --- Set filter ---
     (R "SetFilter"
        (Apply (SetFilter (Var flt))
-         (TodoState (NextId (Var n)) (Items (Var xs___)) (Filter (Var oldFilter))))
-       (TodoState (NextId (Var n)) (Items (Var xs___)) (Filter (Var flt))))
+         (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var _))))
+       (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var flt))))
 
     ;; ---------- Projection layer ----------
 
     ;; Count of active items (for header)
     (R "ShowLeftCount/Empty"
        (/@ (Show LeftCount)
-           (App (State (TodoState (NextId (Var n)) (Items) (Filter (Var f)))) (Var ui)))
+           (App (State (TodoState (NextId (Var _)) (Items) (Filter (Var _)))) (Var _)))
        0)
 
     (R "ShowLeftCount/NonEmpty"
        (/@ (Show LeftCount)
-           (App (State (TodoState (NextId (Var n)) (Items (Var xs___)) (Filter (Var f)))) (Var ui)))
-       (CountActive (Var xs___)))
+           (App (State (TodoState (NextId (Var _)) (Items (Var ___)) (Filter (Var _)))) (Var _)))
+       (CountActive (Var ___)))
 
     ;; CountActive over a list (linear recursion)
     (R "CountActive/Nil"
        (CountActive)
        0)
     (R "CountActive/Cons-Active"
-       (CountActive (Item (Id (Var id)) (Title (Var title)) (Done False)) (Var rest___))
+       (CountActive (Item (Id (Var _)) (Title (Var _)) (Done False)) (Var rest___))
        (Add 1 (CountActive (Var rest___))))
     (R "CountActive/Cons-Done"
-       (CountActive (Item (Id (Var id)) (Title (Var title)) (Done True)) (Var rest___))
+       (CountActive (Item (Id (Var _)) (Title (Var _)) (Done True)) (Var rest___))
        (CountActive (Var rest___)))
 
     ;; RenderTodos → expand into concrete UI (Ul …)
     (R "RenderTodos"
        (/@ (RenderTodos)
-           (App (State (TodoState (NextId (Var n)) (Items (Var xs___)) (Filter (Var flt)))) (Var ui)))
-       (Ul :class "todos" (RenderList (Var flt) (Var xs___))))
+           (App (State (TodoState (NextId (Var _)) (Items (Var ___)) (Filter (Var flt)))) (Var _)))
+       (Ul :class "todos" (RenderList (Var flt) (Var ___))))
 
     ;; RenderList dispatch on filter
     (R "RenderList/All"
-       (RenderList All (Var xs___))
-       (RenderItems (Var xs___)))
+       (RenderList All (Var ___))
+       (RenderItems (Var ___)))
     (R "RenderList/Active"
-       (RenderList Active (Var xs___))
-       (RenderItems (FilterActive (Var xs___))))
+       (RenderList Active (Var ___))
+       (RenderItems (FilterActive (Var ___))))
     (R "RenderList/Done"
-       (RenderList Done (Var xs___))
-       (RenderItems (FilterDone (Var xs___))))
+       (RenderList Done (Var ___))
+       (RenderItems (FilterDone (Var ___))))
 
     ;; Filtering fused into RenderItems so results splice in-place
     (R "RenderItems/FilterActive-Nil"
@@ -143,7 +143,7 @@
        (RenderItems (FilterActive (Item (Id (Var i)) (Title (Var t)) (Done False)) (Var rest___)))
        (RenderItems (Item (Id (Var i)) (Title (Var t)) (Done False)) (FilterActive (Var rest___))))
     (R "RenderItems/FilterActive-Skip"
-       (RenderItems (FilterActive (Item (Id (Var i)) (Title (Var t)) (Done True)) (Var rest___)))
+       (RenderItems (FilterActive (Item (Id (Var _)) (Title (Var _)) (Done True)) (Var rest___)))
        (RenderItems (FilterActive (Var rest___))))
 
     (R "RenderItems/FilterDone-Nil"
@@ -153,7 +153,7 @@
        (RenderItems (FilterDone (Item (Id (Var i)) (Title (Var t)) (Done True)) (Var rest___)))
        (RenderItems (Item (Id (Var i)) (Title (Var t)) (Done True)) (FilterDone (Var rest___))))
     (R "RenderItems/FilterDone-Skip"
-       (RenderItems (FilterDone (Item (Id (Var i)) (Title (Var t)) (Done False)) (Var rest___)))
+       (RenderItems (FilterDone (Item (Id (Var _)) (Title (Var _)) (Done False)) (Var rest___)))
        (RenderItems (FilterDone (Var rest___))))
 
     ;; Turn a (proper) list of Item[...] into <li> rows
@@ -177,12 +177,12 @@
     ;; ---------- Show primitives ----------
     (R "ShowCount"
        (/@ (Show Count)
-           (App (State (TodoState (NextId (Var n)) (Items (Var xs___)) (Filter (Var f)))) (Var ui)))
-       (Length (Var xs___)))
+           (App (State (TodoState (NextId (Var _)) (Items (Var ___)) (Filter (Var _)))) (Var _)))
+       (Length (Var ___)))
 
     ;; list length
     (R "Length/Nil" (Length) 0)
-    (R "Length/Cons" (Length (Var x) (Var rest___)) (Add 1 (Length (Var rest___))))
+    (R "Length/Cons" (Length (Var _) (Var rest___)) (Add 1 (Length (Var rest___))))
 
   )
 
