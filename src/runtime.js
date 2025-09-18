@@ -9,9 +9,9 @@
 
 /* --------------------- AST helpers --------------------------- */
 const K = {
-    Sym:  "Sym",
-    Num:  "Num",
-    Str:  "Str",
+    Sym: "Sym",
+    Num: "Num",
+    Str: "Str",
     Call: "Call"
 };
 /* -------- Dev trace toggle -------- */
@@ -24,26 +24,27 @@ const SYMA_DEV_TRACE = (() => {
         const q = new URLSearchParams(window.location.search);
         if (q.has('trace')) return true;
         if (typeof window !== 'undefined' && window.SYMA_DEV_TRACE === true) return true;
-    } catch (_) {}
+    } catch (_) {
+    }
     return false;
 })();
 
-const Sym  = v => ({k:K.Sym, v});
-const Num  = v => ({k:K.Num, v});
-const Str  = v => ({k:K.Str, v});
-const Call = (h, ...a) => ({k:K.Call, h, a});
+const Sym = v => ({k: K.Sym, v});
+const Num = v => ({k: K.Num, v});
+const Str = v => ({k: K.Str, v});
+const Call = (h, ...a) => ({k: K.Call, h, a});
 
 /* type guards */
-const isSym  = n => n && n.k===K.Sym;
-const isNum  = n => n && n.k===K.Num;
-const isStr  = n => n && n.k===K.Str;
-const isCall = n => n && n.k===K.Call;
+const isSym = n => n && n.k === K.Sym;
+const isNum = n => n && n.k === K.Num;
+const isStr = n => n && n.k === K.Str;
+const isCall = n => n && n.k === K.Call;
 
 /* Deep clone (small trees, simple) */
 const clone = n => JSON.parse(JSON.stringify(n));
 
 /* Structural deep equality */
-const deq = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+const deq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /* Pretty (for debugging) */
 const show = n => {
@@ -56,39 +57,51 @@ const show = n => {
 
 /* --------------------- Rule extraction ----------------------- */
 /* We expect: Rules[...] where each rule is R[name:Str, lhs:Expr, rhs:Expr, prio?:Num] */
-const isR   = n => isCall(n) && isSym(n.h) && n.h.v==="R";
-const isVar = n => isCall(n) && isSym(n.h) && n.h.v==="Var" && n.a.length===1 && isStr(n.a[0]);
+const isR = n => isCall(n) && isSym(n.h) && n.h.v === "R";
+const isVar = n => isCall(n) && isSym(n.h) && n.h.v === "Var" && n.a.length === 1 && isStr(n.a[0]);
 
-function extractRules(universe) {
-    // Universe[...] = Call(Sym("Universe"), [...])
-    if (!isCall(universe) || !isSym(universe.h) || universe.h.v!=="Universe")
+// --- Meta-rule helpers ---
+function findSection(universe, name) {
+    if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
         throw new Error("Expected root Universe[...]");
+    return universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v === name) || null;
+}
+function extractRulesFromNode(rulesNode) {
+    if (!rulesNode || !isCall(rulesNode) || !isSym(rulesNode.h) || (rulesNode.h.v !== "Rules" && rulesNode.h.v !== "RuleRules"))
+        throw new Error("extractRulesFromNode: expected Rules[...] or RuleRules[...] node");
 
-    // Find Rules[...] node among Universe children
-    const rulesNode = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v==="Rules");
-    if (!rulesNode) throw new Error("Universe missing Rules[...]");
-
-    // Extract R[...] entries
     const rs = [];
     for (const r of rulesNode.a) {
         if (!isR(r)) throw new Error(`Rules must contain R[...] entries; found ${show(r)}`);
-        const [nm,lhs,rhs,prio] = r.a;
+        const [nm, lhs, rhs, prio] = r.a;
         if (!isStr(nm)) throw new Error("R[name] must be Str");
-        rs.push({
-            name: nm.v,
-            lhs:  lhs,
-            rhs:  rhs,
-            prio: (prio && isNum(prio)) ? prio.v : 0
-        });
+        rs.push({ name: nm.v, lhs, rhs, prio: (prio && isNum(prio)) ? prio.v : 0 });
     }
-    // High priority first
-    rs.sort((a,b)=> b.prio - a.prio);
+    rs.sort((a, b) => b.prio - a.prio);
     return rs;
 }
 
+function extractRules(universe) {
+    if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
+        throw new Error("Expected root Universe[...]");
+    const baseRulesNode = findSection(universe, "Rules");
+    if (!baseRulesNode) throw new Error("Universe missing Rules[...]");
+
+    // Optional meta-rules that rewrite R[...] terms
+    const ruleRulesNode = findSection(universe, "RuleRules");
+    let effectiveRulesNode = baseRulesNode;
+    if (ruleRulesNode) {
+        // The meta-rules themselves are ordinary R[...] over R[...] trees
+        const meta = extractRulesFromNode(ruleRulesNode);
+        effectiveRulesNode = normalize(baseRulesNode, meta);
+    }
+    return extractRulesFromNode(effectiveRulesNode);
+}
+
 /* --------------------- Pattern matching ---------------------- */
+
 /* Env: plain object mapping var name -> Expr */
-function match(pat, subj, env={}) {
+function match(pat, subj, env = {}) {
     // Pattern variable?
     if (isVar(pat)) {
         const name = pat.a[0].v;
@@ -108,7 +121,7 @@ function match(pat, subj, env={}) {
         if (!env1) return null;
         if (pat.a.length !== subj.a.length) return null;
         let e = env1;
-        for (let i=0;i<pat.a.length;i++) {
+        for (let i = 0; i < pat.a.length; i++) {
             e = match(pat.a[i], subj.a[i], e);
             if (!e) return null;
         }
@@ -131,6 +144,7 @@ function subst(expr, env) {
 }
 
 /* --------------------- Rewriting ----------------------------- */
+
 /* applyOnce: outermost-first, highest-priority rule wins */
 function applyOnce(expr, rules) {
     // Try to rewrite this node
@@ -138,22 +152,22 @@ function applyOnce(expr, rules) {
         const env = match(r.lhs, expr, {});
         if (env) {
             const out = subst(r.rhs, env);
-            return {changed:true, expr: out};
+            return {changed: true, expr: out};
         }
     }
     // Otherwise try children (pre-order)
     if (isCall(expr)) {
-        for (let i=0;i<expr.a.length;i++) {
+        for (let i = 0; i < expr.a.length; i++) {
             const child = expr.a[i];
             const res = applyOnce(child, rules);
             if (res.changed) {
                 const next = clone(expr);
                 next.a[i] = res.expr;
-                return {changed:true, expr: next};
+                return {changed: true, expr: next};
             }
         }
     }
-    return {changed:false, expr};
+    return {changed: false, expr};
 }
 
 /* Tracing variant: track rule name + path of rewrite */
@@ -163,7 +177,7 @@ function applyOnceTrace(expr, rules) {
         const env = match(r.lhs, expr, {});
         if (env) {
             const out = subst(r.rhs, env);
-            return { changed: true, expr: out, rule: r.name, path: [], before: expr, after: out };
+            return {changed: true, expr: out, rule: r.name, path: [], before: expr, after: out};
         }
     }
     // Try children (pre-order)
@@ -177,12 +191,19 @@ function applyOnceTrace(expr, rules) {
                 // Prefix the path with this child index
                 res.path = [i, ...res.path];
                 res.before = child;       // subtree before
-                res.after  = res.expr;    // subtree after at that path
-                return { changed: true, expr: next, rule: res.rule, path: res.path, before: res.before, after: res.after };
+                res.after = res.expr;    // subtree after at that path
+                return {
+                    changed: true,
+                    expr: next,
+                    rule: res.rule,
+                    path: res.path,
+                    before: res.before,
+                    after: res.after
+                };
             }
         }
     }
-    return { changed: false, expr, rule: null, path: null, before: null, after: null };
+    return {changed: false, expr, rule: null, path: null, before: null, after: null};
 }
 
 function foldPrims(node) {
@@ -190,19 +211,19 @@ function foldPrims(node) {
         const h = foldPrims(node.h);
         const a = node.a.map(foldPrims);
         // Host arithmetic: Add[Num, Num] -> Num(sum)
-        if (isSym(h) && h.v==="Add" && a.length===2 && isNum(a[0]) && isNum(a[1])) {
+        if (isSym(h) && h.v === "Add" && a.length === 2 && isNum(a[0]) && isNum(a[1])) {
             return Num(a[0].v + a[1].v);
         }
-        return {k:K.Call, h, a};
+        return {k: K.Call, h, a};
     }
     // atoms unchanged
     if (isSym(node) || isNum(node) || isStr(node)) return node;
     throw new Error("foldPrims: unknown node");
 }
 
-function normalize(expr, rules, maxSteps=1000) {
+function normalize(expr, rules, maxSteps = 1000) {
     let cur = expr;
-    for (let i=0;i<maxSteps;i++) {
+    for (let i = 0; i < maxSteps; i++) {
         const step = applyOnce(cur, rules);
         cur = foldPrims(step.expr);   // <-- add this line
         if (!step.changed) return cur;
@@ -217,7 +238,7 @@ function normalizeWithTrace(expr, rules, maxSteps = 1000) {
     for (let i = 0; i < maxSteps; i++) {
         const step = applyOnceTrace(cur, rules);
         cur = foldPrims(step.expr);
-        if (!step.changed) return { result: cur, trace };
+        if (!step.changed) return {result: cur, trace};
         // Human-friendly snapshot of *this* rewrite
         trace.push({
             i,
@@ -238,14 +259,15 @@ function formatStep(step) {
 
 /* --------------------- Universe plumbing --------------------- */
 function getProgram(universe) {
-    const node = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v==="Program");
+    const node = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
     if (!node) throw new Error("Universe missing Program[...]");
-    if (node.a.length!==1) throw new Error("Program[...] must have exactly one child");
+    if (node.a.length !== 1) throw new Error("Program[...] must have exactly one child");
     return node.a[0];
 }
+
 function setProgram(universe, newProg) {
-    const i = universe.a.findIndex(n => isCall(n) && isSym(n.h) && n.h.v==="Program");
-    if (i<0) throw new Error("Universe missing Program[...]");
+    const i = universe.a.findIndex(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
+    if (i < 0) throw new Error("Universe missing Program[...]");
     const progWrapper = clone(universe.a[i]);
     progWrapper.a[0] = newProg;
     const uni = clone(universe);
@@ -255,16 +277,19 @@ function setProgram(universe, newProg) {
 
 /* Inject an action: Program := Normalize( Apply[action, Program] ) */
 function dispatch(universe, rules, actionTerm) {
+    // Recompute rules from current universe in case RuleRules rewrote Rules
+    rules = extractRules(universe);
     const prog = getProgram(universe);
     const applied = Call(Sym("Apply"), actionTerm, prog);
     let newProg;
     if (SYMA_DEV_TRACE) {
-        const { result, trace } = normalizeWithTrace(applied, rules);
+        const {result, trace} = normalizeWithTrace(applied, rules);
         try {
             console.groupCollapsed?.(`[SYMA TRACE] dispatch ${show(actionTerm)}`);
             trace.forEach(step => console.log(formatStep(step)));
             console.groupEnd?.();
-        } catch (_) {}
+        } catch (_) {
+        }
         newProg = result;
     } else {
         newProg = normalize(applied, rules);
@@ -273,10 +298,11 @@ function dispatch(universe, rules, actionTerm) {
 }
 
 /* --------------------- Minimal DOM projector ------------------ */
+
 /* Supports: App[ State[...], UI[ ... ]] with VStack, HStack, Text, Button[Str, OnClick->action] */
 
 function splitPropsAndChildren(node) {
-    if (!isCall(node)) return { props: null, children: [] };
+    if (!isCall(node)) return {props: null, children: []};
     if (node.a.length && isCall(node.a[0]) && isSym(node.a[0].h) && node.a[0].h.v === "Props") {
         const propsNode = node.a[0];
         const children = node.a.slice(1);
@@ -287,15 +313,15 @@ function splitPropsAndChildren(node) {
             }
             props[kv.a[0].v] = kv.a[1];
         }
-        return { props, children };
+        return {props, children};
     }
-    return { props: null, children: node.a };
+    return {props: null, children: node.a};
 }
 
 function renderUniverseToDOM(universe, mount, onDispatch) {
     mount.innerHTML = ""; // simple full replace (can optimize with keyed diff)
     const prog = getProgram(universe);
-    if (!isCall(prog) || !isSym(prog.h) || prog.h.v!=="App")
+    if (!isCall(prog) || !isSym(prog.h) || prog.h.v !== "App")
         throw new Error("Program must be App[state, ui]");
 
     const [state, ui] = prog.a;
@@ -307,64 +333,34 @@ function renderUI(node, state, onDispatch) {
     const tag = node.h.v;
 
     if (tag === "UI") {
-        if (node.a.length!==1) throw new Error("UI[...] must wrap exactly one subtree");
+        if (node.a.length !== 1) throw new Error("UI[...] must wrap exactly one subtree");
         return renderUI(node.a[0], state, onDispatch);
     }
 
-    if (tag === "VStack") {
-        const el = document.createElement("div");
-        el.style.display = "flex";
-        el.style.flexDirection = "column";
-        el.style.gap = "8px";
-        node.a.forEach(child => el.appendChild(renderUI(child, state, onDispatch)));
-        return el;
-    }
+    const {props, children} = splitPropsAndChildren(node);
+    const el = document.createElement(tag.toLowerCase());
 
-    if (tag === "HStack") {
-        const el = document.createElement("div");
-        el.style.display = "flex";
-        el.style.gap = "8px";
-        el.style.alignItems = "center";
-        node.a.forEach(child => el.appendChild(renderUI(child, state, onDispatch)));
-        return el;
-    }
-
-    if (tag === "Text") {
-        const span = document.createElement("span");
-        node.a.forEach(part => span.appendChild(renderTextPart(part, state)));
-        return span;
-    }
-
-    {
-        const { props, children } = splitPropsAndChildren(node);
-        const el = document.createElement(tag.toLowerCase());
-
-        if (props) {
-            for (const [k, v] of Object.entries(props)) {
-                if (k === "onClick") {
-                    el.onclick = () => onDispatch(v); // v is an action term
-                    continue;
-                }
-                if (isStr(v) || isNum(v)) el.setAttribute(k, isStr(v) ? v.v : String(v.v));
-                else if (isSym(v)) el.setAttribute(k, v.v);
-                else el.setAttribute(k, JSON.stringify(v));
+    if (props) {
+        for (const [k, v] of Object.entries(props)) {
+            if (k === "onClick") {
+                el.onclick = () => onDispatch(v); // v is an action term
+                continue;
             }
+            if (isStr(v) || isNum(v)) el.setAttribute(k, isStr(v) ? v.v : String(v.v));
+            else if (isSym(v)) el.setAttribute(k, v.v);
+            else el.setAttribute(k, JSON.stringify(v));
         }
-
-        for (const ch of children) {
-            // strings/numbers/Show[...] become text; Calls recurse
-            if (isStr(ch) || isNum(ch) || (isCall(ch) && isSym(ch.h) && ch.h.v==="Show") || isSym(ch)) {
-                el.appendChild(renderTextPart(ch, state));
-            } else {
-                el.appendChild(renderUI(ch, state, onDispatch));
-            }
-        }
-        return el;
     }
 
-    // Allow custom UI terms that reduce to primitives via rules before projection.
-    // If something non-primitive leaked here, that's a modeling error:
-    // throw new Error(`Unknown UI tag: ${tag}`);
+    for (const ch of children) {
+        // strings/numbers/Show[...] become text; Calls recurse
+        if (isStr(ch) || isNum(ch) || (isCall(ch) && isSym(ch.h) && ch.h.v === "Show") || isSym(ch)) {
+            el.appendChild(renderTextPart(ch, state));
+        } else {
+            el.appendChild(renderUI(ch, state, onDispatch));
+        }
+    }
+    return el;
 }
 
 function renderTextPart(part, state) {
@@ -374,22 +370,24 @@ function renderTextPart(part, state) {
     if (isStr(part)) return document.createTextNode(part.v);
     if (isNum(part)) return document.createTextNode(String(part.v));
 
-    if (isCall(part) && isSym(part.h) && part.h.v==="Show") {
+    if (isCall(part) && isSym(part.h) && part.h.v === "Show") {
         // Build a tiny projection context: Show[x] /@ App[State, _] -> Str[...]
         const appCtx = Call(Sym("App"), state, Sym("_"));
         const annotated = Call(Sym("/@"), part, appCtx); // “apply in context” idiom
         // Let rules reduce it; if it doesn't become Str/Num, complain
         const reduced = (() => {
+            const currentRules = extractRules(GLOBAL_UNIVERSE);
             if (SYMA_DEV_TRACE) {
-                const { result, trace } = normalizeWithTrace(annotated, GLOBAL_RULES);
+                const {result, trace} = normalizeWithTrace(annotated, currentRules);
                 try {
                     console.groupCollapsed?.(`[SYMA TRACE] project ${show(part)}`);
                     trace.forEach(step => console.log(formatStep(step)));
                     console.groupEnd?.();
-                } catch (_) {}
+                } catch (_) {
+                }
                 return result;
             }
-            return normalize(annotated, GLOBAL_RULES);
+            return normalize(annotated, currentRules);
         })();
         if (isStr(reduced)) return document.createTextNode(reduced.v);
         if (isNum(reduced)) return document.createTextNode(String(reduced.v));
@@ -405,15 +403,15 @@ function renderTextPart(part, state) {
 
 /* --------------------- Boot glue ----------------------------- */
 let GLOBAL_UNIVERSE = null;
-let GLOBAL_RULES    = null;
+let GLOBAL_RULES = null;
 
-async function boot(universeJsonUrl, mountSelector="#app") {
+async function boot(universeJsonUrl, mountSelector = "#app") {
     const res = await fetch(universeJsonUrl);
     if (!res.ok) throw new Error(`Failed to load universe: ${res.status}`);
     const uni = await res.json();
 
     GLOBAL_UNIVERSE = uni;
-    GLOBAL_RULES    = extractRules(uni);
+    GLOBAL_RULES = extractRules(uni);
 
     const mount = document.querySelector(mountSelector);
     if (!mount) throw new Error(`Mount not found: ${mountSelector}`);
@@ -432,11 +430,11 @@ async function boot(universeJsonUrl, mountSelector="#app") {
 function traceProjection(part, state) {
     const appCtx = Call(Sym("App"), state, Sym("_"));
     const annotated = Call(Sym("/@"), part, appCtx);
-    return normalizeWithTrace(annotated, GLOBAL_RULES);
+    return normalizeWithTrace(annotated, extractRules(GLOBAL_UNIVERSE));
 }
 
 /* --------------------- Expose API ---------------------------- */
-window.SymbolicHost = { boot, show, dispatch, normalize, normalizeWithTrace, formatStep, traceProjection };
+window.SymbolicHost = {boot, show, dispatch, normalize, normalizeWithTrace, formatStep, traceProjection};
 
 Object.defineProperty(window, "GLOBAL_UNIVERSE", {
     get: () => GLOBAL_UNIVERSE
@@ -447,10 +445,14 @@ Object.defineProperty(window, "GLOBAL_RULES", {
 
 // Dynamic toggle for trace in console: SymbolicHost.setTrace(true/false)
 function setTrace(v) {
-    try { window.SYMA_DEV_TRACE = !!v; } catch (_) {}
+    try {
+        window.SYMA_DEV_TRACE = !!v;
+    } catch (_) {
+    }
     // No re-render here; next dispatch/projection will honor it.
     return !!v;
 }
-window.SymbolicHost = { ...window.SymbolicHost, setTrace };
 
-export { boot, show, dispatch };
+window.SymbolicHost = {...window.SymbolicHost, setTrace};
+
+export {boot, show, dispatch};
