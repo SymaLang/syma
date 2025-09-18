@@ -4,29 +4,18 @@
     (App
       (State
         (EffectsDemo
-          ;; Storage demo
-          ""        ;; StoredValue
-          "Ready"   ;; StorageStatus
-
-          ;; Clipboard demo
-          ""        ;; ClipboardText
-          "Ready"   ;; ClipboardStatus
-
-          ;; Animation demo
-          False      ;; AnimationActive
-          0          ;; AnimationFrame
-          0          ;; AnimationX
-
-          ;; Random demo
-          0          ;; RandomNumber
-
-          ;; Navigation demo
-          "/"        ;; CurrentPath
-
-          ;; General status
-          "None"     ;; LastEffect
-          Nil        ;; EffectLog (empty list)
-          ))  ; List of effect results
+          ;; KV-based state structure
+          (KV StoredValue     "")
+          (KV StorageStatus   "Ready")
+          (KV ClipboardText   "")
+          (KV ClipboardStatus "Ready")
+          (KV AnimationActive False)
+          (KV AnimationFrame  0)
+          (KV AnimationX      0)
+          (KV RandomNumber    0)
+          (KV CurrentPath     "/")
+          (KV LastEffect      "None")
+          (KV EffectLog       Nil)))
 
       (UI
         (Div :class "max-w-4xl mx-auto p-6"
@@ -151,6 +140,42 @@
   ;; ========= Rules =========
   (Rules
 
+    ;; --- Generic KV Operations ---
+    ;; Get value from KV list
+    (R "GetKV/Here"
+       (Get tag_ key_ (tag_ before___ (KV key_ v_) after___))
+       v_)
+
+    (R "GetKV/Skip"
+       (Get tag_ key_ (tag_ (KV k_ _) rest___))
+       (Get tag_ key_ (tag_ rest___))
+       -100)  ;; Low priority to try Here first
+
+    ;; Put value into KV list (replace existing)
+    (R "PutKV/Replace"
+       (Put tag_ key_ v_ (tag_ before___ (KV key_ _) after___))
+       (tag_ before___ (KV key_ v_) after___))
+
+    ;; Put value into KV list (insert if missing)
+    (R "PutKV/Insert"
+       (Put tag_ key_ v_ (tag_ fields___))
+       (tag_ fields___ (KV key_ v_))
+       -100)  ;; Low priority to try Replace first
+
+    ;; Set is just Put with better name
+    (R "SetField"
+       (Set tag_ key_ v_ st_)
+       (Put tag_ key_ v_ st_))
+
+    ;; Patch multiple fields
+    (R "Patch/End"
+       (Patch tag_ st_)
+       st_)
+
+    (R "Patch/Step"
+       (Patch tag_ st_ (KV k_ v_) more___)
+       (Patch tag_ (Put tag_ k_ v_ st_) more___))
+
     ;; --- Lifters ---
     (R "LiftApplyThroughProgram"
        (Apply act_ (Program app_ eff_))
@@ -166,145 +191,148 @@
 
     ;; --- Storage Effects ---
     (R "SaveToStorage/Enqueue"
-       (Apply (SaveToStorage value_) (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         (Apply (SetStorageStatus "Saving...") app_)
-         (Effects
-           (Pending p___ (StorageSet (FreshId) (Store Local) (Key "demo-value") (Value value_)))
-           inbox_))
+       (Apply (SaveToStorage value_) (Program (App (State st_) ui_) (Effects (Pending p___) inbox_)))
+       (Enqueue (StorageSet (Store Local) (Key "demo-value") (Value value_))
+                (Program (App (State (Patch EffectsDemo st_
+                                        (KV StoredValue value_)
+                                        (KV StorageStatus "Saving..."))) ui_)
+                         (Effects (Pending p___) inbox_)))
        10)
 
     (R "StorageSet/Complete"
-       (Program app_ (Effects pending_ (Inbox (StorageSetComplete id_ Ok) rest___)))
+       (Program (App (State st_) ui_) (Effects pending_ (Inbox (StorageSetComplete id_ Ok) rest___)))
        (Program
-         (Apply StorageSaved app_)
+         (App (State (Apply StorageSaved st_)) ui_)
          (Effects pending_ (Inbox rest___))))
 
     (R "StorageSaved"
-       (Apply StorageSaved (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_))
-       (EffectsDemo stored_ "Saved!" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Saved" (Cons "Storage: Value saved" log_)))
+       (Apply StorageSaved st_)
+       (Patch EffectsDemo st_
+                (KV StorageStatus "Saved!")
+                (KV LastEffect "Storage: Saved")
+                (KV EffectLog (Cons "Storage: Value saved" (Get EffectsDemo EffectLog st_)))))
 
     (R "LoadFromStorage/Enqueue"
        (Apply LoadFromStorage (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         app_
-         (Effects
-           (Pending p___ (StorageGet (FreshId) (Store Local) (Key "demo-value")))
-           inbox_))
+       (Enqueue (StorageGet (Store Local) (Key "demo-value"))
+                (Program app_ (Effects (Pending p___) inbox_)))
        10)
 
     (R "StorageGet/Found"
-       (Program (App (State (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (StorageGetComplete id_ (Found value_)) rest2___)))
        (Program
-         (App (State (EffectsDemo value_ "Loaded!" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Loaded" (Cons (Concat "Storage: Loaded " value_) log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV StoredValue value_)
+                        (KV StorageStatus "Loaded!")
+                        (KV LastEffect "Storage: Loaded")
+                        (KV EffectLog (Cons (Concat "Storage: Loaded " value_) (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "StorageGet/Missing"
-       (Program (App (State (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (StorageGetComplete id_ Missing) rest2___)))
        (Program
-         (App (State (EffectsDemo "" "No stored value" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Not found" (Cons "Storage: No value found" log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV StoredValue "")
+                        (KV StorageStatus "No stored value")
+                        (KV LastEffect "Storage: Not found")
+                        (KV EffectLog (Cons "Storage: No value found" (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "ClearStorage/Enqueue"
        (Apply ClearStorage (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         app_
-         (Effects
-           (Pending p___ (StorageDel (FreshId) (Store Local) (Key "demo-value")))
-           inbox_))
+       (Enqueue (StorageDel (Store Local) (Key "demo-value"))
+                (Program app_ (Effects (Pending p___) inbox_)))
        10)
 
     (R "StorageDel/Complete"
-       (Program (App (State (EffectsDemo stored_ status_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (StorageDelComplete id_ Ok) rest2___)))
        (Program
-         (App (State (EffectsDemo "" "Cleared!" ct_ cs_ aa_ af_ ax_ rn_ cp_ "Storage: Cleared" (Cons "Storage: Value cleared" log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV StoredValue "")
+                        (KV StorageStatus "Cleared!")
+                        (KV LastEffect "Storage: Cleared")
+                        (KV EffectLog (Cons "Storage: Value cleared" (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Clipboard Effects ---
     (R "CopyToClipboard/Enqueue"
        (Apply (CopyToClipboard text_) (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         app_
-         (Effects
-           (Pending p___ (ClipboardWrite (FreshId) (Text text_)))
-           inbox_))
+       (Enqueue (ClipboardWrite (Text text_))
+                (Program app_ (Effects (Pending p___) inbox_)))
        10)
 
     (R "ClipboardWrite/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (ClipboardWriteComplete id_ Ok) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ "Copied!" aa_ af_ ax_ rn_ cp_ "Clipboard: Copied" (Cons "Clipboard: Text copied" log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV ClipboardStatus "Copied!")
+                        (KV LastEffect "Clipboard: Copied")
+                        (KV EffectLog (Cons "Clipboard: Text copied" (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "PasteFromClipboard/Enqueue"
        (Apply PasteFromClipboard (Program app_ (Effects (Pending p___) inbox_)))
-       (Program
-         app_
-         (Effects
-           (Pending p___ (ClipboardRead (FreshId)))
-           inbox_))
+       (Enqueue ClipboardRead
+                (Program app_ (Effects (Pending p___) inbox_)))
        10)
 
     (R "ClipboardRead/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (ClipboardReadComplete id_ (Text text_)) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ text_ "Pasted!" aa_ af_ ax_ rn_ cp_ "Clipboard: Pasted" (Cons (Concat "Clipboard: Pasted " text_) log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV ClipboardText text_)
+                        (KV ClipboardStatus "Pasted!")
+                        (KV LastEffect "Clipboard: Pasted")
+                        (KV EffectLog (Cons (Concat "Clipboard: Pasted " text_) (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Animation Effects ---
-    ;; Toggle animation state
+    ;; Toggle animation state - match on actual KV structure
     (R "ToggleAnimation/Start"
-       (Apply ToggleAnimation (EffectsDemo sv_ ss_ ct_ cs_ False rest___))
-       (EffectsDemo sv_ ss_ ct_ cs_ True rest___))
+       (Apply ToggleAnimation (State (EffectsDemo before___ (KV AnimationActive False) after___)))
+       (State (EffectsDemo before___ (KV AnimationActive True) after___)))
 
     (R "ToggleAnimation/Stop"
-       (Apply ToggleAnimation (EffectsDemo sv_ ss_ ct_ cs_ True rest___))
-       (EffectsDemo sv_ ss_ ct_ cs_ False rest___))
+       (Apply ToggleAnimation (State (EffectsDemo before___ (KV AnimationActive True) after___)))
+       (State (EffectsDemo before___ (KV AnimationActive False) after___)))
 
     ;; When toggling animation on, start with effect
     (R "ToggleAnimation/StartWithEffect"
-       (Apply ToggleAnimation (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
+       (Apply ToggleAnimation (Program (App (State (EffectsDemo before___ (KV AnimationActive False) after___)) ui_)
                                       (Effects (Pending p___) inbox_)))
-       (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ True frame_ x_ rest___)) ui_)
-         (Effects
-           (Pending p___ (AnimationFrame (FreshId)))
-           inbox_))
+       (Enqueue AnimationFrame
+                (Program (App (State (EffectsDemo before___ (KV AnimationActive True) after___)) ui_)
+                         (Effects (Pending p___) inbox_)))
        10)  ; High priority
 
     ;; When toggling animation off, just update state
     (R "ToggleAnimation/StopWithEffect"
-       (Apply ToggleAnimation (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ True frame_ x_ rest___)) ui_)
-                                      effects_))
+       (Apply ToggleAnimation (Program (App (State (EffectsDemo before___ (KV AnimationActive True) after___)) ui_) effects_))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
+         (App (State (EffectsDemo before___ (KV AnimationActive False) after___)) ui_)
          effects_)
        10)  ; High priority
 
     ;; Process animation frame when active - update and request next
     (R "AnimationFrame/CompleteActive"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ True frame_ x_ rest___)) ui_)
+       (Program (App (State (EffectsDemo b1___ (KV AnimationActive True) b2___ (KV AnimationFrame frame_) b3___ (KV AnimationX x_) b4___)) ui_)
                 (Effects pending_ (Inbox (AnimationFrameComplete id_ (Now ts_)) rest2___)))
-       (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ True
-                                  (Add frame_ 1)
-                                  (Mod (Add x_ 3) 300)
-                                  rest___)) ui_)
-         (Effects
-           (Pending (AnimationFrame (FreshId)))  ; Request next frame
-           (Inbox rest2___))))
+       (Enqueue AnimationFrame
+                (Program
+                  (App (State (EffectsDemo b1___ (KV AnimationActive True) b2___ (KV AnimationFrame (Add frame_ 1)) b3___ (KV AnimationX (Mod (Add x_ 3) 300)) b4___)) ui_)
+                  (Effects pending_ (Inbox rest2___)))))
 
     ;; Process animation frame when inactive - just consume the event
     (R "AnimationFrame/CompleteInactive"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
+       (Program (App (State (EffectsDemo before___ (KV AnimationActive False) after___)) ui_)
                 (Effects pending_ (Inbox (AnimationFrameComplete id_ _) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
+         (App (State (EffectsDemo before___ (KV AnimationActive False) after___)) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Random Effects ---
@@ -314,10 +342,13 @@
        10)
 
     (R "RandResponse/Process"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (RandResponse id_ value_) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ value_ cp_ (Concat "Random: " (ToString value_)) (Cons (Concat "Random: Generated " (ToString value_)) log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV RandomNumber value_)
+                        (KV LastEffect (Concat "Random: " (ToString value_)))
+                        (KV EffectLog (Cons (Concat "Random: Generated " (ToString value_)) (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Navigation Effects ---
@@ -327,10 +358,12 @@
        10)
 
     (R "Navigate/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (NavigateComplete id_ Ok) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ "Navigation: Complete" (Cons "Navigation: URL updated" log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV LastEffect "Navigation: Complete")
+                        (KV EffectLog (Cons "Navigation: URL updated" (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     (R "ReadCurrentLocation/Enqueue"
@@ -339,35 +372,40 @@
        10)
 
     (R "ReadLocation/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (ReadLocationComplete id_ (Location (Path path_) _ _)) rest2___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ path_ (Concat "Location: " path_) (Cons (Concat "Location: Read " path_) log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV CurrentPath path_)
+                        (KV LastEffect (Concat "Location: " path_))
+                        (KV EffectLog (Cons (Concat "Location: Read " path_) (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Timer Effect ---
     (R "DelayedAction/Enqueue"
-       (Apply DelayedAction (Program app_ (Effects (Pending p___) inbox_)))
+       (Apply DelayedAction (Program (App (State st_) ui_) (Effects (Pending p___) inbox_)))
        (Enqueue (Timer (Delay 2000))
-                (Program (Apply (UpdateLastEffect "Timer started...") app_)
+                (Program (App (State (Set EffectsDemo LastEffect "Timer started..." st_)) ui_)
                          (Effects (Pending p___) inbox_)))
        10)
 
     (R "Timer/Complete"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_)) ui_)
+       (Program (App (State st_) ui_)
                 (Effects pending_ (Inbox (TimerComplete id_ _) rest___)))
        (Program
-         (App (State (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ "Timer completed!" (Cons "Timer: 2s delay completed" log_))) ui_)
+         (App (State (Patch EffectsDemo st_
+                        (KV LastEffect "Timer completed!")
+                        (KV EffectLog (Cons "Timer: 2s delay completed" (Get EffectsDemo EffectLog st_))))) ui_)
          (Effects pending_ (Inbox rest___))))
 
     ;; --- Helper Rules ---
     (R "UpdateLastEffect"
-       (Apply (UpdateLastEffect msg_) (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ le_ log_))
-       (EffectsDemo sv_ ss_ ct_ cs_ aa_ af_ ax_ rn_ cp_ msg_ log_))
+       (Apply (UpdateLastEffect msg_) st_)
+       (Set EffectsDemo LastEffect msg_ st_))
 
     (R "SetStorageStatus"
-       (Apply (SetStorageStatus status_) (EffectsDemo sv_ ss_ rest___))
-       (EffectsDemo sv_ status_ rest___))
+       (Apply (SetStorageStatus status_) st_)
+       (Set EffectsDemo StorageStatus status_ st_))
 
     ;; Generic enqueue rule - takes an effect term and inserts FreshId as first arg
     ;; Pattern: (Enqueue (EffectKind ...args) program-context)
@@ -393,70 +431,70 @@
 
     ;; --- UI Projections ---
     (R "ShowStoredValue"
-       (/@ (Show StoredValue) (App (State (EffectsDemo sv_ _ _ _ _ _ _ _ _ _ _)) _))
-       sv_)
+       (/@ (Show StoredValue) (App (State st_) _))
+       (Get EffectsDemo StoredValue st_))
 
     (R "ShowStorageStatus"
-       (/@ (Show StorageStatus) (App (State (EffectsDemo _ ss_ _ _ _ _ _ _ _ _ _)) _))
-       ss_)
+       (/@ (Show StorageStatus) (App (State st_) _))
+       (Get EffectsDemo StorageStatus st_))
 
     (R "ShowClipboardText"
-       (/@ (Show ClipboardText) (App (State (EffectsDemo _ _ ct_ _ _ _ _ _ _ _ _)) _))
-       ct_)
+       (/@ (Show ClipboardText) (App (State st_) _))
+       (Get EffectsDemo ClipboardText st_))
 
     (R "ShowClipboardStatus"
-       (/@ (Show ClipboardStatus) (App (State (EffectsDemo _ _ _ cs_ _ _ _ _ _ _ _)) _))
-       cs_)
+       (/@ (Show ClipboardStatus) (App (State st_) _))
+       (Get EffectsDemo ClipboardStatus st_))
 
     (R "ShowAnimationActive"
-       (/@ (Show AnimationActive) (App (State (EffectsDemo _ _ _ _ aa_ _ _ _ _ _ _)) _))
-       aa_)
+       (/@ (Show AnimationActive) (App (State st_) _))
+       (Get EffectsDemo AnimationActive st_))
 
     (R "ShowAnimationFrame"
-       (/@ (Show AnimationFrame) (App (State (EffectsDemo _ _ _ _ _ af_ _ _ _ _ _)) _))
-       af_)
+       (/@ (Show AnimationFrame) (App (State st_) _))
+       (Get EffectsDemo AnimationFrame st_))
 
     (R "ShowAnimationX"
-       (/@ (Show AnimationX) (App (State (EffectsDemo _ _ _ _ _ _ ax_ _ _ _ _)) _))
-       ax_)
+       (/@ (Show AnimationX) (App (State st_) _))
+       (Get EffectsDemo AnimationX st_))
 
     ;; Animation style projection - computes the full style string
     (R "AnimationStyle"
-       (/@ (AnimationStyle) (App (State (EffectsDemo _ _ _ _ _ _ ax_ _ _ _ _)) _))
-       (Concat "transform: translateX(" (Concat (ToString ax_) "px); top: 38px;")))
+       (/@ (AnimationStyle) (App (State st_) _))
+       (Concat "transform: translateX(" (Concat (ToString (Get EffectsDemo AnimationX st_)) "px); top: 38px;")))
 
     (R "ShowRandomNumber"
-       (/@ (Show RandomNumber) (App (State (EffectsDemo _ _ _ _ _ _ _ rn_ _ _ _)) _))
-       rn_)
+       (/@ (Show RandomNumber) (App (State st_) _))
+       (Get EffectsDemo RandomNumber st_))
 
     (R "ShowCurrentPath"
-       (/@ (Show CurrentPath) (App (State (EffectsDemo _ _ _ _ _ _ _ _ cp_ _ _)) _))
-       cp_)
+       (/@ (Show CurrentPath) (App (State st_) _))
+       (Get EffectsDemo CurrentPath st_))
 
     (R "ShowLastEffect"
-       (/@ (Show LastEffect) (App (State (EffectsDemo _ _ _ _ _ _ _ _ _ le_ _)) _))
-       le_)
+       (/@ (Show LastEffect) (App (State st_) _))
+       (Get EffectsDemo LastEffect st_))
 
-    ;; Animation button projections
+    ;; Animation button projections - match on the actual state structure
     (R "AnimButtonClass/Active"
-       (/@ (AnimButtonClass) (App (State (EffectsDemo _ _ _ _ True _ _ _ _ _ _)) _))
+       (/@ (AnimButtonClass) (App (State (EffectsDemo before___ (KV AnimationActive True) after___)) _))
        "px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600")
 
     (R "AnimButtonClass/Inactive"
-       (/@ (AnimButtonClass) (App (State (EffectsDemo _ _ _ _ False _ _ _ _ _ _)) _))
+       (/@ (AnimButtonClass) (App (State (EffectsDemo before___ (KV AnimationActive False) after___)) _))
        "px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600")
 
     (R "AnimButtonText/Active"
-       (/@ (AnimButtonText) (App (State (EffectsDemo _ _ _ _ True _ _ _ _ _ _)) _))
+       (/@ (AnimButtonText) (App (State (EffectsDemo before___ (KV AnimationActive True) after___)) _))
        "Stop Animation")
 
     (R "AnimButtonText/Inactive"
-       (/@ (AnimButtonText) (App (State (EffectsDemo _ _ _ _ False _ _ _ _ _ _)) _))
+       (/@ (AnimButtonText) (App (State (EffectsDemo before___ (KV AnimationActive False) after___)) _))
        "Start Animation")
 
     (R "RenderLog"
-       (/@ (RenderLog) (App (State (EffectsDemo _ _ _ _ _ _ _ _ _ _ log_)) _))
-       (If (IsNil log_) "No effects triggered yet" (RenderLogItems log_)))
+       (/@ (RenderLog) (App (State st_) _))
+       (If (IsNil (Get EffectsDemo EffectLog st_)) "No effects triggered yet" (RenderLogItems (Get EffectsDemo EffectLog st_))))
 
     (R "RenderLogItems/Cons"
        (RenderLogItems (Cons item_ rest_))
