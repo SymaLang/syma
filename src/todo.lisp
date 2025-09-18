@@ -26,18 +26,26 @@
                               (ClearInput todoInput))
                     :class "px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors" "Add")
             (Button :onClick Add3 :class "px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors" "Add 3")
+            (Button :onClick TestTimer :class "px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors" "Test Timer")
             (Span :class "px-4 py-2 text-gray-600 font-medium" "Active: " (Show LeftCount)))
           ;; The list is rendered by projecting a symbolic node that rules expand to real UI
           (Project (RenderTodos))
           (Div :class "flex gap-2 justify-center mt-6"
             (Button :onClick (SetFilter All)  :class "px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 transition-colors" "All")
             (Button :onClick (SetFilter Active) :class "px-4 py-2 rounded-lg text-sm font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors" "Active")
-            (Button :onClick (SetFilter Done) :class "px-4 py-2 rounded-lg text-sm font-medium bg-green-100 hover:bg-green-200 text-green-700 transition-colors" "Done")))))))
+            (Button :onClick (SetFilter Done) :class "px-4 py-2 rounded-lg text-sm font-medium bg-green-100 hover:bg-green-200 text-green-700 transition-colors" "Done"))))))
+    ;; Effects lane for symbolic I/O
+    (Effects (Pending) (Inbox)))
 
   ;; ========= Rules =========
   (Rules
 
     ;; --- Lifters (push Apply through shells) ---
+    ;; Updated to handle Program with Effects
+    (R "LiftApplyThroughProgram"
+       (Apply (Var act) (Program (Var app) (Var eff)))
+       (Program (Apply (Var act) (Var app)) (Var eff)))
+
     (R "LiftApplyThroughApp"
        (Apply (Var act) (App (Var st) (Var ui)))
        (App (Apply (Var act) (Var st)) (Var ui)))
@@ -118,6 +126,31 @@
        (Apply (SetFilter (Var flt))
          (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var _))))
        (TodoState (NextId (Var n)) (Items (Var ___)) (Filter (Var flt))))
+
+    ;; --- Effects demo: Timer ---
+    ;; TestTimer is a no-op at the state level
+    (R "TestTimer/State"
+       (Apply TestTimer (Var state))
+       (Var state))
+
+    ;; TestTimer action enqueues a timer effect at Program level (high priority to match before lifters)
+    (R "TestTimer/Enqueue"
+       (Apply TestTimer (Program (Var app) (Effects (Pending (Var p___)) (Var inbox))))
+       (Program
+         (Var app)
+         (Effects
+           (Pending (Var p___) (Timer (FreshId) (Delay 2000)))
+           (Var inbox)))
+       10)  ; High priority to match before lifters
+
+    ;; When timer completes, add a demo todo with custom title
+    (R "TimerComplete/Process"
+       (Program
+         (App (Var state) (Var ui))
+         (Effects (Var pending) (Inbox (TimerComplete (Var id) (Var _)) (Var rest___))))
+       (Program
+         (Apply (AddTodoWithTitle (Str "Timer completed!")) (App (Var state) (Var ui)))
+         (Effects (Var pending) (Inbox (Var rest___)))))
 
     ;; ---------- Projection layer ----------
 

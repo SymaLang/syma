@@ -9,6 +9,7 @@
 
 import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from './ast-helpers.js';
 import { createEventHandler, handleBinding, clearInput, getInputValue } from './events.js';
+import { createEffectsProcessor, freshId } from './effects-processor.js';
 
 /* -------- Dev trace toggle -------- */
 // Enable tracing via:
@@ -285,6 +286,10 @@ function foldPrims(node) {
         if (isSym(h) && h.v === "Add" && a.length === 2 && isNum(a[0]) && isNum(a[1])) {
             return Num(a[0].v + a[1].v);
         }
+        // Generate fresh ID
+        if (isSym(h) && h.v === "FreshId" && a.length === 0) {
+            return freshId();
+        }
         return {k: K.Call, h, a};
     }
     // atoms unchanged
@@ -332,18 +337,35 @@ function formatStep(step) {
 function getProgram(universe) {
     const node = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
     if (!node) throw new Error("Universe missing Program[...]");
-    if (node.a.length !== 1) throw new Error("Program[...] must have exactly one child");
-    return node.a[0];
+    return node;
+}
+
+function getProgramApp(universe) {
+    const prog = getProgram(universe);
+    // Program might contain [App[...]] or [App[...], Effects[...]]
+    const app = prog.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "App");
+    return app || prog.a[0];
 }
 
 function setProgram(universe, newProg) {
     const i = universe.a.findIndex(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
     if (i < 0) throw new Error("Universe missing Program[...]");
-    const progWrapper = clone(universe.a[i]);
-    progWrapper.a[0] = newProg;
     const uni = clone(universe);
-    uni.a[i] = progWrapper;
+    uni.a[i] = newProg;
     return uni;
+}
+
+function setProgramApp(universe, newApp) {
+    const prog = getProgram(universe);
+    const progCopy = clone(prog);
+    // Find and replace App node
+    const appIdx = progCopy.a.findIndex(n => isCall(n) && isSym(n.h) && n.h.v === "App");
+    if (appIdx >= 0) {
+        progCopy.a[appIdx] = newApp;
+    } else {
+        progCopy.a[0] = newApp;
+    }
+    return setProgram(universe, progCopy);
 }
 
 /* Inject an action: Program := Normalize( Apply[action, Program] ) */
@@ -422,11 +444,11 @@ function splitPropsAndChildren(node) {
 
 function renderUniverseToDOM(universe, mount, onDispatch) {
     mount.innerHTML = ""; // simple full replace (can optimize with keyed diff)
-    const prog = getProgram(universe);
-    if (!isCall(prog) || !isSym(prog.h) || prog.h.v !== "App")
-        throw new Error("Program must be App[state, ui]");
+    const app = getProgramApp(universe);
+    if (!isCall(app) || !isSym(app.h) || app.h.v !== "App")
+        throw new Error("Program must contain App[state, ui]");
 
-    const [state, ui] = prog.a;
+    const [state, ui] = app.a;
     mount.appendChild(renderUI(ui, state, onDispatch));
 }
 
@@ -603,6 +625,20 @@ async function boot(universeOrUrl, mountSelector = "#app") {
     // Initial render (if your rules expect pre-normalization, do it here too)
     renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
 
+    // Create effects processor to handle symbolic effects
+    const effectsProcessor = createEffectsProcessor(
+        () => getProgram(GLOBAL_UNIVERSE),
+        (newProg) => {
+            // After effects update, normalize to trigger inbox processing rules
+            const normalized = normalize(newProg, GLOBAL_RULES);
+            GLOBAL_UNIVERSE = setProgram(GLOBAL_UNIVERSE, normalized);
+        },
+        () => {
+            // Re-render after effects update
+            renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
+        }
+    );
+
     // Return a handle for HMR
     return {
         universe: GLOBAL_UNIVERSE,
@@ -610,7 +646,8 @@ async function boot(universeOrUrl, mountSelector = "#app") {
             GLOBAL_UNIVERSE = uni;
             GLOBAL_RULES = extractRules(uni);
             renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
-        }
+        },
+        effectsProcessor
     };
 }
 
@@ -622,7 +659,7 @@ function traceProjection(part, state) {
 }
 
 /* --------------------- Expose API ---------------------------- */
-window.SymbolicHost = {boot, show, dispatch, normalize, normalizeWithTrace, formatStep, traceProjection};
+window.SymbolicHost = {boot, show, dispatch, normalize, normalizeWithTrace, formatStep, traceProjection, freshId};
 
 Object.defineProperty(window, "GLOBAL_UNIVERSE", {
     get: () => GLOBAL_UNIVERSE
@@ -643,4 +680,4 @@ function setTrace(v) {
 
 window.SymbolicHost = {...window.SymbolicHost, setTrace};
 
-export {boot, show, dispatch, clearInput, getInputValue};
+export {boot, show, dispatch, clearInput, getInputValue, freshId};

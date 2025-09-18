@@ -136,6 +136,7 @@ The runtime uses an outermost-first strategy:
 
 The runtime provides primitive operations that are folded during normalization:
 - `(Add num1 num2)` → evaluates to the sum
+- `(FreshId)` → generates a unique identifier string
 
 ---
 
@@ -213,7 +214,68 @@ Lifting rules propagate `Apply` through state containers:
 
 ---
 
-## 10. Meta-Rules
+## 10. Symbolic Effects System
+
+The language supports a purely symbolic effects system where all I/O operations are represented as terms in the AST. The host runtime acts as a minimal bridge between symbolic effect requests and actual I/O operations.
+
+### Effects Structure
+
+Programs can include an Effects node alongside the main application:
+
+```lisp
+(Program
+  (App ...)           ; Main application
+  (Effects            ; Effects lane
+    (Pending ...)     ; Outbound effect requests
+    (Inbox ...)))     ; Inbound effect responses
+```
+
+### Effect Flow
+
+1. **Request**: Actions enqueue effect terms in `Pending`
+2. **Processing**: Host runtime performs actual I/O
+3. **Response**: Results are added to `Inbox`
+4. **Consumption**: Rules process inbox messages and update state
+
+### Example: Timer Effect
+
+```lisp
+;; Enqueue a timer effect
+(R "StartTimer"
+   (Apply StartTimer (Program (Var app) (Effects (Pending (Var p___)) (Var inbox))))
+   (Program
+     (Var app)
+     (Effects
+       (Pending (Var p___) (Timer (FreshId) (Delay 2000)))
+       (Var inbox)))
+   10)  ; High priority to match before lifters
+
+;; Process timer completion
+(R "TimerComplete"
+   (Program
+     (App (Var state) (Var ui))
+     (Effects (Var pending) (Inbox (TimerComplete (Var id) (Var _)) (Var rest___))))
+   (Program
+     (Apply DoSomething (App (Var state) (Var ui)))
+     (Effects (Var pending) (Inbox (Var rest___)))))
+```
+
+### Supported Effect Types
+
+- **Timer**: `(Timer id (Delay ms))` → `(TimerComplete id (Now timestamp))`
+- **HttpReq**: `(HttpReq id (Method "POST") (Url "/api") (Body data) (Headers ...))` → `(HttpRes id (Status 200) (Json result) (Headers ...))`
+- **RandRequest**: `(RandRequest id (Min 0) (Max 100))` → `(RandResponse id value)`
+
+### Benefits
+
+- **Pure**: All effects are symbolic terms, no imperative code
+- **Inspectable**: Effect history is visible in the AST
+- **Testable**: Mock effects by directly manipulating inbox
+- **Composable**: Rules can transform, retry, or cancel effects
+
+---
+
+## 11. Meta-Rules
 
 Meta-rules in the `RuleRules` section can transform other rules before they're compiled:
 
@@ -228,7 +290,43 @@ This enables dynamic rule modification and DSL extensions.
 
 ---
 
-## 11. Development Features
+## 12. Event Action Combinators
+
+The language provides composable action primitives for handling UI events:
+
+### Basic Actions
+
+- `(Seq action1 action2 ...)` - Execute actions in sequence
+- `(If condition thenAction elseAction)` - Conditional execution
+- `(When condition action)` - Execute only if condition is true
+
+### Input/Form Actions
+
+- `(Input fieldName)` - Reference input field value
+- `(ClearInput fieldName)` - Clear input field
+- `(SetInput fieldName)` - Set input field value
+
+### Event Control
+
+- `(PreventDefault action)` - Prevent default browser behavior
+- `(StopPropagation action)` - Stop event bubbling
+- `(KeyIs "Enter")` - Check if specific key was pressed
+
+### Example Usage
+
+```lisp
+(Input :type "text"
+       :value (Input todoInput)
+       :onKeydown (When (KeyIs "Enter")
+                    (PreventDefault
+                      (Seq
+                        (AddTodoWithTitle (Input todoInput))
+                        (ClearInput todoInput)))))
+```
+
+---
+
+## 13. Development Features
 
 ### Trace Mode
 
@@ -252,7 +350,7 @@ node scripts/sym-2-json.js input.lisp --out output.json --pretty
 
 ---
 
-## 12. Complete Todo App Example
+## 14. Complete Todo App Example
 
 ```lisp
 (Universe
@@ -311,7 +409,7 @@ node scripts/sym-2-json.js input.lisp --out output.json --pretty
 
 ---
 
-## 13. Key Concepts Summary
+## 15. Key Concepts Summary
 
 1. **S-expressions** as universal syntax
 2. **Pattern matching** with variables and wildcards
@@ -319,6 +417,8 @@ node scripts/sym-2-json.js input.lisp --out output.json --pretty
 4. **Normalization** as the execution model
 5. **Context-aware projection** for UI rendering
 6. **Event handling** through `Apply` patterns
-7. **Meta-programming** with rule-rewriting rules
+7. **Symbolic effects** for pure I/O representation
+8. **Event action combinators** for composable UI interactions
+9. **Meta-programming** with rule-rewriting rules
 
-This language provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture.
+This language provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture where all side effects are symbolic and the runtime is just a thin bridge to the real world.
