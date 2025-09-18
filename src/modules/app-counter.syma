@@ -1,6 +1,6 @@
 ;; Counter feature module
 (Module App/Counter
-  (Import Core/KV as KV open)
+  (Import Core/KV as KV)
 
   (Export InitialState View Inc Dec Reset)
 
@@ -14,19 +14,19 @@
     ;; Actions
     (R "Inc"
        (Apply Inc st_)
-       (Patch CounterState st_
-         (KV Count (Add (Get CounterState Count st_) 1))
+       (KV/Patch CounterState st_
+         (KV Count (Add (KV/Get CounterState Count st_) 1))
          (KV LastAction "Incremented")))
 
     (R "Dec"
        (Apply Dec st_)
-       (Patch CounterState st_
-         (KV Count (Sub (Get CounterState Count st_) 1))
+       (KV/Patch CounterState st_
+         (KV Count (Sub (KV/Get CounterState Count st_) 1))
          (KV LastAction "Decremented")))
 
     (R "Reset"
        (Apply Reset st_)
-       (Patch CounterState st_
+       (KV/Patch CounterState st_
          (KV Count 0)
          (KV LastAction "Reset")))
 
@@ -47,8 +47,8 @@
     ;; Show projections
     (R "ShowCount"
        (/@ (Show Count) (App (State st_) _))
-       (Get CounterState Count st_))
+       (KV/Get CounterState Count st_))
 
     (R "ShowLastAction"
        (/@ (Show LastAction) (App (State st_) _))
-       (Get CounterState LastAction st_))))
+       (KV/Get CounterState LastAction st_))))

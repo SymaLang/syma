@@ -202,9 +202,18 @@ class SymbolQualifier {
       }
     }
 
-    // Otherwise, it's a local symbol - keep it unqualified!
-    // Local symbols within a module should remain unqualified
-    // so that pattern matching in rules works correctly
+    // Is it one of our module's exports? If so, qualify it
+    if (this.module.exports.includes(sym)) {
+      return `${this.module.name}/${sym}`;
+    }
+
+    // Is it defined in our module's Defs? If so, qualify it
+    if (this.module.defs && this.module.defs[sym] !== undefined) {
+      return `${this.module.name}/${sym}`;
+    }
+
+    // Otherwise, it's a local domain constructor - keep unqualified
+    // This allows pattern matching to work within the module
     return sym;
   }
 
