@@ -90,8 +90,8 @@
                         :class (Project (AnimButtonClass))
                         (Project (AnimButtonText)))
                 (Div :class "mt-4 h-20 bg-gray-50 rounded relative overflow-hidden"
-                  (Div :class "absolute h-4 w-4 bg-blue-500 rounded-full transition-none"
-                       :style (Concat "left: " (Show AnimationX) "px; top: 38px;")
+                  (Div :class "absolute h-4 w-4 bg-blue-500 rounded-full"
+                       :style (Project (AnimationStyle))
                        ""))
                 (P :class "text-sm mt-2" "Frame: " (Show AnimationFrame))
                 (P :class "text-xs text-gray-500" "60 FPS smooth animation using AnimationFrame effect"))
@@ -257,7 +257,8 @@
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Animation Effects ---
-    (R "ToggleAnimation"
+    ;; Toggle animation state
+    (R "ToggleAnimation/Start"
        (Apply ToggleAnimation (EffectsDemo sv_ ss_ ct_ cs_ False rest___))
        (EffectsDemo sv_ ss_ ct_ cs_ True rest___))
 
@@ -265,18 +266,28 @@
        (Apply ToggleAnimation (EffectsDemo sv_ ss_ ct_ cs_ True rest___))
        (EffectsDemo sv_ ss_ ct_ cs_ False rest___))
 
-    ;; Start animation loop when active
-    (R "AnimationActive/RequestFrame"
-       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ True frame_ x_ rest___)) ui_)
-                (Effects (Pending p___) inbox_))
+    ;; When toggling animation on, start with effect
+    (R "ToggleAnimation/StartWithEffect"
+       (Apply ToggleAnimation (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
+                                      (Effects (Pending p___) inbox_)))
        (Program
          (App (State (EffectsDemo sv_ ss_ ct_ cs_ True frame_ x_ rest___)) ui_)
          (Effects
            (Pending p___ (AnimationFrame (FreshId)))
            inbox_))
-       -10)  ; Low priority to avoid infinite loop
+       10)  ; High priority
 
-    (R "AnimationFrame/Complete"
+    ;; When toggling animation off, just update state
+    (R "ToggleAnimation/StopWithEffect"
+       (Apply ToggleAnimation (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ True frame_ x_ rest___)) ui_)
+                                      effects_))
+       (Program
+         (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
+         effects_)
+       10)  ; High priority
+
+    ;; Process animation frame when active - update and request next
+    (R "AnimationFrame/CompleteActive"
        (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ True frame_ x_ rest___)) ui_)
                 (Effects pending_ (Inbox (AnimationFrameComplete id_ (Now ts_)) rest2___)))
        (Program
@@ -284,6 +295,16 @@
                                   (Add frame_ 1)
                                   (Mod (Add x_ 3) 300)
                                   rest___)) ui_)
+         (Effects
+           (Pending (AnimationFrame (FreshId)))  ; Request next frame
+           (Inbox rest2___))))
+
+    ;; Process animation frame when inactive - just consume the event
+    (R "AnimationFrame/CompleteInactive"
+       (Program (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
+                (Effects pending_ (Inbox (AnimationFrameComplete id_ _) rest2___)))
+       (Program
+         (App (State (EffectsDemo sv_ ss_ ct_ cs_ False frame_ x_ rest___)) ui_)
          (Effects pending_ (Inbox rest2___))))
 
     ;; --- Random Effects ---
@@ -389,6 +410,11 @@
     (R "ShowAnimationX"
        (/@ (Show AnimationX) (App (State (EffectsDemo _ _ _ _ _ _ ax_ _ _ _ _)) _))
        ax_)
+
+    ;; Animation style projection - computes the full style string
+    (R "AnimationStyle"
+       (/@ (AnimationStyle) (App (State (EffectsDemo _ _ _ _ _ _ ax_ _ _ _ _)) _))
+       (Concat "transform: translateX(" (Concat (ToString ax_) "px); top: 38px;")))
 
     (R "ShowRandomNumber"
        (/@ (Show RandomNumber) (App (State (EffectsDemo _ _ _ _ _ _ _ rn_ _ _ _)) _))
