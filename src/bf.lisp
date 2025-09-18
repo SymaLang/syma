@@ -34,15 +34,18 @@
           (P :class "font-mono whitespace-pre" "Output: " (Show Output))
         )
     ))
-    ))
+    )
+    ;; Effects lane for timer-based execution
+    (Effects (Pending) (Inbox)))
 
   ;; ========= Rules =========
   (Rules
 
     ;; --- Lifters (push Apply through shells) ---
+    ;; Updated to handle Program with Effects
     (R "LiftApplyThroughProgram"
-       (Apply act_ (Program app_))
-       (Program (Apply act_ app_)))
+       (Apply act_ (Program app_ eff_))
+       (Program (Apply act_ app_) eff_))
 
     (R "LiftApplyThroughApp"
        (Apply act_ (App st_ ui_))
@@ -57,31 +60,38 @@
        (Apply Step (BFState left_ curr_ right_ ip_ code_ out_))
        (BFStep left_ curr_ right_ ip_ code_ out_))
 
-    ;; Run just a batch of steps to avoid hitting normalization limit
-    (R "RunToEnd"
-       (Apply RunToEnd (BFState left_ curr_ right_ ip_ code_ out_))
-       (BFRun left_ curr_ right_ ip_ code_ out_ 0))
+    ;; --- Timer-based Run execution ---
+    ;; RunToEnd is a no-op at the state level
+    (R "RunToEnd/State"
+       (Apply RunToEnd state_)
+       state_)
 
-    ;; --- BFRun: Execute multiple steps until done or limit ---
-    (R "BFRun/Done"
-       (BFRun left_ curr_ right_ ip_ code_ out_ count_)
-       (BFState left_ curr_ right_ ip_ code_ out_)
-       (Gte count_ 500))  ; Guard: enough for Hello World
+    ;; RunToEnd enqueues a timer effect at Program level to start execution
+    (R "RunToEnd/Enqueue"
+       (Apply RunToEnd (Program app_ (Effects (Pending p___) inbox_)))
+       (Program
+         app_
+         (Effects
+           (Pending p___ (Timer (BFStepTimer 0) (Delay 0)))  ; Immediate timer with step counter
+           inbox_))
+       10)  ; High priority to match before lifters
 
-    (R "BFRun/AtEnd"
-       (BFRun left_ curr_ right_ ip_ code_ out_ _)
-       (BFState left_ curr_ right_ ip_ code_ out_)
-       (Gte ip_ (StrLen code_)))  ; Guard
-
-    (R "BFRun/Continue"
-       (BFRun left_ curr_ right_ ip_ code_ out_ count_)
-       (BFRunStep (BFStep left_ curr_ right_ ip_ code_ out_) (Add count_ 1))
-       -10)  ; Priority
-
-    ;; Helper to continue running after a step
-    (R "BFRunStep"
-       (BFRunStep (BFState left_ curr_ right_ ip_ code_ out_) count_)
-       (BFRun left_ curr_ right_ ip_ code_ out_ count_))
+    ;; When timer completes, execute a step and check if we should continue
+    (R "BFStepTimer/Process"
+       (Program
+         (App (State (BFState left_ curr_ right_ ip_ code_ out_)) ui_)
+         (Effects pending_ (Inbox (TimerComplete (BFStepTimer count_) _) rest___)))
+       (If (And (Lt ip_ (StrLen code_)) (Lt count_ 10000))  ; Stop at end or after 10000 steps
+           ;; Not at end and under limit: execute Step and enqueue another timer
+           (Program
+             (Apply Step (App (State (BFState left_ curr_ right_ ip_ code_ out_)) ui_))
+             (Effects
+               (Pending (Timer (BFStepTimer (Add count_ 1)) (Delay 0)))  ; Continue with next step
+               (Inbox rest___)))
+           ;; At end or limit reached: stop running
+           (Program
+             (App (State (BFState left_ curr_ right_ ip_ code_ out_)) ui_)
+             (Effects pending_ (Inbox rest___)))))
 
     ;; --- BFStep: Execute one instruction ---
     (R "BFStep/End"
@@ -156,8 +166,13 @@
 
     (R "BFExec/LoopEnd/NonZero"
        (BFExec "]" left_ curr_ right_ ip_ code_ out_)
-       (BFState left_ curr_ right_ (FindMatchingBracketBack code_ ip_ 1 0) code_ out_)
+       (BFJumpBack left_ curr_ right_ ip_ code_ out_)
        (Neq curr_ 0))
+
+    ;; Separate rule to handle the jump back
+    (R "BFJumpBack"
+       (BFJumpBack left_ curr_ right_ ip_ code_ out_)
+       (BFState left_ curr_ right_ (FindMatchingBracketBack code_ (Sub ip_ 1) 1 0) code_ out_))
 
     ;; Skip any other character
     (R "BFExec/Skip"
@@ -194,12 +209,12 @@
     ;; --- Helper: Find matching [ bracket (going backwards) ---
     (R "FindMatchingBracketBack/TooFar"
        (FindMatchingBracketBack _ pos_ _ _)
-       (Add pos_ 1)  ; Return a safe position instead of 0
+       0  ; Return to start if we go out of bounds
        (Lt pos_ 0))  ; Guard: out of bounds
 
     (R "FindMatchingBracketBack/Found"
-       (FindMatchingBracketBack code_ pos_ _ 1)
-       pos_  ; Jump TO the "[", not past it
+       (FindMatchingBracketBack code_ pos_ _ 0)
+       pos_  ; Jump TO the "[" so it can check the condition
        (Eq (Substring code_ pos_ (Add pos_ 1)) "["))
 
     (R "FindMatchingBracketBack/CloseBracket"
@@ -210,7 +225,7 @@
     (R "FindMatchingBracketBack/OpenBracket"
        (FindMatchingBracketBack code_ pos_ dir_ depth_)
        (FindMatchingBracketBack code_ (Sub pos_ dir_) dir_ (Sub depth_ 1))
-       (Eq (Substring code_ pos_ (Add pos_ 1)) "["))
+       (And (Eq (Substring code_ pos_ (Add pos_ 1)) "[") (Gt depth_ 0)))  ; Only match if not at target depth
 
     (R "FindMatchingBracketBack/Other"
        (FindMatchingBracketBack code_ pos_ dir_ depth_)
@@ -274,6 +289,11 @@
     ;; --- Conditionals ---
     (R "If/True"  (If True  a_ b_) a_)
     (R "If/False" (If False a_ b_) b_)
+
+    ;; --- Boolean operations ---
+    (R "And/True"  (And True True) True)
+    (R "And/False1" (And False _) False)
+    (R "And/False2" (And _ False) False)
   ) ;; End Rules
 
   ;; Optional: meta-rules to tweak UI or behavior live
