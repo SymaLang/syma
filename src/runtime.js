@@ -574,10 +574,19 @@ function renderTextPart(part, state) {
 let GLOBAL_UNIVERSE = null;
 let GLOBAL_RULES = null;
 
-async function boot(universeJsonUrl, mountSelector = "#app") {
-    const res = await fetch(universeJsonUrl);
-    if (!res.ok) throw new Error(`Failed to load universe: ${res.status}`);
-    const uni = await res.json();
+async function boot(universeOrUrl, mountSelector = "#app") {
+    let uni;
+
+    // Check if it's a URL string or a direct AST object
+    if (typeof universeOrUrl === 'string') {
+        // Legacy mode: fetch from URL
+        const res = await fetch(universeOrUrl);
+        if (!res.ok) throw new Error(`Failed to load universe: ${res.status}`);
+        uni = await res.json();
+    } else {
+        // Direct import mode: use the AST directly
+        uni = universeOrUrl;
+    }
 
     GLOBAL_UNIVERSE = uni;
     GLOBAL_RULES = extractRules(uni);
@@ -593,6 +602,16 @@ async function boot(universeJsonUrl, mountSelector = "#app") {
 
     // Initial render (if your rules expect pre-normalization, do it here too)
     renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
+
+    // Return a handle for HMR
+    return {
+        universe: GLOBAL_UNIVERSE,
+        reload: () => {
+            GLOBAL_UNIVERSE = uni;
+            GLOBAL_RULES = extractRules(uni);
+            renderUniverseToDOM(GLOBAL_UNIVERSE, mount, dispatchAction);
+        }
+    };
 }
 
 /* Helper to trace the exact projector path for Show[...] terms */
