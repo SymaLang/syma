@@ -32,7 +32,11 @@ export default function symaPlugin(options = {}) {
     async function parseModuleInfo(filePath) {
         const content = await fs.readFile(filePath, 'utf-8');
 
-        const moduleMatch = content.match(/\{Module\s+([A-Za-z0-9/_-]+)/);
+        // Try both syntaxes: {Module Name} and Module(Name, ...)
+        let moduleMatch = content.match(/\{Module\s+([A-Za-z0-9/_-]+)/);
+        if (!moduleMatch) {
+            moduleMatch = content.match(/Module\s*\(\s*([A-Za-z0-9/_-]+)/);
+        }
         if (!moduleMatch) {
             throw new Error(`${filePath} is not a valid module file`);
         }
@@ -40,9 +44,18 @@ export default function symaPlugin(options = {}) {
         const moduleName = moduleMatch[1];
         const imports = [];
 
-        const importRegex = /\{Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+open)?\}/g;
+        // Match both syntaxes for imports
+        // Brace syntax: {Import X/Y as Z [open]}
+        // Function syntax: Import(X/Y, as, Z) or Import variations
+        const importRegexBrace = /\{Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+open)?\}/g;
+        const importRegexFunc = /Import\s*\(\s*([A-Za-z0-9/_-]+)\s*,\s*as\s*,\s*([A-Za-z0-9]+)(?:\s*,\s*open)?\s*\)/g;
         let match;
-        while ((match = importRegex.exec(content)) !== null) {
+        // Check brace syntax imports
+        while ((match = importRegexBrace.exec(content)) !== null) {
+            imports.push(match[1]);
+        }
+        // Check function syntax imports
+        while ((match = importRegexFunc.exec(content)) !== null) {
             imports.push(match[1]);
         }
 

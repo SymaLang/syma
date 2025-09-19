@@ -181,9 +181,35 @@ function foldToString(args) {
         return Str(String(arg.v));
     } else if (isSym(arg)) {
         return Str(arg.v);
+    } else if (isCall(arg)) {
+        // Convert complex expressions to S-expression string format
+        return Str(exprToString(arg));
     }
 
     return null;
+}
+
+/**
+ * Helper to convert expressions to S-expression string format
+ */
+function exprToString(expr) {
+    if (isStr(expr)) {
+        // Strings need quotes in S-expression format
+        return `"${expr.v.replace(/"/g, '\\"')}"`;
+    } else if (isNum(expr)) {
+        return String(expr.v);
+    } else if (isSym(expr)) {
+        return expr.v;
+    } else if (isCall(expr)) {
+        // Format as {Head arg1 arg2 ...}
+        const head = exprToString(expr.h);
+        const args = expr.a.map(exprToString);
+        if (args.length === 0) {
+            return `{${head}}`;
+        }
+        return `{${head} ${args.join(' ')}}`;
+    }
+    return String(expr); // Fallback
 }
 
 /**

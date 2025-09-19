@@ -98,7 +98,8 @@ function extractRules(universe) {
     if (ruleRulesNode) {
         // The meta-rules themselves are ordinary R[...] over R[...] trees
         const meta = extractRulesFromNode(ruleRulesNode);
-        effectiveRulesNode = normalize(baseRulesNode, meta);
+        // Don't fold primitives when normalizing rules - we need to preserve guards
+        effectiveRulesNode = normalize(baseRulesNode, meta, 10000, true);
     }
     return extractRulesFromNode(effectiveRulesNode);
 }
@@ -334,23 +335,23 @@ function applyOnceTrace(expr, rules) {
 }
 
 
-function normalize(expr, rules, maxSteps = 10000) {
+function normalize(expr, rules, maxSteps = 10000, skipPrims = false) {
     let cur = expr;
     for (let i = 0; i < maxSteps; i++) {
         const step = applyOnce(cur, rules);
-        cur = foldPrims(step.expr);   // <-- add this line
+        cur = skipPrims ? step.expr : foldPrims(step.expr);
         if (!step.changed) return cur;
     }
     throw new Error("normalize: exceeded maxSteps (possible non-termination)");
 }
 
 /* Normalization with step trace for debugger UIs */
-function normalizeWithTrace(expr, rules, maxSteps = 10000) {
+function normalizeWithTrace(expr, rules, maxSteps = 10000, skipPrims = false) {
     let cur = expr;
     const trace = [];
     for (let i = 0; i < maxSteps; i++) {
         const step = applyOnceTrace(cur, rules);
-        cur = foldPrims(step.expr);
+        cur = skipPrims ? step.expr : foldPrims(step.expr);
         if (!step.changed) return {result: cur, trace};
         // Human-friendly snapshot of *this* rewrite
         trace.push({

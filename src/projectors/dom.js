@@ -235,27 +235,49 @@ export class DOMProjector extends BaseProjector {
         if (isStr(part)) return document.createTextNode(part.v);
         if (isNum(part)) return document.createTextNode(String(part.v));
 
+        // if (isCall(part) && isSym(part.h) && part.h.v === "Show") {
+        //     // Build a tiny projection context: Show[x] /@ App[State, _] -> Str[...]
+        //     const appCtx = Call(Sym("App"), state, Sym("_"));
+        //     const annotated = Call(Sym("/@"), part, appCtx);
+        //
+        //     // Let rules reduce it
+        //     const reduced = (() => {
+        //         const currentRules = this.extractRulesFunc(this.universe);
+        //         if (getTraceState()) {
+        //             const { result, trace } = this.normalizeWithTrace(annotated, currentRules);
+        //             logProjectionTrace(part, trace);
+        //             return result;
+        //         }
+        //         return this.normalizeFunc(annotated, currentRules);
+        //     })();
+        //
+        //     if (isStr(reduced)) return document.createTextNode(reduced.v);
+        //     if (isNum(reduced)) return document.createTextNode(String(reduced.v));
+        //
+        //     // If reduction failed, log error
+        //     const currentRules = this.extractRulesFunc(this.universe);
+        //     logProjectionFailure(part, annotated, reduced, currentRules);
+        //     throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
+        // }
+
         if (isCall(part) && isSym(part.h) && part.h.v === "Show") {
-            // Build a tiny projection context: Show[x] /@ App[State, _] -> Str[...]
             const appCtx = Call(Sym("App"), state, Sym("_"));
             const annotated = Call(Sym("/@"), part, appCtx);
+            const currentRules = this.extractRulesFunc(this.universe);
 
-            // Let rules reduce it
-            const reduced = (() => {
-                const currentRules = this.extractRulesFunc(this.universe);
-                if (getTraceState()) {
-                    const { result, trace } = this.normalizeWithTrace(annotated, currentRules);
-                    logProjectionTrace(part, trace);
-                    return result;
-                }
-                return this.normalizeFunc(annotated, currentRules);
-            })();
+            const reduced = getTraceState()
+                ? this.normalizeWithTrace(annotated, currentRules).result
+                : this.normalizeFunc(annotated, currentRules);
 
             if (isStr(reduced)) return document.createTextNode(reduced.v);
             if (isNum(reduced)) return document.createTextNode(String(reduced.v));
 
-            // If reduction failed, log error
-            const currentRules = this.extractRulesFunc(this.universe);
+            // 🔽 Fallback: stringify anything else
+            const coerced = this.normalizeFunc(Call(Sym("ToString"), reduced), currentRules);
+            if (isStr(coerced)) return document.createTextNode(coerced.v);
+            if (isNum(coerced)) return document.createTextNode(String(coerced.v));
+
+            // Still not displayable? Log and throw.
             logProjectionFailure(part, annotated, reduced, currentRules);
             throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
         }

@@ -465,7 +465,7 @@ function tokenize(src, filename = '<input>') {
 
   const isWS = c => c === ' ' || c === '\t' || c === '\n' || c === '\r';
   const isDigit = c => c >= '0' && c <= '9';
-  const isDelim = c => c === '{' || c === '}' || c === '"' || c === ';';
+  const isDelim = c => c === '{' || c === '}' || c === '(' || c === ')' || c === ',' || c === '"' || c === ';';
 
   const pos = () => ({ line, col, index: i, file: filename });
 
@@ -490,7 +490,7 @@ function tokenize(src, filename = '<input>') {
       continue;
     }
 
-    if (c === '{' || c === '}') {
+    if (c === '{' || c === '}' || c === '(' || c === ')' || c === ',') {
       tokens.push({ t: c, pos: startPos });
       advance();
       continue;
@@ -591,13 +591,57 @@ function parse(tokens) {
 
     if (tok.t === 'num') { eat(); return { k: 'Num', v: tok.v }; }
     if (tok.t === 'str') { eat(); return { k: 'Str', v: tok.v }; }
-    if (tok.t === 'sym') { eat(); return { k: 'Sym', v: tok.v }; }
+    if (tok.t === 'sym') {
+      const sym = eat();
+      // Check if followed by '(' for function call syntax
+      if (peek() && peek().t === '(') {
+        eat(); // consume '('
+        const args = [];
+
+        // Handle empty parens
+        if (peek() && peek().t === ')') {
+          eat();
+          return { k: 'Call', h: { k: 'Sym', v: sym.v }, a: [] };
+        }
+
+        // Parse comma-separated arguments
+        while (true) {
+          args.push(parseExpr());
+          const next = peek();
+          if (!next) die('Unterminated function call', sym.pos);
+          if (next.t === ',') {
+            eat(); // consume comma
+            continue;
+          }
+          if (next.t === ')') {
+            eat(); // consume closing paren
+            break;
+          }
+          die(`Expected ',' or ')' in function call`, next.pos);
+        }
+
+        return { k: 'Call', h: { k: 'Sym', v: sym.v }, a: args };
+      }
+      return { k: 'Sym', v: sym.v };
+    }
 
     if (tok.t === '}') {
       if (braceStack.length === 0) {
         die('Unexpected closing brace - no matching opening brace', tok.pos);
       }
       die('Unexpected closing brace', tok.pos);
+    }
+
+    if (tok.t === ')') {
+      die('Unexpected closing parenthesis', tok.pos);
+    }
+
+    if (tok.t === '(') {
+      die('Unexpected opening parenthesis - function calls must have a name', tok.pos);
+    }
+
+    if (tok.t === ',') {
+      die('Unexpected comma outside of function call', tok.pos);
     }
 
     if (tok.t === '{') {
@@ -647,6 +691,12 @@ function parse(tokens) {
     const tok = peek();
     if (tok && tok.t === '}') {
       die('Unexpected closing brace - no matching opening brace', tok.pos);
+    }
+    if (tok && tok.t === ')') {
+      die('Unexpected closing parenthesis - no matching opening parenthesis', tok.pos);
+    }
+    if (tok && tok.t === ',') {
+      die('Unexpected comma at top level', tok.pos);
     }
     exprs.push(parseExpr());
   }

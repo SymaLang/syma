@@ -20,21 +20,53 @@ Atoms represent constant values or symbolic identifiers in the language.
 
 ## 3. Calls
 
-A **Call** is an S-expression where the first element is the head (function or operator) and the rest are arguments. The syntax is:
+A **Call** is an expression where the first element is the head (function or operator) and the rest are arguments. The language supports two equivalent syntaxes:
+
+### Brace Syntax (Original)
 
 ```lisp
-{Head arg1 arg2 …}
+{Head arg1 arg2 arg3}
 ```
 
-This corresponds to a `Call` node in the JSON AST with a `head` and a list of `args`. For example:
+Space-separated arguments within curly braces.
+
+### Function Call Syntax (Alternative)
 
 ```lisp
+Head(arg1, arg2, arg3)
+```
+
+Comma-separated arguments within parentheses, similar to traditional programming languages.
+
+### Examples
+
+Both syntaxes produce identical AST structures:
+
+```lisp
+; These are equivalent:
 {Add 1 2}
+Add(1, 2)
+
+; Nested calls:
+{Mul {Add 1 2} 3}
+Mul(Add(1, 2), 3)
+
+; Complex expressions:
+{TodoState {NextId 5} {Items} {Filter "all"}}
+TodoState(NextId(5), Items(), Filter("all"))
 ```
 
-represents a call to `Add` with arguments `1` and `2`.
+### Mixing Syntaxes
 
-Calls can be nested arbitrarily to represent complex expressions.
+You can freely mix both syntaxes within the same file or even the same expression:
+
+```lisp
+R("Toggle",
+  Apply(Toggle(id_), {TodoState {NextId n_} items_ filter_}),
+  TodoState(NextId(n_), UpdatedItems(id_), filter_))
+```
+
+This flexibility allows you to use whichever syntax is clearer for each specific context. Function call syntax is often more readable for function applications, while brace syntax can be cleaner for data structures.
 
 ---
 
@@ -116,8 +148,9 @@ Pattern matching with mixed syntax:
 
 ### Module Structure
 
-The language supports a module system for organizing code into reusable, composable units:
+The language supports a module system for organizing code into reusable, composable units. Modules can be written in either syntax:
 
+**Brace Syntax:**
 ```lisp
 {Module Module/Name
   {Export Symbol1 Symbol2 ...}           ; What this module provides
@@ -128,16 +161,30 @@ The language supports a module system for organizing code into reusable, composa
   {RuleRules ...}}                        ; Meta-rules (optional)
 ```
 
+**Function Call Syntax:**
+```lisp
+Module(Module/Name,
+  Export(Symbol1, Symbol2, ...),         ; What this module provides
+  Import(Other/Module, as, Alias),       ; Dependencies (note: 'as' is literal)
+  Import(Core/KV, as, KV, open),         ; Open import
+  Defs(Name(value), ...),                ; Constants/definitions
+  Program(...),                          ; Main program (entry modules only)
+  Rules(...),                            ; Transformation rules
+  RuleRules(...))                        ; Meta-rules (optional)
+```
+
 ### Imports
 
-Modules can import symbols from other modules:
+Modules can import symbols from other modules using either syntax:
 
 ```lisp
-;; Qualified import - symbols accessed as Alias/Name
-{Import Core/KV as KV}  ; Use as: KV/Get, KV/Set
+;; Brace syntax
+{Import Core/KV as KV}          ; Qualified: use as KV/Get, KV/Set
+{Import Core/KV as KV open}     ; Open: use as Get, Set
 
-;; Open import - symbols available unqualified
-{Import Core/KV as KV open}  ; Use as: Get, Set
+;; Function syntax
+Import(Core/KV, as, KV)         ; Qualified: use as KV/Get, KV/Set
+Import(Core/KV, as, KV, open)   ; Open: use as Get, Set
 ```
 
 ### Symbol Qualification
