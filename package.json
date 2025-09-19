@@ -1,25 +1,31 @@
 {
   "name": "syma-fe",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "bin": {
+    "syma": "./bin/syma-repl.js",
+    "syma-repl": "./bin/syma-repl.js",
+    "syma-compile": "./bin/syma-compile.js"
+  },
   "scripts": {
+    "repl": "node bin/syma-repl.js",
     "dev": "vite",
     "dev:demo": "VITE_DEMO_MODE=true vite",
     "build": "vite build",
     "preview": "vite preview",
-    "compile": "node scripts/syma-modules.js src/modules/*.syma --bundle --entry App/Main --out public/universe.json --pretty",
+    "compile": "node bin/syma-compile.js src/modules/*.syma --bundle --entry App/Main --out public/universe.json --pretty",
     "watch": "nodemon --watch 'src/modules/**/*.syma' --ext syma --exec 'npm run compile'",
-    "demo:counter": "node scripts/syma-modules.js src/demos/counter.syma --bundle --entry Demo/Counter --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
-    "demo:todo": "node scripts/syma-modules.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
-    "demo:effects": "node scripts/syma-modules.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
-    "demo:bf": "node scripts/syma-modules.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
-    "demo:math": "node scripts/syma-modules.js src/demos/math.syma src/modules/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
-    "build:demo:counter": "node scripts/syma-modules.js src/demos/counter.syma --bundle --entry Demo/Counter --out public/universe.json --pretty",
-    "build:demo:todo": "node scripts/syma-modules.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty",
-    "build:demo:effects": "node scripts/syma-modules.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty",
-    "build:demo:bf": "node scripts/syma-modules.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty",
-    "build:demo:math": "node scripts/syma-modules.js src/demos/math.syma src/modules/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty"
+    "demo:counter": "node bin/syma-compile.js src/demos/counter.syma --bundle --entry Demo/Counter --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:todo": "node bin/syma-compile.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:effects": "node bin/syma-compile.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:bf": "node bin/syma-compile.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:math": "node bin/syma-compile.js src/demos/math.syma src/modules/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "build:demo:counter": "node bin/syma-compile.js src/demos/counter.syma --bundle --entry Demo/Counter --out public/universe.json --pretty",
+    "build:demo:todo": "node bin/syma-compile.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty",
+    "build:demo:effects": "node bin/syma-compile.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty",
+    "build:demo:bf": "node bin/syma-compile.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty",
+    "build:demo:math": "node bin/syma-compile.js src/demos/math.syma src/modules/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty"
   },
   "devDependencies": {
     "@rollup/pluginutils": "^5.3.0",

@@ -16,7 +16,7 @@ This is a symbolic programming language runtime and frontend application built w
 
 ### Core Components
 
-1. **Symbolic Language (`.lisp` files)**: Programs written in S-expression syntax located in `src/`. Examples include `todo.lisp` and `counter.lisp`.
+1. **Symbolic Language (`.syma` files)**: Programs written in S-expression syntax with module support. Located in `src/modules/` and `src/demos/`.
 
 2. **Runtime Engine (`src/runtime.js`)**: The core runtime that:
    - Loads Universe AST from JSON
@@ -25,7 +25,7 @@ This is a symbolic programming language runtime and frontend application built w
    - Renders UI to DOM
    - Handles events via `Apply[action, Program]` + normalization
 
-3. **Compiler (`scripts/syma-modules.js`)**: Converts S-expression source files to JSON AST format. The AST structure uses:
+3. **Compiler (`bin/syma-compile.js`)**: Converts S-expression source files to JSON AST format. The AST structure uses:
    - `{k:"Sym", v:string}` for symbols
    - `{k:"Num", v:number}` for numbers
    - `{k:"Str", v:string}` for strings
@@ -48,7 +48,7 @@ Rules have the format: `(R "Name" pattern replacement priority?)`
 
 When modifying symbolic programs:
 1. Edit `.lisp` files in `src/`
-2. Compile to JSON using: `node scripts/syma-modules.js src/file.lisp --out public/universe.json --pretty`
+2. Compile to JSON using: `npm run compile` or `syma-compile src/file.syma --out public/universe.json --pretty`
 3. The runtime loads the JSON AST and applies normalization rules
 
 ### UI Rendering
@@ -62,5 +62,8 @@ The runtime supports a minimal UI DSL with elements like `Div`, `Button`, `H1`, 
 
 - `src/runtime.js` - Core runtime engine
 - `src/*.lisp` - Symbolic program source files
-- `scripts/syma-modules.js` - S-expression to JSON compiler
+- `bin/syma-compile.js` - S-expression to JSON compiler
+- `bin/syma-repl.js` - Interactive REPL
+- `src/core/parser.js` - Shared parser used by both compiler and REPL
+- `src/core/engine.js` - Platform-independent runtime core
 - `public/universe.json` - Compiled program AST (generated)
