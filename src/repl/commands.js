@@ -6,6 +6,7 @@
 
 import { Sym, Str, Num, Call, isSym, isCall, isStr, isNum, deq } from '../ast-helpers.js';
 import * as engine from '../core/engine.js';
+import { foldPrims } from '../primitives.js';
 
 export class CommandProcessor {
     constructor(repl) {
@@ -25,7 +26,8 @@ export class CommandProcessor {
             'universe': this.showUniverse.bind(this),
             'rules': this.listRules.bind(this),
             'rule': this.showOrEditRule.bind(this),
-            'exec': this.execRule.bind(this),
+            'apply': this.applyRule.bind(this),
+            'exec': this.smartExecRule.bind(this),
             'trace': this.trace.bind(this),
             'why': this.explainStuck.bind(this),
             'apply': this.applyToState.bind(this),
@@ -33,7 +35,8 @@ export class CommandProcessor {
             'edit': this.editRule.bind(this),
             'undo': this.undo.bind(this),
             'history': this.showHistory.bind(this),
-            'set': this.setOption.bind(this)
+            'set': this.setOption.bind(this),
+            'norm': this.normalizeUniverse.bind(this)
         };
     }
 
@@ -69,7 +72,7 @@ File operations:
   :load <file>              Load universe from file
   :bundle <file>            Bundle module and dependencies into universe
   :export <module>          Export single module to file
-  :import <file> [open]     Import module into universe
+  :import <file>            Import module and dependencies into current universe
 
 Universe management:
   :clear                    Reset universe to empty state
@@ -85,10 +88,12 @@ Rule management:
   :edit <name> <pat> → <repl>  Replace existing rule
 
 Evaluation:
-  :exec <name> <expr>       Apply specific rule to expression
+  :apply <name> <expr>      Apply specific rule to expression
+  :exec <name> <expr>       Smart execute: auto-wrap input to match rule
   :trace <expr>             Evaluate with step-by-step trace
   :why <expr>               Explain why evaluation got stuck
   :apply <action>           Apply action to current universe state
+  :norm [show]              Normalize the universe Program section
 
 Settings:
   :set <option> <value>     Set REPL option
@@ -221,24 +226,147 @@ History:
 
     async import(args, rawArgs) {
         const filename = args[0];
-        const open = args[1] === 'open';
+        // Note: 'open' parameter doesn't make sense for :import since we're not in a module context
+        // All imports are effectively added to the global namespace
 
         if (!filename) {
-            this.repl.platform.print("Usage: :import <filename> [open]");
+            this.repl.platform.print("Usage: :import <filename>");
+            this.repl.platform.print("Note: Imports a module and its dependencies into the current universe");
             return true;
         }
 
         try {
-            // Read and parse the module file
-            const content = await this.repl.platform.readFile(filename);
-            const module = this.repl.parser.parseString(content, filename);
+            // Use child_process to run the compiler (same as :bundle)
+            const { execSync } = await import('child_process');
 
-            // TODO: Properly merge module into universe with symbol qualification
-            this.repl.platform.print(`Module imported from ${filename}${open ? ' (open)' : ''}`);
+            // Read the module to get its name
+            const content = await this.repl.platform.readFile(filename);
+            const ast = this.repl.parser.parseString(content, filename);
+
+            if (!isCall(ast) || !isSym(ast.h) || ast.h.v !== 'Module') {
+                throw new Error('File is not a module (must start with Module)');
+            }
+
+            const nameNode = ast.a[0];
+            if (!isSym(nameNode)) {
+                throw new Error('Module name must be a symbol');
+            }
+            const moduleName = nameNode.v;
+
+            this.repl.platform.print(`Importing module ${moduleName}...`);
+
+            // Run the compiler in library mode (no Program section required)
+            // The compiler will handle dependency resolution automatically
+            const command = `node bin/syma-compile.js ${filename} --library`;
+            const result = execSync(command, { encoding: 'utf8', cwd: process.cwd() });
+
+            // Parse the resulting Universe
+            const compiledUniverse = JSON.parse(result);
+
+            // Now merge the compiled universe into our current one
+            this.mergeUniverses(compiledUniverse, moduleName);
+
+            this.repl.platform.print(`Module ${moduleName} imported successfully`);
+
+            // Show what was imported
+            const importedRules = engine.extractRules(compiledUniverse);
+            this.repl.platform.print(`Added ${importedRules.length} rules from ${moduleName} and its dependencies`);
+
         } catch (error) {
             this.repl.platform.print(`Failed to import: ${error.message}`);
+            if (error.stderr) {
+                this.repl.platform.print(`Compiler error: ${error.stderr}`);
+            }
         }
         return true;
+    }
+
+    // Helper method to merge universes
+    mergeUniverses(importedUniverse, moduleName) {
+        // Save undo state
+        this.repl.pushUndo();
+
+        // Extract rules from imported universe
+        const importedRules = engine.findSection(importedUniverse, "Rules");
+
+        if (!importedRules || !isCall(importedRules) || importedRules.a.length === 0) {
+            this.repl.platform.print(`Warning: No rules found in module ${moduleName}`);
+            return;
+        }
+
+        // Get current rules section (or create if missing)
+        let currentRules = engine.findSection(this.repl.universe, "Rules");
+
+        if (!currentRules) {
+            // Create Rules section if it doesn't exist
+            if (!isCall(this.repl.universe)) {
+                throw new Error("Invalid universe structure");
+            }
+            currentRules = Call(Sym("Rules"));
+            this.repl.universe.a.push(currentRules);
+        }
+
+        // Build a set of existing rule names for conflict detection
+        const existingRuleNames = new Set();
+        for (const rule of currentRules.a) {
+            if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length > 0) {
+                const nameArg = rule.a[0];
+                if (isStr(nameArg)) {
+                    existingRuleNames.add(nameArg.v);
+                }
+            }
+        }
+
+        // Merge imported rules, checking for conflicts
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        for (const rule of importedRules.a) {
+            if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length > 0) {
+                const nameArg = rule.a[0];
+                if (isStr(nameArg)) {
+                    const ruleName = nameArg.v;
+                    if (existingRuleNames.has(ruleName)) {
+                        this.repl.platform.print(`  Skipping rule "${ruleName}" (already exists)`);
+                        skippedCount++;
+                    } else {
+                        currentRules.a.push(rule);
+                        existingRuleNames.add(ruleName);
+                        addedCount++;
+                    }
+                }
+            }
+        }
+
+        if (addedCount > 0) {
+            this.repl.platform.print(`  Added ${addedCount} new rules`);
+        }
+        if (skippedCount > 0) {
+            this.repl.platform.print(`  Skipped ${skippedCount} existing rules`);
+        }
+
+        // Also merge RuleRules if present
+        const importedRuleRules = engine.findSection(importedUniverse, "RuleRules");
+        if (importedRuleRules && isCall(importedRuleRules) && importedRuleRules.a.length > 0) {
+            let currentRuleRules = engine.findSection(this.repl.universe, "RuleRules");
+
+            if (!currentRuleRules) {
+                // Just add the entire RuleRules section if we don't have one
+                this.repl.universe.a.push(importedRuleRules);
+                this.repl.platform.print(`  Added ${importedRuleRules.a.length} meta-rules`);
+            } else {
+                // Merge meta-rules
+                let metaAdded = 0;
+                for (const rule of importedRuleRules.a) {
+                    // For simplicity, just add all meta-rules (they're less likely to conflict)
+                    currentRuleRules.a.push(rule);
+                    metaAdded++;
+                }
+                if (metaAdded > 0) {
+                    this.repl.platform.print(`  Added ${metaAdded} meta-rules`);
+                }
+            }
+        }
     }
 
     async clear(args) {
@@ -295,7 +423,8 @@ History:
         // Check if this is an inline rule definition
         if (rawArgs.includes('→') || rawArgs.includes('->')) {
             try {
-                const ruleText = rawArgs;
+                // Strip the name from the beginning of rawArgs to get just the pattern and replacement
+                const ruleText = rawArgs.slice(name.length).trim();
                 const ruleAst = this.repl.parser.parseInlineRule(name, ruleText);
                 this.repl.addRule(ruleAst);
                 this.repl.platform.print(`Rule "${name}" added`);
@@ -328,9 +457,9 @@ History:
         return true;
     }
 
-    async execRule(args, rawArgs) {
+    async applyRule(args, rawArgs) {
         if (args.length < 2) {
-            this.repl.platform.print("Usage: :exec <rule-name> <expression>");
+            this.repl.platform.print("Usage: :apply <rule-name> <expression>");
             return true;
         }
 
@@ -360,6 +489,75 @@ History:
             this.repl.platform.print(`Error: ${error.message}`);
         }
         return true;
+    }
+
+    async smartExecRule(args, rawArgs) {
+        if (args.length < 2) {
+            this.repl.platform.print("Usage: :exec <rule-name> <expression>");
+            return true;
+        }
+
+        const ruleName = args[0];
+        const exprText = args.slice(1).join(' ');
+
+        try {
+            const expr = this.repl.parser.parseString(exprText);
+            const rules = this.repl.getRules();
+            const rule = rules.find(r => r.name === ruleName);
+
+            if (!rule) {
+                this.repl.platform.print(`Rule "${ruleName}" not found`);
+                return true;
+            }
+
+            // Extract the pattern structure from the rule's LHS
+            const wrappedExpr = this.wrapExpressionForRule(rule.lhs, expr);
+
+            if (!wrappedExpr) {
+                this.repl.platform.print(`Cannot adapt expression to match rule pattern`);
+                return true;
+            }
+
+            // Show what we're doing
+            const patternStr = this.repl.formatResult(rule.lhs);
+            const wrappedStr = this.repl.formatResult(wrappedExpr);
+            this.repl.platform.print(`Wrapping to match pattern: ${patternStr}`);
+            this.repl.platform.print(`Wrapped expression: ${wrappedStr}`);
+
+            // Now just normalize the wrapped expression normally
+            const normalized = engine.normalize(wrappedExpr, rules, this.repl.maxSteps, false, foldPrims);
+            const output = this.repl.formatResult(normalized);
+            this.repl.platform.print(`→ ${output}`);
+        } catch (error) {
+            this.repl.platform.print(`Error: ${error.message}`);
+        }
+        return true;
+    }
+
+    // Helper to wrap an expression to match a rule's pattern
+    wrapExpressionForRule(pattern, expr) {
+        // If pattern is a variable, just return the expr
+        if (isSym(pattern) && pattern.v.endsWith('_')) {
+            return expr;
+        }
+
+        // If pattern is a Call, we need to understand its structure
+        if (isCall(pattern)) {
+            // Check if this is a unary application pattern like {F x_}
+            if (pattern.a.length === 1) {
+                const arg = pattern.a[0];
+                if (isSym(arg) && arg.v.endsWith('_')) {
+                    // This is a pattern like {F x_}, wrap expr with F
+                    return Call(pattern.h, expr);
+                }
+            }
+            // For more complex patterns, try to match the structure
+            // This is a simplified approach - could be enhanced
+            return Call(pattern.h, expr);
+        }
+
+        // For other cases, return null to indicate we can't wrap
+        return null;
     }
 
     async trace(args, rawArgs) {
@@ -599,6 +797,60 @@ History:
 
             default:
                 this.repl.platform.print(`Unknown option: ${option}`);
+        }
+        return true;
+    }
+
+    async normalizeUniverse(args) {
+        try {
+            // Save undo state
+            this.repl.pushUndo();
+
+            // Get the current Program section
+            const program = engine.findSection(this.repl.universe, "Program");
+
+            if (!program) {
+                this.repl.platform.print("No Program section to normalize");
+                return true;
+            }
+
+            // Get current rules
+            const rules = this.repl.getRules();
+
+            if (rules.length === 0) {
+                this.repl.platform.print("No rules to apply");
+                return true;
+            }
+
+            // Normalize the Program
+            this.repl.platform.print("Normalizing universe...");
+
+            const normalized = engine.normalize(program, rules, this.repl.maxSteps, false, foldPrims);
+
+            // Update the universe with the normalized Program
+            if (!isCall(this.repl.universe)) {
+                throw new Error("Invalid universe structure");
+            }
+
+            // Find and replace the Program section
+            for (let i = 0; i < this.repl.universe.a.length; i++) {
+                const section = this.repl.universe.a[i];
+                if (isCall(section) && isSym(section.h) && section.h.v === "Program") {
+                    this.repl.universe.a[i] = normalized;
+                    break;
+                }
+            }
+
+            this.repl.platform.print("Universe normalized");
+
+            // Optionally show the normalized program
+            if (args.length > 0 && args[0] === 'show') {
+                const output = this.repl.formatResult(normalized);
+                this.repl.platform.print("Normalized Program:");
+                this.repl.platform.print(output);
+            }
+        } catch (error) {
+            this.repl.platform.print(`Normalization failed: ${error.message}`);
         }
         return true;
     }

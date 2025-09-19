@@ -21,12 +21,12 @@
     "demo:todo": "node bin/syma-compile.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
     "demo:effects": "node bin/syma-compile.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
     "demo:bf": "node bin/syma-compile.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
-    "demo:math": "node bin/syma-compile.js src/demos/math.syma src/modules/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
+    "demo:math": "node bin/syma-compile.js src/demos/math.syma src/stdlib/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty && VITE_DEMO_MODE=true npm run dev",
     "build:demo:counter": "node bin/syma-compile.js src/demos/counter.syma --bundle --entry Demo/Counter --out public/universe.json --pretty",
     "build:demo:todo": "node bin/syma-compile.js src/demos/todo.syma --bundle --entry Demo/TodoList --out public/universe.json --pretty",
     "build:demo:effects": "node bin/syma-compile.js src/demos/effects-demo.syma --bundle --entry Demo/Effects --out public/universe.json --pretty",
     "build:demo:bf": "node bin/syma-compile.js src/demos/bf.syma --bundle --entry Demo/Brainfuck --out public/universe.json --pretty",
-    "build:demo:math": "node bin/syma-compile.js src/demos/math.syma src/modules/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty"
+    "build:demo:math": "node bin/syma-compile.js src/demos/math.syma src/stdlib/algebra-simplify.syma --bundle --entry Demo/Math --out public/universe.json --pretty"
   },
   "devDependencies": {
     "@rollup/pluginutils": "^5.3.0",

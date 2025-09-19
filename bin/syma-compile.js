@@ -316,7 +316,7 @@ class ModuleLinker {
     return sorted;
   }
 
-  link(entryModuleName) {
+  link(entryModuleName, libraryMode = false) {
     const sorted = this.topoSort();
     const allRules = [];
     const allRuleRules = [];
@@ -357,22 +357,31 @@ class ModuleLinker {
       }
     }
 
-    // Get the entry module's program
-    const entryMod = this.moduleMap.get(entryModuleName);
-    if (!entryMod || !entryMod.program) {
-      throw new Error(`Entry module ${entryModuleName} must have a Program section`);
+    if (libraryMode) {
+      // In library mode, just return a Universe with Rules (no Program required)
+      return Call(
+        Sym('Universe'),
+        Call(Sym('Rules'), ...allRules),
+        Call(Sym('RuleRules'), ...allRuleRules)
+      );
+    } else {
+      // Normal mode - require entry module with Program
+      const entryMod = this.moduleMap.get(entryModuleName);
+      if (!entryMod || !entryMod.program) {
+        throw new Error(`Entry module ${entryModuleName} must have a Program section`);
+      }
+
+      const entryQualifier = new SymbolQualifier(entryMod, this.moduleMap);
+      const qualifiedProgram = entryQualifier.qualify(entryMod.program);
+
+      // Build the Universe
+      return Call(
+        Sym('Universe'),
+        qualifiedProgram,
+        Call(Sym('Rules'), ...allRules),
+        Call(Sym('RuleRules'), ...allRuleRules)
+      );
     }
-
-    const entryQualifier = new SymbolQualifier(entryMod, this.moduleMap);
-    const qualifiedProgram = entryQualifier.qualify(entryMod.program);
-
-    // Build the Universe
-    return Call(
-      Sym('Universe'),
-      qualifiedProgram,
-      Call(Sym('Rules'), ...allRules),
-      Call(Sym('RuleRules'), ...allRuleRules)
-    );
   }
 }
 
@@ -462,7 +471,7 @@ async function loadModuleRecursive(filePath, loadedModules = new Map(), stdlibPa
 
 /* ---------------- Main Compiler ---------------- */
 async function compile(options) {
-  const { files, bundle, entry, output, pretty, format, stdlibPath } = options;
+  const { files, bundle, entry, output, pretty, format, stdlibPath, library } = options;
 
   // Use our shared parser
   const parser = new SymaParser();
@@ -540,7 +549,7 @@ async function compile(options) {
     console.error(`Bundling ${modules.length} modules (including dependencies)`);
 
     const linker = new ModuleLinker(modules);
-    const universe = linker.link(entryModuleName);
+    const universe = linker.link(entryModuleName, library);
 
     const json = JSON.stringify(universe, null, pretty ? 2 : 0);
     if (output) {
@@ -576,12 +585,14 @@ Usage:
   syma-compile <file> [options]                     # Single file mode
   syma-compile <file> --bundle                      # Bundle with auto-detected entry
   syma-compile <files...> --bundle --entry <name>   # Bundle with explicit entry
+  syma-compile <file> --library                    # Bundle as library (no Program required)
   syma-compile <file> --format                      # Format/pretty-print mode
 
 Options:
   -o, --out <file>      Output file (default: stdout)
   --pretty              Pretty-print JSON output
   --bundle              Bundle modules with dependencies
+  --library             Bundle as library (doesn't require Program section)
   --entry <name>        Entry module name (optional for single file)
   --stdlib <path>       Path to standard library modules
   --format, -f          Format/pretty-print .syma file
@@ -596,6 +607,9 @@ Examples:
 
   # Bundle multiple modules with explicit entry
   syma-compile src/*.syma --bundle --entry App/Main --out universe.json
+
+  # Bundle library modules (no Program required)
+  syma-compile src/stdlib/core-kv.syma --library --out kv-lib.json
 
   # Format/pretty-print a .syma file
   syma-compile messy.syma --format --out clean.syma
@@ -617,6 +631,7 @@ async function main() {
   const options = {
     files: [],
     bundle: false,
+    library: false,
     entry: null,
     output: null,
     pretty: false,
@@ -639,6 +654,11 @@ async function main() {
 
       case '--bundle':
         options.bundle = true;
+        break;
+
+      case '--library':
+        options.bundle = true;  // Library mode is a type of bundling
+        options.library = true;
         break;
 
       case '--entry':
