@@ -30,7 +30,7 @@
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "Demo/Counter/Count"
+                    "v": "Count"
                   },
                   "a": [
                     {
@@ -57,7 +57,7 @@
                   "a": [
                     {
                       "k": "Sym",
-                      "v": "Demo/Counter/:class"
+                      "v": ":class"
                     },
                     {
                       "k": "Str",
@@ -96,7 +96,7 @@
                           "a": [
                             {
                               "k": "Sym",
-                              "v": "Demo/Counter/Count"
+                              "v": "Count"
                             }
                           ]
                         }
@@ -111,7 +111,7 @@
                       "a": [
                         {
                           "k": "Sym",
-                          "v": "Demo/Counter/:onClick"
+                          "v": ":onClick"
                         },
                         {
                           "k": "Sym",
@@ -119,7 +119,7 @@
                         },
                         {
                           "k": "Sym",
-                          "v": "Demo/Counter/:class"
+                          "v": ":class"
                         },
                         {
                           "k": "Str",
@@ -350,7 +350,7 @@
                       "k": "Call",
                       "h": {
                         "k": "Sym",
-                        "v": "Demo/Counter/Count"
+                        "v": "Count"
                       },
                       "a": [
                         {
@@ -383,7 +383,7 @@
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "Demo/Counter/Count"
+                    "v": "Count"
                   },
                   "a": [
                     {
@@ -445,7 +445,7 @@
                   "a": [
                     {
                       "k": "Sym",
-                      "v": "Demo/Counter/Count"
+                      "v": "Count"
                     }
                   ]
                 },
@@ -467,7 +467,7 @@
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "Demo/Counter/Count"
+                            "v": "Count"
                           },
                           "a": [
                             {

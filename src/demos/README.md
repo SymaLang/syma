@@ -48,7 +48,7 @@ npm run build:demo:bf
 
 ```bash
 # Compile a demo to universe.json
-node scripts/syma-modules.js src/demos/counter.syma --out public/universe.json --pretty
+node scripts/syma-old-compiler.js src/demos/counter.syma --out public/universe.json --pretty
 
 # Then start the dev server
 npm run dev

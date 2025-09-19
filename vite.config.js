@@ -8,7 +8,7 @@ export default defineConfig({
         symaPlugin({
             entryModule: 'App/Main',
             modulesDir: 'src/modules',
-            compiler: 'scripts/syma-modules.js',
+            compiler: 'bin/syma-compile.js',
             pretty: true
         })
     ],

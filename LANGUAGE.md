@@ -621,24 +621,24 @@ This shows each rule application with the matched pattern and replacement.
 Convert source to AST:
 ```bash
 # For single files (backward compatibility)
-node scripts/syma-modules.js input.syma --out output.json --pretty
+node scripts/syma-old-compiler.js input.syma --out output.json --pretty
 
 # Bundle modules into a Universe
-node scripts/syma-modules.js src/modules/*.syma --bundle --entry App/Main --out universe.json
+node scripts/syma-old-compiler.js src/modules/*.syma --bundle --entry App/Main --out universe.json
 ```
 
 ---
 
 ## 15. Module Compilation
 
-The `syma-modules.js` compiler handles both single files and module bundling:
+The `syma-old-compiler.js` compiler handles both single files and module bundling:
 
 ```bash
 # Single file mode (backward compatibility for non-module files)
-node scripts/syma-modules.js input.syma --out output.json --pretty
+node scripts/syma-old-compiler.js input.syma --out output.json --pretty
 
 # Bundle modules into a Universe
-node scripts/syma-modules.js src/modules/*.syma --bundle --entry App/Main --out universe.json
+node scripts/syma-old-compiler.js src/modules/*.syma --bundle --entry App/Main --out universe.json
 
 # The compiler:
 # 1. Parses all module files

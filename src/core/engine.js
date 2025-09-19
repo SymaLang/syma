@@ -407,7 +407,11 @@ export function dispatch(universe, rules, actionTerm, foldPrimsFn = null, traceF
     // Recompute rules from current universe in case RuleRules rewrote Rules
     rules = extractRules(universe);
     const prog = getProgram(universe);
+
+    // Apply the action to the Program node itself
+    // The lifting rules will handle propagating it through Program -> App -> State
     const applied = Call(Sym("Apply"), actionTerm, prog);
+
     let newProg;
     if (traceFn) {
         const {result, trace} = normalizeWithTrace(applied, rules, 10000, false, foldPrimsFn);
@@ -416,6 +420,18 @@ export function dispatch(universe, rules, actionTerm, foldPrimsFn = null, traceF
     } else {
         newProg = normalize(applied, rules, 10000, false, foldPrimsFn);
     }
+
+    // The result should be a Program node after normalization
+    // If not, something went wrong
+    if (!isCall(newProg) || !isSym(newProg.h) || newProg.h.v !== "Program") {
+        console.warn("Warning: dispatch normalization didn't return a Program node");
+        // Try to recover by wrapping it
+        if (isCall(newProg) && isSym(newProg.h) && newProg.h.v === "App") {
+            // If it's an App, wrap it in Program
+            newProg = Call(Sym("Program"), newProg);
+        }
+    }
+
     return setProgram(universe, newProg);
 }
 

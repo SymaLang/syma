@@ -15,7 +15,7 @@ export default function symaPlugin(options = {}) {
         modulesDir = 'src/modules',
 
         // Compiler configuration
-        compiler = 'scripts/syma-modules.js',
+        compiler = 'bin/syma-compile.js',
         pretty = true,
 
         // File filtering

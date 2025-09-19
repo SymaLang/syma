@@ -110,6 +110,7 @@ export class DOMProjector extends BaseProjector {
     splitPropsAndChildren(node) {
         if (!isCall(node)) return { props: null, children: [] };
 
+        // Check for new-style Props[KV[...], KV[...]] structure
         if (node.a.length && isCall(node.a[0]) && isSym(node.a[0].h) && node.a[0].h.v === "Props") {
             const propsNode = node.a[0];
             const children = node.a.slice(1);
@@ -125,7 +126,33 @@ export class DOMProjector extends BaseProjector {
             return { props, children };
         }
 
-        return { props: null, children: node.a };
+        // Handle old-style attributes (symbols starting with ':' like :class, :onClick)
+        const props = {};
+        const children = [];
+        let i = 0;
+
+        while (i < node.a.length) {
+            const arg = node.a[i];
+
+            // Check if it's an attribute (symbol starting with ':')
+            if (isSym(arg) && arg.v.startsWith(':')) {
+                const propName = arg.v.slice(1); // Remove the ':'
+
+                // Next argument is the value
+                if (i + 1 < node.a.length) {
+                    props[propName] = node.a[i + 1];
+                    i += 2; // Skip both attribute and value
+                } else {
+                    throw new Error(`Attribute ${arg.v} missing value`);
+                }
+            } else {
+                // It's a child element
+                children.push(arg);
+                i++;
+            }
+        }
+
+        return { props: Object.keys(props).length > 0 ? props : null, children };
     }
 
     /**

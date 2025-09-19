@@ -6,10 +6,10 @@ The Syma module system provides a clean way to organize code into reusable, comp
 
 ```bash
 # Bundle modules into a Universe
-node scripts/syma-modules.js src/modules/*.syma --bundle --entry App/Main --out public/universe.json --pretty
+node scripts/syma-old-compiler.js src/modules/*.syma --bundle --entry App/Main --out public/universe.json --pretty
 
 # Single file (backward compatibility)
-node scripts/syma-modules.js src/file.syma --out output.json --pretty
+node scripts/syma-old-compiler.js src/file.syma --out output.json --pretty
 ```
 
 ## Module Structure
@@ -91,7 +91,7 @@ src/modules/
 
 ## Implementation Details
 
-The module compiler (`scripts/syma-modules.js`) extends the base S-expression compiler with:
+The module compiler (`scripts/syma-old-compiler.js`) extends the base S-expression compiler with:
 
 - `Module` class for parsing module structure
 - `SymbolQualifier` for namespace resolution

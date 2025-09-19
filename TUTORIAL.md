@@ -877,7 +877,7 @@ Modules are compiled into a Universe:
 
 ```bash
 # Compile multiple modules into one universe
-node scripts/syma-modules.js src/*.syma --bundle --entry MyApp/Main --out universe.json
+node scripts/syma-old-compiler.js src/*.syma --bundle --entry MyApp/Main --out universe.json
 ```
 
 The compiler:

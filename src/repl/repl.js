@@ -199,9 +199,13 @@ export class SymaREPL {
         if (path.endsWith('.json')) {
             // Load JSON AST directly
             this.universe = JSON.parse(content);
+            // Enrich with Effects structure if needed for compatibility
+            this.universe = engine.enrichProgramWithEffects(this.universe);
         } else {
             // Parse S-expression
             this.universe = this.parser.parseString(content, path);
+            // Enrich with Effects structure if needed for compatibility
+            this.universe = engine.enrichProgramWithEffects(this.universe);
         }
     }
 

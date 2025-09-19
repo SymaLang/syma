@@ -4,7 +4,7 @@
  * Handles all colon-prefixed commands in the REPL
  ******************************************************************/
 
-import { Sym, Str, Num, Call } from '../ast-helpers.js';
+import { Sym, Str, Num, Call, isSym, isCall, deq } from '../ast-helpers.js';
 import * as engine from '../core/engine.js';
 
 export class CommandProcessor {
@@ -332,8 +332,8 @@ History:
         // Simple analysis - check if heads match at least
         const lhs = rule.lhs;
 
-        if (engine.isCall(lhs) && engine.isCall(expr)) {
-            if (engine.deq(lhs.h, expr.h)) {
+        if (isCall(lhs) && isCall(expr)) {
+            if (deq(lhs.h, expr.h)) {
                 // Heads match, check arguments
                 if (lhs.a.length !== expr.a.length) {
                     return {
@@ -360,7 +360,35 @@ History:
         const actionText = args.join(' ');
         try {
             const action = this.repl.parser.parseString(actionText);
-            this.repl.applyAction(action);
+
+            // Try to find a matching rule to get the qualified name
+            const rules = this.repl.getRules();
+            let qualifiedAction = action;
+
+            // If action is a simple symbol, try to find a rule that matches it
+            if (isSym(action)) {
+                const actionName = action.v;
+                // Look for a rule that ends with this action name
+                const matchingRule = rules.find(r => {
+                    // Check if rule name ends with the action name
+                    // e.g., "Demo/Counter/Inc" ends with "Inc"
+                    return r.name.endsWith('/' + actionName) || r.name === actionName;
+                });
+
+                if (matchingRule) {
+                    // Extract the action symbol from the rule's LHS pattern
+                    // The pattern should be {Apply SomeQualifiedName ...}
+                    const lhs = matchingRule.lhs;
+                    if (isCall(lhs) && isSym(lhs.h) && lhs.h.v === 'Apply') {
+                        if (lhs.a.length > 0 && isSym(lhs.a[0])) {
+                            qualifiedAction = lhs.a[0];
+                            this.repl.platform.print(`Using qualified action: ${lhs.a[0].v}`);
+                        }
+                    }
+                }
+            }
+
+            this.repl.applyAction(qualifiedAction);
 
             // Show the updated program state
             const program = engine.getProgram(this.repl.universe);

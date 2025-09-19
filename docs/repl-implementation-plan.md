@@ -264,7 +264,7 @@ export class CommandProcessor {
 ### 3.3 Expression Parser
 **File**: `src/repl/parser.js`
 
-Extend existing S-expression parser from `syma-modules.js` compiler:
+Extend existing S-expression parser from `syma-old-compiler.js` compiler:
 - Inline rule syntax: `:rule AddZero Add(x_, 0) → x_`
 - Multiline input with `.` terminator
 - Mixed brace and function call syntax
@@ -320,7 +320,7 @@ export class TerminalProjector extends BaseProjector {
 ### 4.1 Module Compiler Integration
 **File**: `src/repl/modules.js`
 
-Integrate with `syma-modules.js` compiler:
+Integrate with `syma-old-compiler.js` compiler:
 - Support `:import <file> [open]` for loading modules
 - Handle symbol qualification
 - Manage module dependencies
@@ -407,7 +407,7 @@ Update `package.json`:
   },
   "scripts": {
     "repl": "node bin/syma-repl.js",
-    "compile": "node scripts/syma-modules.js",
+    "compile": "node scripts/syma-old-compiler.js",
     "dev": "vite",
     "build": "vite build"
   }

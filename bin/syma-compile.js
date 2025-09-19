@@ -125,6 +125,7 @@ class SymbolQualifier {
     this.moduleMap = moduleMap;
     this.importMap = new Map(); // alias -> module name
     this.openImports = new Set(); // set of module names imported open
+    this.localSymbols = new Set(); // symbols defined in this module
 
     // Build import maps
     for (const imp of module.imports) {
@@ -133,11 +134,39 @@ class SymbolQualifier {
         this.openImports.add(imp.module);
       }
     }
+
+    // Track symbols defined in this module
+    // 1. Exported symbols
+    for (const exp of module.exports) {
+      this.localSymbols.add(exp);
+    }
+
+    // 2. Def names
+    for (const name of Object.keys(module.defs)) {
+      this.localSymbols.add(name);
+    }
+
+    // 3. Action symbols from rule patterns (Apply patterns)
+    // Look for patterns like Apply(ActionName, ...) in rules
+    for (const rule of module.rules) {
+      if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length >= 2) {
+        const pattern = rule.a[1]; // The LHS pattern
+        if (isCall(pattern) && isSym(pattern.h) && pattern.h.v === 'Apply') {
+          if (pattern.a.length > 0 && isSym(pattern.a[0])) {
+            // This is an action symbol that should be qualified
+            this.localSymbols.add(pattern.a[0].v);
+          }
+        }
+      }
+    }
   }
 
   qualifySymbol(sym) {
     // Already qualified?
     if (sym.includes('/')) return sym;
+
+    // HTML attributes (start with :) should NEVER be qualified
+    if (sym.startsWith(':')) return sym;
 
     // Special built-in symbols that should never be qualified
     const builtins = ['True', 'False', 'Nil', 'Add', 'Sub', 'Mul', 'Div', 'Mod',
@@ -192,8 +221,14 @@ class SymbolQualifier {
       return sym;
     }
 
-    // Otherwise qualify with current module name
-    return `${this.module.name}/${sym}`;
+    // Is it a locally defined symbol in this module?
+    if (this.localSymbols.has(sym)) {
+      return `${this.module.name}/${sym}`;
+    }
+
+    // Otherwise it's a free variable - leave it unqualified
+    // This includes mathematical variables, unbound symbols, etc.
+    return sym;
   }
 
   qualify(node) {
