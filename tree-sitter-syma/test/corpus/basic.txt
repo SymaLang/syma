@@ -1,0 +1,145 @@
+==================
+Numbers
+==================
+
+42
+-3.14
+0
+
+---
+
+(source_file
+  (expression (number))
+  (expression (number))
+  (expression (number)))
+
+==================
+Strings
+==================
+
+"hello"
+"escaped \"string\" with\nnewlines"
+
+---
+
+(source_file
+  (expression (string))
+  (expression (string)))
+
+==================
+Symbols
+==================
+
+foo
+Bar123
+→
+Add
+
+---
+
+(source_file
+  (expression (symbol))
+  (expression (symbol))
+  (expression (symbol))
+  (expression (symbol)))
+
+==================
+Variable Patterns
+==================
+
+x_
+_
+name_
+
+---
+
+(source_file
+  (expression (var_pattern))
+  (expression (var_pattern))
+  (expression (var_pattern)))
+
+==================
+VarRest Patterns
+==================
+
+xs...
+___
+rest___
+
+---
+
+(source_file
+  (expression (var_rest_pattern))
+  (expression (var_rest_pattern))
+  (expression (var_rest_pattern)))
+
+==================
+Brace Calls
+==================
+
+{Add 1 2}
+{If true {Print "yes"} {Print "no"}}
+
+---
+
+(source_file
+  (expression
+    (brace_call
+      head: (expression (symbol))
+      arguments: (expression (number))
+      arguments: (expression (number))))
+  (expression
+    (brace_call
+      head: (expression (symbol))
+      arguments: (expression (symbol))
+      arguments: (expression
+        (brace_call
+          head: (expression (symbol))
+          arguments: (expression (string))))
+      arguments: (expression
+        (brace_call
+          head: (expression (symbol))
+          arguments: (expression (string)))))))
+
+==================
+Function Calls
+==================
+
+Add(1, 2)
+Print("hello")
+Func()
+
+---
+
+(source_file
+  (expression
+    (function_call
+      function: (symbol)
+      arguments: (expression (number))
+      arguments: (expression (number))))
+  (expression
+    (function_call
+      function: (symbol)
+      arguments: (expression (string))))
+  (expression
+    (function_call
+      function: (symbol))))
+
+==================
+Comments
+==================
+
+42 // single line
+/* block */123
+; semicolon comment
+42
+
+---
+
+(source_file
+  (expression (number))
+  (comment)
+  (comment)
+  (expression (number))
+  (comment)
+  (expression (number)))

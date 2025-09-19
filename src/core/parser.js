@@ -60,8 +60,40 @@ export class SymaParser {
             }
 
             // Comments
+            // Single-line comment with semicolon
             if (c === ';') {
                 while (i < len && src[i] !== '\n') advance();
+                continue;
+            }
+
+            // Single-line comment with //
+            if (c === '/' && i + 1 < len && src[i + 1] === '/') {
+                advance(); // skip first /
+                advance(); // skip second /
+                while (i < len && src[i] !== '\n') advance();
+                continue;
+            }
+
+            // Multiline comment with /* */
+            if (c === '/' && i + 1 < len && src[i + 1] === '*') {
+                advance(); // skip /
+                advance(); // skip *
+
+                // Look for closing */
+                while (i < len - 1) {
+                    if (src[i] === '*' && src[i + 1] === '/') {
+                        advance(); // skip *
+                        advance(); // skip /
+                        break;
+                    }
+                    advance();
+                }
+
+                // Check if we reached EOF without finding closing */
+                if (i >= len - 1 && !(i === len - 1 && src[i - 1] === '/' && src[i - 2] === '*')) {
+                    this.die('Unterminated multiline comment', startPos);
+                }
+
                 continue;
             }
 
@@ -184,18 +216,8 @@ export class SymaParser {
             if (tok.t === 'sym') {
                 const sym = eat();
 
-                // Handle Var shorthand: name_ → {Var "name"}
-                if (sym.v.endsWith('_') && !sym.v.endsWith('...')) {
-                    const name = sym.v.slice(0, -1);
-                    if (name === '') {
-                        // Just _ is wildcard
-                        return Call(Sym('Var'), Str('_'));
-                    } else {
-                        return Call(Sym('Var'), Str(name));
-                    }
-                }
-
-                // Handle VarRest shorthand: name... or name___
+                // Handle VarRest shorthand FIRST: name... or name___
+                // Must check this before Var to avoid catching ___ as Var
                 if (sym.v.endsWith('...') || sym.v.endsWith('___')) {
                     const suffix = sym.v.endsWith('...') ? '...' : '___';
                     const name = sym.v.slice(0, -suffix.length);
@@ -208,6 +230,18 @@ export class SymaParser {
                         return Call(Sym('VarRest'), Str(name.slice(0, -1)));
                     } else {
                         return Call(Sym('VarRest'), Str(name));
+                    }
+                }
+
+                // Handle Var shorthand: name_ → {Var "name"}
+                // Check this AFTER VarRest to avoid incorrectly catching ___
+                if (sym.v.endsWith('_')) {
+                    const name = sym.v.slice(0, -1);
+                    if (name === '') {
+                        // Just _ is wildcard
+                        return Call(Sym('Var'), Str('_'));
+                    } else {
+                        return Call(Sym('Var'), Str(name));
                     }
                 }
 
@@ -383,6 +417,18 @@ export class SymaParser {
         if (isSym(node)) return node.v;
 
         if (isCall(node)) {
+            // Handle VarRest shorthand FIRST: {VarRest "name"} → name...
+            // Must check this before Var to generate correct output
+            if (isSym(node.h) && node.h.v === 'VarRest' &&
+                node.a.length === 1 && isStr(node.a[0])) {
+                const name = node.a[0].v;
+                if (name === '_') {
+                    return '...';  // Wildcard rest
+                } else {
+                    return `${name}...`;
+                }
+            }
+
             // Handle Var shorthand: {Var "name"} → name_
             if (isSym(node.h) && node.h.v === 'Var' &&
                 node.a.length === 1 && isStr(node.a[0])) {
@@ -391,17 +437,6 @@ export class SymaParser {
                     return '_';  // Wildcard
                 } else {
                     return `${name}_`;
-                }
-            }
-
-            // Handle VarRest shorthand: {VarRest "name"} → name...
-            if (isSym(node.h) && node.h.v === 'VarRest' &&
-                node.a.length === 1 && isStr(node.a[0])) {
-                const name = node.a[0].v;
-                if (name === '_') {
-                    return '...';  // Wildcard rest
-                } else {
-                    return `${name}...`;
                 }
             }
             const head = this.nodeToString(node.h);
@@ -460,6 +495,18 @@ export class SymaParser {
 
         // Calls
         if (isCall(node)) {
+            // Handle VarRest shorthand FIRST: {VarRest "name"} → name...
+            // Must check this before Var to generate correct output
+            if (isSym(node.h) && node.h.v === 'VarRest' &&
+                node.a.length === 1 && isStr(node.a[0])) {
+                const name = node.a[0].v;
+                if (name === '_') {
+                    return '...';  // Wildcard rest
+                } else {
+                    return `${name}...`;
+                }
+            }
+
             // Handle Var shorthand: {Var "name"} → name_
             if (isSym(node.h) && node.h.v === 'Var' &&
                 node.a.length === 1 && isStr(node.a[0])) {
@@ -468,17 +515,6 @@ export class SymaParser {
                     return '_';  // Wildcard
                 } else {
                     return `${name}_`;
-                }
-            }
-
-            // Handle VarRest shorthand: {VarRest "name"} → name...
-            if (isSym(node.h) && node.h.v === 'VarRest' &&
-                node.a.length === 1 && isStr(node.a[0])) {
-                const name = node.a[0].v;
-                if (name === '_') {
-                    return '...';  // Wildcard rest
-                } else {
-                    return `${name}...`;
                 }
             }
             const head = this.prettyPrint(node.h, 0, opts);

@@ -7,7 +7,7 @@
 import * as engine from '../core/engine.js';
 import { foldPrims } from '../primitives.js';
 import { CommandProcessor } from './commands.js';
-import { SymaParser } from '../core/parser.js';
+import { createParserSync, createParser } from '../core/parser-factory.js';
 import { getPlatform } from '../platform/index.js';
 import { createEffectsProcessor, freshId } from '../effects/processor.js';
 
@@ -17,7 +17,8 @@ export class SymaREPL {
         this.universe = engine.enrichProgramWithEffects(engine.createEmptyUniverse());
         this.history = [];
         this.commandProcessor = new CommandProcessor(this);
-        this.parser = new SymaParser();
+        this.parser = null; // Will be initialized asynchronously
+        this.parserReady = this.initializeParser();
         this.effectsProcessor = null;
 
         // Options
@@ -39,7 +40,21 @@ export class SymaREPL {
         this.evaluateExpression = this.evaluateExpression.bind(this);
     }
 
+    async initializeParser() {
+        try {
+            // Try to use tree-sitter parser first
+            this.parser = await createParser({ useTreeSitter: true });
+        } catch (e) {
+            // Fallback to original parser
+            console.warn('Tree-sitter parser not available, using original parser');
+            this.parser = createParserSync();
+        }
+    }
+
     async init() {
+        // Wait for parser to be ready
+        await this.parserReady;
+
         // Initialize effects processor
         this.effectsProcessor = createEffectsProcessor(
             this.platform,
@@ -166,6 +181,11 @@ export class SymaREPL {
 
     async evaluateExpression(input) {
         try {
+            // Ensure parser is ready
+            if (!this.parser) {
+                await this.parserReady;
+            }
+
             // Parse the expression
             const expr = this.parser.parseString(input);
 

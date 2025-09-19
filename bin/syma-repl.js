@@ -18,7 +18,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
 import { promisify } from 'util';
-import { SymaParser } from '../src/core/parser.js';
+import { createParser } from '../src/core/parser-factory.js';
 import * as engine from '../src/core/engine.js';
 import { foldPrims } from '../src/primitives.js';
 import { createEffectsProcessor } from '../src/effects/processor.js';
@@ -169,7 +169,7 @@ function showVersion() {
  * Compile a .syma file to universe AST
  */
 async function compileSymaFile(filePath, platform) {
-    const parser = new SymaParser();
+    const parser = await createParser({ useTreeSitter: true });
     const content = await fs.promises.readFile(filePath, 'utf-8');
     const ast = parser.parseString(content, filePath);
 

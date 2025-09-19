@@ -11,6 +11,9 @@
   },
   "scripts": {
     "repl": "node bin/syma-repl.js",
+    "build:parser": "cd tree-sitter-syma && npm run generate && npm run build-wasm",
+    "build:parser:node": "cd tree-sitter-syma && npm run build",
+    "test:parser": "cd tree-sitter-syma && npm test",
     "dev": "vite",
     "dev:demo": "VITE_DEMO_MODE=true vite",
     "build": "vite build",
@@ -32,11 +35,14 @@
   },
   "devDependencies": {
     "@rollup/pluginutils": "^5.3.0",
+    "tree-sitter-cli": "^0.25.9",
     "vite": "^7.1.2"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.13",
     "glob": "^11.0.3",
-    "tailwindcss": "^4.1.13"
+    "tailwindcss": "^4.1.13",
+    "tree-sitter": "^0.25.0",
+    "web-tree-sitter": "^0.25.9"
   }
 }

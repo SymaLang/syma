@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
-import { SymaParser } from '../src/core/parser.js';
+import { createParser } from '../src/core/parser-factory.js';
 import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall } from '../src/ast-helpers.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -429,7 +429,7 @@ async function resolveModule(importSpec, currentFile, stdlibPath = null) {
 }
 
 async function loadModuleRecursive(filePath, loadedModules = new Map(), stdlibPath = null, parser = null) {
-  if (!parser) parser = new SymaParser();
+  if (!parser) parser = await createParser({ useTreeSitter: true });
 
   // Normalize the path to avoid duplicates
   const normalizedPath = path.resolve(filePath);
@@ -473,8 +473,8 @@ async function loadModuleRecursive(filePath, loadedModules = new Map(), stdlibPa
 async function compile(options) {
   const { files, bundle, entry, output, pretty, format, stdlibPath, library } = options;
 
-  // Use our shared parser
-  const parser = new SymaParser();
+  // Use tree-sitter parser by default, fallback to original if it fails
+  const parser = await createParser({ useTreeSitter: true });
 
   // Format mode - pretty print .syma files
   if (format) {
