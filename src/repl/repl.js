@@ -26,6 +26,7 @@ export class SymaREPL {
         this.rcFile = options.rcFile;
         this.multilineBuffer = [];
         this.multilineMode = false;
+        this.prettyPrint = options.prettyPrint !== false; // Default to true
 
         // Undo stack
         this.undoStack = [];
@@ -190,6 +191,9 @@ export class SymaREPL {
     }
 
     formatResult(node) {
+        if (this.prettyPrint) {
+            return this.parser.prettyPrint(node);
+        }
         return this.parser.nodeToString(node);
     }
 

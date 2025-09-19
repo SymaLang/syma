@@ -230,11 +230,17 @@ History:
         const rules = this.repl.getRules();
         const rule = rules.find(r => r.name === name);
         if (rule) {
-            // Format rule for display
-            const lhsStr = this.repl.parser.nodeToString(rule.lhs);
-            const rhsStr = this.repl.parser.nodeToString(rule.rhs);
-            const prioStr = rule.prio !== 0 ? `, ${rule.prio}` : '';
-            const guardStr = rule.guard ? `, :guard ${this.repl.parser.nodeToString(rule.guard)}` : '';
+            // Format rule for display using pretty print
+            const lhsStr = this.repl.prettyPrint ?
+                this.repl.parser.prettyPrint(rule.lhs, 1) :
+                this.repl.parser.nodeToString(rule.lhs);
+            const rhsStr = this.repl.prettyPrint ?
+                this.repl.parser.prettyPrint(rule.rhs, 1) :
+                this.repl.parser.nodeToString(rule.rhs);
+            const prioStr = rule.prio !== 0 ? `,\n  ${rule.prio}` : '';
+            const guardStr = rule.guard ? `,\n  :guard ${this.repl.prettyPrint ?
+                this.repl.parser.prettyPrint(rule.guard, 1) :
+                this.repl.parser.nodeToString(rule.guard)}` : '';
             const output = `R("${rule.name}",\n  ${lhsStr},\n  ${rhsStr}${guardStr}${prioStr})`;
             this.repl.platform.print(output);
         } else {
@@ -313,7 +319,10 @@ History:
                 if (analysis.partial) {
                     foundCandidates = true;
                     this.repl.platform.print(`Rule "${rule.name}" partially matches:`);
-                    this.repl.platform.print(`  Pattern: ${this.repl.parser.nodeToString(rule.lhs)}`);
+                    const pattern = this.repl.prettyPrint ?
+                        this.repl.parser.prettyPrint(rule.lhs, 1) :
+                        this.repl.parser.nodeToString(rule.lhs);
+                    this.repl.platform.print(`  Pattern:\n    ${pattern}`);
                     this.repl.platform.print(`  Issue: ${analysis.reason}`);
                     this.repl.platform.print("");
                 }
@@ -393,7 +402,8 @@ History:
             // Show the updated program state
             const program = engine.getProgram(this.repl.universe);
             const output = this.repl.formatResult(program);
-            this.repl.platform.print(`Program updated:\n${output}`);
+            this.repl.platform.print('Program updated:');
+            this.repl.platform.print(output);
         } catch (error) {
             this.repl.platform.print(`Error: ${error.message}`);
         }
@@ -477,8 +487,9 @@ History:
         if (args.length < 2) {
             this.repl.platform.print("Usage: :set <option> <value>");
             this.repl.platform.print("Available options:");
-            this.repl.platform.print("  trace on/off     - Enable/disable trace mode");
-            this.repl.platform.print("  maxsteps <n>     - Maximum normalization steps");
+            this.repl.platform.print("  trace on/off       - Enable/disable trace mode");
+            this.repl.platform.print("  maxsteps <n>       - Maximum normalization steps");
+            this.repl.platform.print("  prettyprint on/off - Enable/disable pretty printing");
             return true;
         }
 
@@ -499,6 +510,12 @@ History:
                     this.repl.maxSteps = steps;
                     this.repl.platform.print(`Max steps set to ${steps}`);
                 }
+                break;
+
+            case 'prettyprint':
+            case 'pretty':
+                this.repl.prettyPrint = value === 'on' || value === 'true';
+                this.repl.platform.print(`Pretty print: ${this.repl.prettyPrint ? 'on' : 'off'}`);
                 break;
 
             default:

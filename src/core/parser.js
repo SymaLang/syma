@@ -414,4 +414,94 @@ export class SymaParser {
         ];
         return functionLike.includes(sym);
     }
+
+    prettyPrint(node, indent = 0, options = {}) {
+        const defaultOptions = {
+            indentSize: 2,
+            maxInlineLength: 60,
+            maxInlineArgs: 3,
+            bracketStyle: 'auto', // 'brace', 'function', or 'auto'
+        };
+        const opts = { ...defaultOptions, ...options };
+
+        const isSym = n => n && n.k === K.Sym;
+        const isNum = n => n && n.k === K.Num;
+        const isStr = n => n && n.k === K.Str;
+        const isCall = n => n && n.k === K.Call;
+        const spaces = ' '.repeat(indent * opts.indentSize);
+
+        // Atoms
+        if (isNum(node)) return String(node.v);
+        if (isStr(node)) return `"${node.v.replace(/"/g, '\\"')}"`;
+        if (isSym(node)) return node.v;
+
+        // Calls
+        if (isCall(node)) {
+            const head = this.prettyPrint(node.h, 0, opts);
+
+            // Special handling for attributes (symbols starting with ':')
+            const hasAttributes = node.a.some(a => isSym(a) && a.v.startsWith(':'));
+
+            // Determine if we should use function syntax
+            const useFunctionSyntax = opts.bracketStyle === 'function' ||
+                (opts.bracketStyle === 'auto' && isSym(node.h) && this.prefersFunctionSyntax(node.h.v));
+
+            // Try inline format first
+            const inlineArgs = node.a.map(a => this.nodeToString(a, 0));
+            const inline = useFunctionSyntax
+                ? `${head}(${inlineArgs.join(', ')})`
+                : `{${head}${inlineArgs.length > 0 ? ' ' + inlineArgs.join(' ') : ''}}`;
+
+            // Use inline if it's short enough and doesn't have too many args
+            const shouldInline = inline.length <= opts.maxInlineLength &&
+                                node.a.length <= opts.maxInlineArgs &&
+                                !hasAttributes &&
+                                !node.a.some(a => isCall(a) && a.a.length > 2);
+
+            if (shouldInline) {
+                return inline;
+            }
+
+            // Otherwise use multiline format
+            const nextIndent = indent + 1;
+            const childSpaces = ' '.repeat(nextIndent * opts.indentSize);
+
+            // Format arguments with proper indentation
+            const formattedArgs = [];
+            let i = 0;
+            while (i < node.a.length) {
+                const arg = node.a[i];
+
+                // Handle attribute-value pairs
+                if (isSym(arg) && arg.v.startsWith(':')) {
+                    // This is an attribute, next arg should be its value
+                    if (i + 1 < node.a.length) {
+                        const value = this.nodeToString(node.a[i + 1], 0);
+                        formattedArgs.push(`${arg.v} ${value}`);
+                        i += 2;
+                    } else {
+                        formattedArgs.push(this.prettyPrint(arg, nextIndent, opts));
+                        i++;
+                    }
+                } else {
+                    formattedArgs.push(this.prettyPrint(arg, nextIndent, opts));
+                    i++;
+                }
+            }
+
+            if (useFunctionSyntax) {
+                if (formattedArgs.length === 0) {
+                    return `${head}()`;
+                }
+                return `${head}(\n${formattedArgs.map(a => childSpaces + a).join(',\n')}\n${spaces})`;
+            } else {
+                if (formattedArgs.length === 0) {
+                    return `{${head}}`;
+                }
+                return `{${head}\n${formattedArgs.map(a => childSpaces + a).join('\n')}\n${spaces}}`;
+            }
+        }
+
+        return JSON.stringify(node); // Fallback
+    }
 }
