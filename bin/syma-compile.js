@@ -365,10 +365,28 @@ class ModuleLinker {
 
 /* ---------------- Main Compiler ---------------- */
 async function compile(options) {
-  const { files, bundle, entry, output, pretty } = options;
+  const { files, bundle, entry, output, pretty, format } = options;
 
   // Use our shared parser
   const parser = new SymaParser();
+
+  // Format mode - pretty print .syma files
+  if (format) {
+    if (files.length !== 1) {
+      throw new Error('Format mode requires exactly one input file');
+    }
+
+    const content = fs.readFileSync(files[0], 'utf-8');
+    const ast = parser.parseString(content, files[0]);
+    const formatted = parser.prettyPrint(ast);
+
+    if (output) {
+      fs.writeFileSync(output, formatted);
+    } else {
+      console.log(formatted);
+    }
+    return;
+  }
 
   if (bundle) {
     // Module bundling mode
@@ -431,12 +449,14 @@ Syma Module Compiler
 Usage:
   syma-compile <file> [options]                     # Single file mode
   syma-compile <files...> --bundle --entry <name>   # Module bundling mode
+  syma-compile <file> --format                      # Format/pretty-print mode
 
 Options:
   -o, --out <file>      Output file (default: stdout)
   --pretty              Pretty-print JSON output
   --bundle              Bundle multiple modules
   --entry <name>        Entry module name (required with --bundle)
+  --format, -f          Format/pretty-print .syma file
   -h, --help            Show this help
 
 Examples:
@@ -445,6 +465,10 @@ Examples:
 
   # Bundle modules
   syma-compile src/*.syma --bundle --entry App/Main --out universe.json
+
+  # Format/pretty-print a .syma file
+  syma-compile messy.syma --format --out clean.syma
+  syma-compile messy.syma -f  # Print to stdout
 
   # Use with REPL
   syma-compile app.syma --out app.json && syma-repl --load app.json
@@ -464,7 +488,8 @@ async function main() {
     bundle: false,
     entry: null,
     output: null,
-    pretty: false
+    pretty: false,
+    format: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -486,6 +511,11 @@ async function main() {
 
       case '--entry':
         options.entry = args[++i];
+        break;
+
+      case '--format':
+      case '-f':
+        options.format = true;
         break;
 
       default:

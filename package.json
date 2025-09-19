@@ -6,7 +6,8 @@
   "bin": {
     "syma": "./bin/syma-repl.js",
     "syma-repl": "./bin/syma-repl.js",
-    "syma-compile": "./bin/syma-compile.js"
+    "syma-compile": "./bin/syma-compile.js",
+    "symc": "./bin/syma-compile.js"
   },
   "scripts": {
     "repl": "node bin/syma-repl.js",

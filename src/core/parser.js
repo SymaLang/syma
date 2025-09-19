@@ -383,6 +383,27 @@ export class SymaParser {
         if (isSym(node)) return node.v;
 
         if (isCall(node)) {
+            // Handle Var shorthand: {Var "name"} → name_
+            if (isSym(node.h) && node.h.v === 'Var' &&
+                node.a.length === 1 && isStr(node.a[0])) {
+                const name = node.a[0].v;
+                if (name === '_') {
+                    return '_';  // Wildcard
+                } else {
+                    return `${name}_`;
+                }
+            }
+
+            // Handle VarRest shorthand: {VarRest "name"} → name...
+            if (isSym(node.h) && node.h.v === 'VarRest' &&
+                node.a.length === 1 && isStr(node.a[0])) {
+                const name = node.a[0].v;
+                if (name === '_') {
+                    return '...';  // Wildcard rest
+                } else {
+                    return `${name}...`;
+                }
+            }
             const head = this.nodeToString(node.h);
             const args = node.a.map(a => this.nodeToString(a, indent));
 
@@ -410,7 +431,9 @@ export class SymaParser {
             'Eq', 'Neq', 'Lt', 'Gt', 'Lte', 'Gte',
             'And', 'Or', 'Not',
             'IsNum', 'IsStr', 'IsSym', 'IsTrue', 'IsFalse',
-            'FreshId', 'Random', 'ParseNum', 'Debug'
+            'FreshId', 'Random', 'ParseNum', 'Debug',
+            'R', 'Apply', '/@',
+            'App', 'State'
         ];
         return functionLike.includes(sym);
     }
@@ -437,6 +460,27 @@ export class SymaParser {
 
         // Calls
         if (isCall(node)) {
+            // Handle Var shorthand: {Var "name"} → name_
+            if (isSym(node.h) && node.h.v === 'Var' &&
+                node.a.length === 1 && isStr(node.a[0])) {
+                const name = node.a[0].v;
+                if (name === '_') {
+                    return '_';  // Wildcard
+                } else {
+                    return `${name}_`;
+                }
+            }
+
+            // Handle VarRest shorthand: {VarRest "name"} → name...
+            if (isSym(node.h) && node.h.v === 'VarRest' &&
+                node.a.length === 1 && isStr(node.a[0])) {
+                const name = node.a[0].v;
+                if (name === '_') {
+                    return '...';  // Wildcard rest
+                } else {
+                    return `${name}...`;
+                }
+            }
             const head = this.prettyPrint(node.h, 0, opts);
 
             // Special handling for attributes (symbols starting with ':')

@@ -4,7 +4,7 @@
  * Handles all colon-prefixed commands in the REPL
  ******************************************************************/
 
-import { Sym, Str, Num, Call, isSym, isCall, deq } from '../ast-helpers.js';
+import { Sym, Str, Num, Call, isSym, isCall, isStr, isNum, deq } from '../ast-helpers.js';
 import * as engine from '../core/engine.js';
 
 export class CommandProcessor {
@@ -18,9 +18,11 @@ export class CommandProcessor {
             'exit': this.quit.bind(this),
             'save': this.save.bind(this),
             'load': this.load.bind(this),
+            'bundle': this.bundle.bind(this),
             'export': this.export.bind(this),
             'import': this.import.bind(this),
             'clear': this.clear.bind(this),
+            'universe': this.showUniverse.bind(this),
             'rules': this.listRules.bind(this),
             'rule': this.showOrEditRule.bind(this),
             'exec': this.execRule.bind(this),
@@ -65,11 +67,13 @@ Commands:
 File operations:
   :save <file>              Save universe to file (.syma or .json)
   :load <file>              Load universe from file
+  :bundle <file>            Bundle module and dependencies into universe
   :export <module>          Export single module to file
   :import <file> [open]     Import module into universe
 
 Universe management:
   :clear                    Reset universe to empty state
+  :universe                 Show current universe (pretty printed)
   :undo                     Undo last modification
 
 Rule management:
@@ -133,6 +137,75 @@ History:
         return true;
     }
 
+    async bundle(args, rawArgs) {
+        if (args.length === 0) {
+            this.repl.platform.print("Usage: :bundle <module-file>");
+            this.repl.platform.print("Example: :bundle src/modules/app-main.syma");
+            return true;
+        }
+
+        const filename = args[0];
+        try {
+            // Use child_process to run the compiler
+            const { execSync } = await import('child_process');
+
+            // Read the module to get its name
+            const content = await this.repl.platform.readFile(filename);
+            const ast = this.repl.parser.parseString(content, filename);
+
+            if (!isCall(ast) || !isSym(ast.h) || ast.h.v !== 'Module') {
+                throw new Error('File is not a module (must start with Module)');
+            }
+
+            const nameNode = ast.a[0];
+            if (!isSym(nameNode)) {
+                throw new Error('Module name must be a symbol');
+            }
+            const moduleName = nameNode.v;
+
+            this.repl.platform.print(`Bundling module ${moduleName}...`);
+
+            // Find the directory containing the module
+            const lastSlash = filename.lastIndexOf('/');
+            const dir = lastSlash >= 0 ? filename.substring(0, lastSlash) : '.';
+
+            // Use the compiler to bundle - look for all .syma files in the directory
+            // First, gather all potential module files
+            const glob = (await import('glob')).glob;
+            const moduleFiles = await glob(`${dir}/*.syma`);
+
+            // If there's a parent modules directory, include those too
+            const parentDir = dir.substring(0, dir.lastIndexOf('/')) || '.';
+            const parentModuleFiles = await glob(`${parentDir}/modules/*.syma`).catch(() => []);
+
+            const allFiles = [...new Set([...moduleFiles, ...parentModuleFiles])];
+
+            if (allFiles.length === 0) {
+                throw new Error('No module files found');
+            }
+
+            const command = `node bin/syma-compile.js ${allFiles.join(' ')} --bundle --entry "${moduleName}"`;
+
+            const result = execSync(command, { encoding: 'utf8', cwd: process.cwd() });
+
+            // Parse the resulting JSON
+            const universe = JSON.parse(result);
+
+            // Load the bundled universe
+            this.repl.universe = universe;
+            this.repl.universe = engine.enrichProgramWithEffects(this.repl.universe);
+
+            this.repl.platform.print(`Module ${moduleName} bundled and loaded successfully`);
+            this.repl.platform.print(`Found ${allFiles.length} module files`);
+        } catch (error) {
+            this.repl.platform.print(`Failed to bundle: ${error.message}`);
+            if (error.stderr) {
+                this.repl.platform.print(`Compiler error: ${error.stderr}`);
+            }
+        }
+        return true;
+    }
+
     async export(args, rawArgs) {
         const moduleName = args[0];
         const filename = args[1];
@@ -171,6 +244,12 @@ History:
     async clear(args) {
         this.repl.clearUniverse();
         this.repl.platform.print("Universe cleared");
+        return true;
+    }
+
+    async showUniverse(args) {
+        const output = this.repl.formatResult(this.repl.universe);
+        this.repl.platform.print(output);
         return true;
     }
 
