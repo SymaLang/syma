@@ -44,19 +44,27 @@ export default function symaPlugin(options = {}) {
         const moduleName = moduleMatch[1];
         const imports = [];
 
-        // Match both syntaxes for imports
-        // Brace syntax: {Import X/Y as Z [open]}
-        // Function syntax: Import(X/Y, as, Z) or Import variations
-        const importRegexBrace = /\{Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+open)?\}/g;
-        const importRegexFunc = /Import\s*\(\s*([A-Za-z0-9/_-]+)\s*,\s*as\s*,\s*([A-Za-z0-9]+)(?:\s*,\s*open)?\s*\)/g;
+        // Match both syntaxes for imports with optional 'from' clause
+        // Brace syntax: {Import X/Y as Z [from "path"] [open]}
+        const importRegexBrace = /\{Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+from\s+"([^"]+)")?(?:\s+open)?\}/g;
+        const importRegexFunc = /Import\s*\(\s*([A-Za-z0-9/_-]+)\s*,\s*as\s*,\s*([A-Za-z0-9]+)(?:\s*,\s*from\s*,\s*"([^"]+)")?(?:\s*,\s*open)?\s*\)/g;
+
         let match;
         // Check brace syntax imports
         while ((match = importRegexBrace.exec(content)) !== null) {
-            imports.push(match[1]);
+            imports.push({
+                module: match[1],
+                alias: match[2],
+                fromPath: match[3] || null
+            });
         }
         // Check function syntax imports
         while ((match = importRegexFunc.exec(content)) !== null) {
-            imports.push(match[1]);
+            imports.push({
+                module: match[1],
+                alias: match[2],
+                fromPath: match[3] || null
+            });
         }
 
         return { moduleName, imports, filePath };
@@ -94,8 +102,30 @@ export default function symaPlugin(options = {}) {
 
         let deps = [module.filePath];
 
-        for (const importName of module.imports) {
-            deps = deps.concat(getModuleDependencies(importName, visited));
+        for (const imp of module.imports) {
+            if (imp.fromPath) {
+                // File-based import - resolve path relative to current module
+                const currentDir = path.dirname(module.filePath);
+                const resolvedPath = path.resolve(currentDir, imp.fromPath);
+
+                // Try to find this module in our map by file path
+                let foundModule = null;
+                for (const [modName, modInfo] of moduleMap.entries()) {
+                    if (path.resolve(modInfo.filePath) === resolvedPath) {
+                        foundModule = modName;
+                        break;
+                    }
+                }
+
+                if (foundModule) {
+                    deps = deps.concat(getModuleDependencies(foundModule, visited));
+                } else {
+                    console.warn(`[syma] File import ${imp.fromPath} not found in module map`);
+                }
+            } else {
+                // Standard module import by name
+                deps = deps.concat(getModuleDependencies(imp.module, visited));
+            }
         }
 
         return [...new Set(deps)];

@@ -1,6 +1,6 @@
 ;; Main application module
 {Module App/Main
-  {Import App/Counter as Counter}
+  {Import App/Counter as Counter from "./app-counter.syma"}
 
   ;; The main program structure
   {Program

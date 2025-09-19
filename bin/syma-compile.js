@@ -78,7 +78,7 @@ class Module {
   }
 
   parseImports(nodes) {
-    // Parse {Import X/Y as Z [open]}
+    // Parse {Import X/Y as Z [from "path"] [open]}
     let i = 0;
     while (i < nodes.length) {
       const moduleNode = nodes[i++];
@@ -94,7 +94,19 @@ class Module {
       }
       const alias = nodes[i++].v;
 
+      let fromPath = null;
       let open = false;
+
+      // Check for 'from' clause
+      if (i < nodes.length && isSym(nodes[i]) && nodes[i].v === 'from') {
+        i++; // skip 'from'
+        if (i >= nodes.length || !isStr(nodes[i])) {
+          throw new Error('Import "from" must be followed by a string path');
+        }
+        fromPath = nodes[i++].v;
+      }
+
+      // Check for 'open' modifier
       if (i < nodes.length && isSym(nodes[i]) && nodes[i].v === 'open') {
         open = true;
         i++;
@@ -103,6 +115,7 @@ class Module {
       this.imports.push({
         module: moduleNode.v,
         alias,
+        fromPath,
         open
       });
     }
@@ -363,9 +376,93 @@ class ModuleLinker {
   }
 }
 
+/* ---------------- Module Resolution ---------------- */
+async function resolveModule(importSpec, currentFile, stdlibPath = null) {
+  const { module: moduleName, fromPath } = importSpec;
+
+  if (fromPath) {
+    // Resolve relative to current file
+    const currentDir = path.dirname(currentFile);
+    const resolvedPath = path.resolve(currentDir, fromPath);
+
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`Cannot resolve module ${moduleName} from path: ${fromPath}`);
+    }
+
+    return resolvedPath;
+  } else {
+    // Standard module - look in stdlib directory
+    if (!stdlibPath) {
+      // Default stdlib locations to check
+      const possiblePaths = [
+        path.join(__dirname, '../src/stdlib'),
+        path.join(process.cwd(), 'src/stdlib'),
+        path.join(process.cwd(), 'stdlib')
+      ];
+
+      for (const stdPath of possiblePaths) {
+        const modulePath = path.join(stdPath, `${moduleName.toLowerCase().replace('/', '-')}.syma`);
+        if (fs.existsSync(modulePath)) {
+          return modulePath;
+        }
+      }
+
+      throw new Error(`Cannot find standard module ${moduleName}. Searched in: ${possiblePaths.join(', ')}`);
+    }
+
+    const modulePath = path.join(stdlibPath, `${moduleName.toLowerCase().replace('/', '-')}.syma`);
+    if (!fs.existsSync(modulePath)) {
+      throw new Error(`Cannot find standard module ${moduleName} in ${stdlibPath}`);
+    }
+
+    return modulePath;
+  }
+}
+
+async function loadModuleRecursive(filePath, loadedModules = new Map(), stdlibPath = null, parser = null) {
+  if (!parser) parser = new SymaParser();
+
+  // Normalize the path to avoid duplicates
+  const normalizedPath = path.resolve(filePath);
+
+  // Check if already loaded
+  if (loadedModules.has(normalizedPath)) {
+    return loadedModules.get(normalizedPath);
+  }
+
+  // Parse the module
+  const content = fs.readFileSync(normalizedPath, 'utf-8');
+  const ast = parser.parseString(content, normalizedPath);
+
+  if (!isCall(ast) || !isSym(ast.h) || ast.h.v !== 'Module') {
+    throw new Error(`${normalizedPath}: Not a module file (must start with Module)`);
+  }
+
+  const nameNode = ast.a[0];
+  if (!isSym(nameNode)) {
+    throw new Error(`${normalizedPath}: Module name must be a symbol`);
+  }
+
+  const module = new Module(nameNode.v, ast);
+  module.filePath = normalizedPath;
+  loadedModules.set(normalizedPath, module);
+
+  // Load dependencies
+  for (const imp of module.imports) {
+    try {
+      const depPath = await resolveModule(imp, normalizedPath, stdlibPath);
+      await loadModuleRecursive(depPath, loadedModules, stdlibPath, parser);
+    } catch (error) {
+      console.warn(`Warning: Could not load dependency ${imp.module}: ${error.message}`);
+    }
+  }
+
+  return module;
+}
+
 /* ---------------- Main Compiler ---------------- */
 async function compile(options) {
-  const { files, bundle, entry, output, pretty, format } = options;
+  const { files, bundle, entry, output, pretty, format, stdlibPath } = options;
 
   // Use our shared parser
   const parser = new SymaParser();
@@ -389,32 +486,61 @@ async function compile(options) {
   }
 
   if (bundle) {
-    // Module bundling mode
-    const modules = [];
+    // Module bundling mode - now with proper dependency resolution
+    const loadedModules = new Map();
 
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf-8');
-      const ast = parser.parseString(content, file);
+    // Determine entry module
+    let entryModuleName = entry;
+    let entryFile = null;
 
-      // Extract module name from AST
-      if (!isCall(ast) || !isSym(ast.h) || ast.h.v !== 'Module') {
-        throw new Error(`${file}: Not a module file (must start with Module)`);
+    if (!entry && files.length === 1) {
+      // If no entry specified and only one file, use that file's module as entry
+      const content = fs.readFileSync(files[0], 'utf-8');
+      const ast = parser.parseString(content, files[0]);
+
+      if (isCall(ast) && isSym(ast.h) && ast.h.v === 'Module') {
+        const nameNode = ast.a[0];
+        if (isSym(nameNode)) {
+          entryModuleName = nameNode.v;
+          entryFile = files[0];
+          console.error(`Using ${entryModuleName} as entry module`);
+        }
       }
 
-      const nameNode = ast.a[0];
-      if (!isSym(nameNode)) {
-        throw new Error(`${file}: Module name must be a symbol`);
+      if (!entryModuleName) {
+        throw new Error('Could not determine entry module from single file');
       }
+    } else if (!entry) {
+      throw new Error('--entry is required when bundling multiple module files');
+    } else {
+      // Find the entry module file
+      for (const file of files) {
+        const content = fs.readFileSync(file, 'utf-8');
+        const ast = parser.parseString(content, file);
 
-      modules.push(new Module(nameNode.v, ast));
+        if (isCall(ast) && isSym(ast.h) && ast.h.v === 'Module') {
+          const nameNode = ast.a[0];
+          if (isSym(nameNode) && nameNode.v === entryModuleName) {
+            entryFile = file;
+            break;
+          }
+        }
+      }
     }
 
-    if (!entry) {
-      throw new Error('--entry is required when bundling modules');
+    if (!entryFile) {
+      throw new Error(`Entry module ${entryModuleName} not found in provided files`);
     }
+
+    // Load the entry module and all its dependencies
+    await loadModuleRecursive(entryFile, loadedModules, stdlibPath, parser);
+
+    // Convert Map to array for linker
+    const modules = Array.from(loadedModules.values());
+    console.error(`Bundling ${modules.length} modules (including dependencies)`);
 
     const linker = new ModuleLinker(modules);
-    const universe = linker.link(entry);
+    const universe = linker.link(entryModuleName);
 
     const json = JSON.stringify(universe, null, pretty ? 2 : 0);
     if (output) {
@@ -448,14 +574,16 @@ Syma Module Compiler
 
 Usage:
   syma-compile <file> [options]                     # Single file mode
-  syma-compile <files...> --bundle --entry <name>   # Module bundling mode
+  syma-compile <file> --bundle                      # Bundle with auto-detected entry
+  syma-compile <files...> --bundle --entry <name>   # Bundle with explicit entry
   syma-compile <file> --format                      # Format/pretty-print mode
 
 Options:
   -o, --out <file>      Output file (default: stdout)
   --pretty              Pretty-print JSON output
-  --bundle              Bundle multiple modules
-  --entry <name>        Entry module name (required with --bundle)
+  --bundle              Bundle modules with dependencies
+  --entry <name>        Entry module name (optional for single file)
+  --stdlib <path>       Path to standard library modules
   --format, -f          Format/pretty-print .syma file
   -h, --help            Show this help
 
@@ -463,7 +591,10 @@ Examples:
   # Compile single file
   syma-compile input.syma --out output.json --pretty
 
-  # Bundle modules
+  # Bundle single module with dependencies (auto-detects entry)
+  syma-compile src/main.syma --bundle --out universe.json
+
+  # Bundle multiple modules with explicit entry
   syma-compile src/*.syma --bundle --entry App/Main --out universe.json
 
   # Format/pretty-print a .syma file
@@ -489,7 +620,8 @@ async function main() {
     entry: null,
     output: null,
     pretty: false,
-    format: false
+    format: false,
+    stdlibPath: null
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -511,6 +643,10 @@ async function main() {
 
       case '--entry':
         options.entry = args[++i];
+        break;
+
+      case '--stdlib':
+        options.stdlibPath = args[++i];
         break;
 
       case '--format':
