@@ -7,7 +7,7 @@
  ******************************************************************/
 
 import { K, Sym, Num, Str, isNum, isStr, isSym, isCall } from './ast-helpers.js';
-import { freshId } from './effects-processor.js';
+import { freshId } from './effects/processor.js';
 
 /**
  * Fold primitive operations into their computed values
