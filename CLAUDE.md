@@ -25,7 +25,7 @@ This is a symbolic programming language runtime and frontend application built w
    - Renders UI to DOM
    - Handles events via `Apply[action, Program]` + normalization
 
-3. **Compiler (`scripts/sym-2-json.js`)**: Converts S-expression source files to JSON AST format. The AST structure uses:
+3. **Compiler (`scripts/syma-modules.js`)**: Converts S-expression source files to JSON AST format. The AST structure uses:
    - `{k:"Sym", v:string}` for symbols
    - `{k:"Num", v:number}` for numbers
    - `{k:"Str", v:string}` for strings
@@ -48,7 +48,7 @@ Rules have the format: `(R "Name" pattern replacement priority?)`
 
 When modifying symbolic programs:
 1. Edit `.lisp` files in `src/`
-2. Compile to JSON using: `node scripts/sym-2-json.js src/file.lisp --out public/universe.json --pretty`
+2. Compile to JSON using: `node scripts/syma-modules.js src/file.lisp --out public/universe.json --pretty`
 3. The runtime loads the JSON AST and applies normalization rules
 
 ### UI Rendering
@@ -62,5 +62,5 @@ The runtime supports a minimal UI DSL with elements like `Div`, `Button`, `H1`, 
 
 - `src/runtime.js` - Core runtime engine
 - `src/*.lisp` - Symbolic program source files
-- `scripts/sym-2-json.js` - S-expression to JSON compiler
+- `scripts/syma-modules.js` - S-expression to JSON compiler
 - `public/universe.json` - Compiled program AST (generated)
