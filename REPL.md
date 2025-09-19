@@ -1,13 +1,19 @@
-# The Syma REPL Documentation
-## Interactive Development with Symbolic Programming
+# The Syma REPL & Runtime Documentation
+## Interactive Development and Direct Execution with Symbolic Programming
 
-The Syma REPL (Read-Eval-Print Loop) is your interactive gateway to symbolic programming. It's not just a calculator or command line—it's a live environment where you can explore, experiment, and build programs by transforming symbolic expressions in real-time.
+Syma is both a full runtime and an interactive REPL (Read-Eval-Print Loop). Like Node.js, you can:
+- **Run programs directly**: `syma program.syma` executes your code immediately
+- **Start interactive sessions**: `syma` launches the REPL for exploration
+- **Compile and execute**: Automatically handles both `.syma` source and `.json` compiled files
+
+The REPL is your interactive gateway to symbolic programming—a live environment where you can explore, experiment, and build programs by transforming symbolic expressions in real-time.
 
 ---
 
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
+1a. [Runtime vs REPL Mode](#1a-runtime-vs-repl-mode)
 2. [Getting Started](#2-getting-started)
 3. [Basic Expression Evaluation](#3-basic-expression-evaluation)
 4. [Working with Rules](#4-working-with-rules)
@@ -44,6 +50,74 @@ The Syma REPL embodies the core philosophy of symbolic programming:
 
 ---
 
+## 1a. Runtime vs REPL Mode
+
+### When to Use Direct Execution (Runtime Mode)
+
+Use `syma program.syma` when you want to:
+- **Run complete applications**: Execute a finished program
+- **Process data**: Transform input through your rules
+- **Deploy programs**: Run in production environments
+- **Automate tasks**: Use in scripts and pipelines
+- **Test modules**: Verify module behavior end-to-end
+
+Example:
+```bash
+# Run a web server
+syma server.syma
+
+# Process data transformation
+syma transform-data.syma < input.json > output.json
+
+# Run with effects (timers, HTTP, etc.)
+syma app-with-effects.syma
+```
+
+### When to Use Interactive Mode (REPL)
+
+Use `syma` (REPL) when you want to:
+- **Explore the language**: Learn Syma interactively
+- **Debug programs**: Test rules and transformations step-by-step
+- **Develop iteratively**: Build and test incrementally
+- **Inspect state**: Examine program evolution
+- **Prototype ideas**: Try concepts before implementing
+
+Example:
+```bash
+# Start REPL for exploration
+syma
+
+syma> {Add 2 3}
+→ 5
+
+syma> :rule Double {Double n_} → {Mul n_ 2}
+Rule "Double" added
+
+syma> {Double 7}
+→ 14
+```
+
+### The Best of Both Worlds
+
+Syma seamlessly bridges both modes:
+
+```bash
+# Develop in REPL
+syma
+syma> :load my-module.syma
+syma> {TestFunction 42}
+syma> :save tested-module.syma
+
+# Then run directly
+syma tested-module.syma
+
+# Or compile and distribute
+syma-compile tested-module.syma --out app.json
+syma app.json  # Runs anywhere Syma is installed
+```
+
+---
+
 ## 2. Getting Started
 
 ### Installation and Setup
@@ -52,10 +126,36 @@ The Syma REPL embodies the core philosophy of symbolic programming:
 # Install Syma (if not already installed)
 npm install
 
-# Start the REPL
+# Run a Syma program directly (like Node.js!)
+syma my-program.syma
+
+# Run a compiled universe
+syma universe.json
+
+# Start interactive REPL
+syma
+# or via npm:
 npm run repl
-# or directly:
-node bin/syma-repl.js
+```
+
+### Direct Execution Mode (New!)
+
+Syma can now execute programs directly from the command line:
+
+```bash
+# Run a Syma module
+syma src/demos/print-demo.syma
+# Output: Hello from Syma Effects System!
+#         …and I can queue more than one!
+
+# Run with tracing to see transformations
+syma --trace program.syma
+
+# The runtime automatically:
+# - Compiles modules if needed
+# - Handles dependencies
+# - Processes effects
+# - Exits cleanly when done
 ```
 
 ### First Session
@@ -82,20 +182,25 @@ syma> {Concat "Hello " "World"}
 ### Command-Line Options
 
 ```bash
-# Start with tracing enabled
-syma-repl --trace
+# DIRECT EXECUTION (Runtime Mode)
+syma program.syma                # Run a program and exit
+syma universe.json               # Run compiled universe
+syma --trace program.syma        # Run with step-by-step trace
 
-# Load a file on startup
-syma-repl --load my-program.syma
+# INTERACTIVE MODE (REPL)
+syma                            # Start REPL
+syma --load my-program.syma     # Load file then start REPL
+syma --trace                    # REPL with tracing enabled
 
-# Evaluate an expression and exit
-syma-repl --eval "Add(2, 3)"
+# EVALUATION MODE
+syma --eval "Add(2, 3)"         # Evaluate and exit
 
-# Custom history file
-syma-repl --history .my-syma-history
-
-# Set maximum normalization steps
-syma-repl --max-steps 50000
+# OPTIONS FOR ALL MODES
+--max-steps 50000               # Set max normalization steps
+--history .my-syma-history      # Custom history file (REPL)
+--no-history                    # Disable history (REPL)
+--rc .symarc                    # Custom RC file (REPL)
+--no-rc                         # Skip RC file (REPL)
 ```
 
 ---

@@ -8,7 +8,8 @@
 
     {Effects
       {Pending
-        {Print "startup-msg" {Message "Hello from Syma Effects System!"}}}
+        {Print "startup"  {Message "Hello from Syma Effects System!"}}
+        {Print "startup2" {Message "…and I can queue more than one!"}}}
       {Inbox}}}
 
   {Rules

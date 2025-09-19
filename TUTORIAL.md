@@ -3,6 +3,8 @@
 
 Welcome to Syma! This tutorial will teach you a radically different way to think about programming. Instead of telling a computer what to do step by step, you'll define transformation rules that evolve your program like a living system.
 
+**Syma is a true multiplatform runtime**—your code runs identically in browsers, Node.js, and future platforms. Write once, run everywhere, with no changes needed.
+
 By the end of this tutorial, you'll build real interactive applications and understand the beauty of symbolic programming. Let's dive in!
 
 ---
@@ -30,6 +32,23 @@ By the end of this tutorial, you'll build real interactive applications and unde
 In traditional programming, you write instructions: "First do this, then do that." In Syma, you describe transformations: "When you see this pattern, transform it into that."
 
 Think of it like chemistry: you define reactions, and the runtime finds which reactions can happen and applies them until your program reaches a stable state.
+
+### Running Syma Programs
+
+Syma works like Node.js—you can run programs directly or use the REPL:
+
+```bash
+# Run a program directly
+syma hello.syma
+
+# Start interactive REPL
+syma
+syma> {Add 2 3}
+→ 5
+
+# The same code runs in the browser too!
+# Just compile and load in your web app
+```
 
 ### Writing Your First Expression
 
@@ -365,11 +384,23 @@ Now that you understand what's happening under the hood, let's build something r
 
 Let's build something real: an interactive counter. This example will teach you the core concepts of Syma.
 
+### Running Your First App
+
+Save this as `counter.syma` and run it:
+
+```bash
+# Run directly in Node.js
+syma counter.syma
+
+# Or compile for the browser
+syma-compile counter.syma --out counter.json
+# Then load counter.json in your web app
+```
+
 ### The Complete Counter App
 
 ```lisp
-{Universe
-  ; Your app lives in the Program section
+{Module App/Counter  ; Define as a module for easy reuse
   {Program
     {App
       ; State holds your data
@@ -796,7 +827,23 @@ Here's a practical example—a simple key-value store:
 
 ## 7. Organizing Code with Modules
 
-As your apps grow, you need to organize code. Syma's module system lets you build reusable, composable components.
+As your apps grow, you need to organize code. Syma's module system lets you build reusable, composable components that work across all platforms.
+
+### Platform-Agnostic Modules
+
+Modules work identically whether you run them in Node.js or the browser:
+
+```bash
+# Run module directly in Node.js
+syma my-module.syma
+
+# Or bundle for distribution
+syma-compile src/*.syma --bundle --entry App/Main --out app.json
+
+# Run the bundled app anywhere
+syma app.json           # In Node.js
+# or load in browser     # In web apps
+```
 
 ### Your First Module
 
@@ -1103,7 +1150,21 @@ Syma provides powerful ways to compose actions:
 
 ## 9. Understanding Symbolic Effects
 
-In Syma, everything is pure—even I/O. Effects are just data structures that the runtime interprets.
+In Syma, everything is pure—even I/O. Effects are just data structures that the runtime interprets. **This is what makes Syma truly multiplatform**—the same effect descriptions work everywhere.
+
+### Multiplatform Effects
+
+The same effect code works across all platforms:
+
+```lisp
+; This Print effect works in Node.js (console.log)
+; AND in the browser (console.log)
+{Print "Hello from any platform!"}
+
+; HTTP requests work everywhere too
+{HttpReq {Method "GET"} {Url "/api/data"}}
+; Node.js uses node-fetch, browser uses fetch API
+```
 
 ### How Effects Work
 

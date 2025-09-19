@@ -2,7 +2,13 @@
 
 ## 1. Introduction
 
-This document describes Syma — a symbolic language based on S-expressions. The language uses symbolic expressions (S-expressions) as its core syntax and compiles these expressions into a JSON Abstract Syntax Tree (AST) representation. It is designed to express programs, rules, and transformations in a concise and symbolic manner. The language supports atoms, function calls, special forms, pattern matching with wildcards, a module system for code organization, and a structured universe of programs and rules that can be normalized by applying rewrite rules repeatedly.
+This document describes Syma — a symbolic programming language and runtime based on S-expressions. The language uses symbolic expressions (S-expressions) as its core syntax and compiles these expressions into a JSON Abstract Syntax Tree (AST) representation. It is designed to express programs, rules, and transformations in a concise and symbolic manner.
+
+Syma is unique in that it's both a language and a multiplatform runtime:
+- **As a language**: Supports atoms, function calls, pattern matching, modules, and rewrite rules
+- **As a runtime**: Executes directly on Node.js (`syma program.syma`) and in browsers
+- **Platform-agnostic**: The same code runs in browsers, Node.js, and future platforms
+- **Purely functional effects**: All I/O is symbolic, handled by platform adapters
 
 ---
 
@@ -616,29 +622,58 @@ This shows each rule application with the matched pattern and replacement.
 - `.lisp` or `.sym` - Legacy source files (non-module format)
 - `.json` - Compiled AST representation
 
-### Compilation
+### Running Programs
 
-Convert source to AST:
+Syma offers multiple execution modes:
 ```bash
-# For single files (backward compatibility)
-node scripts/syma-old-compiler.js input.syma --out output.json --pretty
+# Direct execution (auto-compiles if needed)
+syma program.syma
 
-# Bundle modules into a Universe
-node scripts/syma-old-compiler.js src/modules/*.syma --bundle --entry App/Main --out universe.json
+# Run pre-compiled universe
+syma universe.json
+
+# Interactive REPL
+syma
+
+# Compile for distribution
+syma-compile src/modules/*.syma --bundle --entry App/Main --out universe.json
 ```
 
 ---
 
-## 15. Module Compilation
+## 15. Running Syma Programs
 
-The `syma-old-compiler.js` compiler handles both single files and module bundling:
+### Direct Execution
+
+Syma programs can be run directly from the command line:
+
+```bash
+# Run a Syma module or program
+syma my-program.syma
+
+# Run a compiled universe
+syma universe.json
+
+# Evaluate an expression
+syma -e '{Add 2 3}'
+
+# Start interactive REPL
+syma
+
+# Load a file into REPL
+syma -l program.syma
+```
+
+### Module Compilation
+
+The `syma-compile` compiler handles both single files and module bundling:
 
 ```bash
 # Single file mode (backward compatibility for non-module files)
-node scripts/syma-old-compiler.js input.syma --out output.json --pretty
+syma-compile input.syma --out output.json --pretty
 
 # Bundle modules into a Universe
-node scripts/syma-old-compiler.js src/modules/*.syma --bundle --entry App/Main --out universe.json
+syma-compile src/modules/*.syma --bundle --entry App/Main --out universe.json
 
 # The compiler:
 # 1. Parses all module files
@@ -648,6 +683,13 @@ node scripts/syma-old-compiler.js src/modules/*.syma --bundle --entry App/Main -
 # 5. Expands Defs as high-priority rules
 # 6. Bundles into a single Universe
 ```
+
+### Platform Support
+
+Syma runs on multiple platforms through a platform abstraction layer:
+- **Node.js**: Full runtime with file I/O, networking, and process control
+- **Browser**: DOM rendering, localStorage, WebSockets, and browser APIs
+- **Platform-agnostic**: Write once, run anywhere with symbolic effects
 
 ### Symbol Qualification Process
 
