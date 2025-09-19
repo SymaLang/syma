@@ -224,7 +224,7 @@ function processPrint(req) {
     }
 
     // Output to console
-    console.log(`[PRINT ${new Date().toISOString()}]`, output);
+    console.log(output);
 
     // PrintComplete[id, Success]
     return Call(

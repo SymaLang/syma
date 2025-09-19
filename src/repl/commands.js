@@ -136,6 +136,9 @@ History:
         try {
             await this.repl.loadFile(filename);
             this.repl.platform.print(`Universe loaded from ${filename}`);
+
+            // Give effects processor a moment to process any pending effects
+            await new Promise(resolve => this.repl.platform.setTimeout(resolve, 50));
         } catch (error) {
             this.repl.platform.print(`Failed to load: ${error.message}`);
         }

@@ -9,14 +9,16 @@ import { foldPrims } from '../primitives.js';
 import { CommandProcessor } from './commands.js';
 import { SymaParser } from '../core/parser.js';
 import { getPlatform } from '../platform/index.js';
+import { createEffectsProcessor, freshId } from '../effects/processor.js';
 
 export class SymaREPL {
     constructor(platform, options = {}) {
         this.platform = platform || getPlatform();
-        this.universe = engine.createEmptyUniverse();
+        this.universe = engine.enrichProgramWithEffects(engine.createEmptyUniverse());
         this.history = [];
         this.commandProcessor = new CommandProcessor(this);
         this.parser = new SymaParser();
+        this.effectsProcessor = null;
 
         // Options
         this.maxHistory = options.maxHistory || 1000;
@@ -38,6 +40,22 @@ export class SymaREPL {
     }
 
     async init() {
+        // Initialize effects processor
+        this.effectsProcessor = createEffectsProcessor(
+            this.platform,
+            () => engine.getProgram(this.universe),
+            (newProg) => {
+                // After effects update, normalize to trigger inbox processing rules
+                const rules = engine.extractRules(this.universe);
+                const normalized = engine.normalize(newProg, rules, this.maxSteps, false, foldPrims);
+                this.universe = engine.setProgram(this.universe, normalized);
+            },
+            () => {
+                // No need to re-render in REPL context
+                // Could print a notification if needed
+            }
+        );
+
         // Load history if available
         if (this.historyFile && await this.platform.fileExists(this.historyFile)) {
             try {
@@ -254,6 +272,11 @@ export class SymaREPL {
 
         this.platform.print("\nGoodbye!");
 
+        // Clean up effects processor
+        if (this.effectsProcessor) {
+            this.effectsProcessor.cleanup();
+        }
+
         // Clean up platform resources
         if (this.platform.cleanup) {
             this.platform.cleanup();
@@ -288,7 +311,7 @@ export class SymaREPL {
 
     clearUniverse() {
         this.pushUndo();
-        this.universe = engine.createEmptyUniverse();
+        this.universe = engine.enrichProgramWithEffects(engine.createEmptyUniverse());
     }
 
     applyAction(action) {
@@ -306,5 +329,10 @@ export class SymaREPL {
                 }
             } : null
         );
+    }
+
+    // Export freshId for command use
+    freshId() {
+        return freshId();
     }
 }
