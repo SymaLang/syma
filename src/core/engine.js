@@ -205,6 +205,22 @@ export function match(pat, subj, env = {}) {
 }
 
 export function subst(expr, env) {
+    // Handle /! nodes - prevent substitution of their contents (unbound variables)
+    if (isCall(expr) && isSym(expr.h) && expr.h.v === "/!" && expr.a.length === 1) {
+        // Return the content without substitution
+        return expr.a[0];
+    }
+    // Handle Unbound sugar - creates a fresh unbound Var or VarRest
+    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Unbound" && expr.a.length === 1 && isStr(expr.a[0])) {
+        const name = expr.a[0].v;
+        if (name.endsWith("...")) {
+            // Create unbound VarRest
+            return Call(Sym("VarRest"), Str(name.slice(0, -3)));
+        } else {
+            // Create unbound Var
+            return Call(Sym("Var"), Str(name));
+        }
+    }
     if (isVar(expr)) {
         const name = expr.a[0].v;
         // Wildcard _ should never appear in RHS, but handle gracefully

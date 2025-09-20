@@ -69,8 +69,8 @@
   {RuleRules
     R(
       "PlumbThroughProgram",
-      R(n_, Plumb(act_), PlumbEnd(endact_)),
-      R(n_, {Program pre... act_ post...}, {Program pre... endact_ post...})
+      R(n_, Plumb(acts...), PlumbEnd(endacts...)),
+      R(n_, {Program {/! pre...} acts... {/! post...}}, {Program {/! pre...} endacts... {/! post...}})
     )
   }
 
