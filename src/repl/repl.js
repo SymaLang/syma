@@ -243,11 +243,15 @@ export class SymaREPL {
             this.universe = JSON.parse(content);
             // Enrich with Effects structure if needed for compatibility
             this.universe = engine.enrichProgramWithEffects(this.universe);
+            // Apply RuleRules to transform the Universe permanently
+            this.universe = engine.applyRuleRules(this.universe);
         } else {
             // Parse S-expression
             this.universe = this.parser.parseString(content, path);
             // Enrich with Effects structure if needed for compatibility
             this.universe = engine.enrichProgramWithEffects(this.universe);
+            // Apply RuleRules to transform the Universe permanently
+            this.universe = engine.applyRuleRules(this.universe);
         }
     }
 
@@ -313,6 +317,8 @@ export class SymaREPL {
         const rulesNode = engine.findSection(this.universe, "Rules");
         if (rulesNode) {
             rulesNode.a.push(rule);
+            // Apply RuleRules to transform the Rules section after adding a new rule
+            this.universe = engine.applyRuleRules(this.universe);
         }
     }
 

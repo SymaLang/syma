@@ -33,7 +33,8 @@ import {
     getProgramApp,
     setProgram,
     setProgramApp,
-    dispatch as coreDispatch
+    dispatch as coreDispatch,
+    applyRuleRules
 } from './core/engine.js';
 
 // Import platform abstraction and effects
@@ -80,6 +81,10 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
 
     // Enrich Program with Effects if missing (for backward compatibility)
     uni = enrichProgramWithEffects(uni);
+
+    // Apply RuleRules to transform the Universe itself
+    // This makes the transformations permanent in the Universe data structure
+    uni = applyRuleRules(uni);
 
     GLOBAL_UNIVERSE = uni;
     GLOBAL_RULES = extractRules(uni);

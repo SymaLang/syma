@@ -202,6 +202,8 @@ History:
             // Load the bundled universe
             this.repl.universe = universe;
             this.repl.universe = engine.enrichProgramWithEffects(this.repl.universe);
+            // Apply RuleRules to transform the Universe permanently
+            this.repl.universe = engine.applyRuleRules(this.repl.universe);
 
             this.repl.platform.print(`Module ${moduleName} bundled and loaded successfully`);
             this.repl.platform.print(`Found ${allFiles.length} module files`);
@@ -268,6 +270,9 @@ History:
 
             // Now merge the compiled universe into our current one
             this.mergeUniverses(compiledUniverse, moduleName);
+
+            // Apply RuleRules to transform the Universe permanently after merge
+            this.repl.universe = engine.applyRuleRules(this.repl.universe);
 
             this.repl.platform.print(`Module ${moduleName} imported successfully`);
 

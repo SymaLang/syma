@@ -175,8 +175,8 @@ export function activate(context: vscode.ExtensionContext) {
         async provideDocumentFormattingEdits(document, options, token) {
             const formatter = new SymaFormatter({
                 indentSize: options.insertSpaces ? options.tabSize : 2,
-                maxInlineLength: 60,
-                maxInlineArgs: 3,
+                maxInlineLength: 120,
+                maxInlineArgs: 6,
                 bracketStyle: 'auto'
             });
             try {

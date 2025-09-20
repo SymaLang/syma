@@ -5,6 +5,10 @@
       State(Empty),
       {UI Div("Check console for print effect")}
     )
+    {Commands
+      {Print {Msg "Initial print command"}}
+      {Print {Msg "Second print command"}}
+    }
     {Effects
       {Pending
         {Print
@@ -21,6 +25,36 @@
   }
   {Rules
     R(
+      "Enqueue/Generic",
+      {Program
+        pre...
+        {Commands {Emit eff_} cmds...}
+        {Effects {Pending pend...} inbox_}
+      },
+      {Program
+        pre...
+        {Commands cmds...}
+        {Effects {Pending pend... eff_} inbox_}
+      }
+    )
+
+    R(
+      "Enque/Print",
+      {Plumb {Commands {Print {Msg m_}} rest...}},
+      {PlumbEnd {Commands {Emit {PrintEff m_}} rest...}}
+    )
+
+    R(
+      "PrintEff/New",
+      {PrintEff m_},
+      {Print FreshId() {Message {Format m_}}}
+    )
+    R(
+      "Format/Message",
+      {Format m_},
+      Concat("Printed message: ", m_)
+    )
+    R(
       "PrintComplete",
       {Program
         app_
@@ -32,4 +66,12 @@
       {Program app_ {Effects pending_ {Inbox rest...}}}
     )
   }
+  {RuleRules
+    R(
+      "PlumbThroughProgram",
+      R(n_, Plumb(act_), PlumbEnd(endact_)),
+      R(n_, {Program pre... act_ post...}, {Program pre... endact_ post...})
+    )
+  }
+
 }

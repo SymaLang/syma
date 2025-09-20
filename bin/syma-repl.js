@@ -254,7 +254,10 @@ async function runProgram(filePath, platform, options) {
     // Ensure universe has Effects structure
     universe = engine.enrichProgramWithEffects(universe);
 
-    // Extract rules
+    // Apply RuleRules to transform the Universe permanently
+    universe = engine.applyRuleRules(universe);
+
+    // Extract rules (now from the transformed universe)
     const rules = engine.extractRules(universe);
 
     // Create effects processor

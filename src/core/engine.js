@@ -77,16 +77,40 @@ export function extractRules(universe) {
     const baseRulesNode = findSection(universe, "Rules");
     if (!baseRulesNode) throw new Error("Universe missing Rules[...]");
 
-    // Optional meta-rules that rewrite R[...] terms
+    // RuleRules should have already transformed the Universe
+    // Just extract the rules as-is
+    return extractRulesFromNode(baseRulesNode);
+}
+
+/**
+ * Apply RuleRules to transform the Universe itself
+ * This makes RuleRules permanent transformations on the Universe data structure
+ */
+export function applyRuleRules(universe) {
+    if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
+        throw new Error("Expected root Universe[...]");
+
     const ruleRulesNode = findSection(universe, "RuleRules");
-    let effectiveRulesNode = baseRulesNode;
-    if (ruleRulesNode) {
-        // The meta-rules themselves are ordinary R[...] over R[...] trees
-        const meta = extractRulesFromNode(ruleRulesNode);
-        // Don't fold primitives when normalizing rules - we need to preserve guards
-        effectiveRulesNode = normalize(baseRulesNode, meta, 10000, true);
+    if (!ruleRulesNode) return universe; // No RuleRules, return as-is
+
+    const baseRulesNode = findSection(universe, "Rules");
+    if (!baseRulesNode) return universe; // No Rules to transform
+
+    // Extract meta-rules
+    const metaRules = extractRulesFromNode(ruleRulesNode);
+
+    // Apply meta-rules to transform the Rules section
+    // Don't fold primitives when normalizing rules - we need to preserve guards
+    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, true);
+
+    // Create new Universe with transformed Rules
+    const newUniverse = clone(universe);
+    const rulesIndex = newUniverse.a.findIndex(n => isCall(n) && isSym(n.h) && n.h.v === "Rules");
+    if (rulesIndex >= 0) {
+        newUniverse.a[rulesIndex] = transformedRulesNode;
     }
-    return extractRulesFromNode(effectiveRulesNode);
+
+    return newUniverse;
 }
 
 /* --------------------- Pattern matching ---------------------- */
@@ -404,8 +428,8 @@ export function setProgramApp(universe, newApp) {
 
 /* Inject an action: Program := Normalize( Apply[action, Program] ) */
 export function dispatch(universe, rules, actionTerm, foldPrimsFn = null, traceFn = null) {
-    // Recompute rules from current universe in case RuleRules rewrote Rules
-    rules = extractRules(universe);
+    // Rules are already extracted and passed in, no need to re-extract
+    // (RuleRules have already been applied to the Universe)
     const prog = getProgram(universe);
 
     // Apply the action to the Program node itself
