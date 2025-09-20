@@ -75,20 +75,76 @@ export class NodePlatform extends Platform {
         console.log(message);
     }
 
-    async readLine(prompt = '') {
-        if (!this.rl) {
-            this.rl = readline.createInterface({
-                input: process.stdin,
-                output: process.stdout,
-                terminal: true
-            });
+    async readLine() {
+        // Close existing readline interface if any (for getChar compatibility)
+        if (this.rl) {
+            this.rl.close();
+            this.rl = null;
         }
 
+        // Create new readline interface
+        this.rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            terminal: true
+        });
+
         return new Promise(resolve => {
-            this.rl.question(prompt, answer => {
+            this.rl.question('', answer => {
+                // Close after getting answer to allow getChar to work
+                this.rl.close();
+                this.rl = null;
                 resolve(answer);
             });
         });
+    }
+
+    async getChar() {
+        // Close readline interface if active (interferes with raw mode)
+        if (this.rl) {
+            this.rl.close();
+            this.rl = null;
+        }
+
+        // Only set raw mode if we're in TTY mode
+        const isTTY = process.stdin.isTTY;
+        if (isTTY) {
+            const wasRaw = process.stdin.isRaw || false;
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+
+            return new Promise(resolve => {
+                const onData = (chunk) => {
+                    // Restore previous mode
+                    process.stdin.setRawMode(wasRaw);
+                    process.stdin.pause();
+                    process.stdin.removeListener('data', onData);
+
+                    // Return the first character
+                    const char = chunk.toString()[0];
+
+                    // Echo the character and newline (for visual feedback)
+                    process.stdout.write(char + '\n');
+
+                    resolve(char);
+                };
+
+                process.stdin.once('data', onData);
+            });
+        } else {
+            // Non-TTY mode (piped input) - just read a line and take first char
+            return new Promise(resolve => {
+                const rl = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout
+                });
+                rl.once('line', (line) => {
+                    rl.close();
+                    const char = line[0] || '';
+                    resolve(char);
+                });
+            });
+        }
     }
 
     clearScreen() {

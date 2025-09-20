@@ -217,6 +217,7 @@ class SymbolQualifier {
                       'HttpReq', 'HttpRes', 'Method', 'Body', 'Headers', 'Status', 'Json', 'Error',
                       'WsConnect', 'WsConnectComplete', 'WsSend', 'WsSendComplete', 'WsRecv',
                       'WsClose', 'WsCloseComplete', 'Opened', 'Closed', 'Ack', 'Code', 'Reason',
+                      'ReadLine', 'ReadLineComplete', 'GetChar', 'GetCharComplete', 'Char',
                       'Obj', 'List', 'Pair'];
     if (builtins.includes(sym)) return sym;
 

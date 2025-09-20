@@ -1,0 +1,19 @@
+{Module
+  Demo/Playground
+
+  {Import Core/Plumb as CP open}
+
+  {Export}
+  {Program
+    App(
+    )
+  }
+  {Rules
+    R(
+      "LiftApplyThroughProgramAndApp",
+      Apply(act_, {Program App(st_, ui_) eff_}),
+      {Program App(Apply(act_, st_), ui_) eff_}
+    )
+  }
+  {RuleRules}
+}

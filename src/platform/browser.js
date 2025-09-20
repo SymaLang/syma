@@ -63,12 +63,21 @@ export class BrowserPlatform extends Platform {
         }
     }
 
-    async readLine(prompt = '') {
+    async readLine() {
         // Browser doesn't have blocking input like Node.js
-        // This would need to use a modal or input element
+        // Using prompt without a message for raw input
         return new Promise(resolve => {
-            const input = window.prompt(prompt);
+            const input = window.prompt('');
             resolve(input || '');
+        });
+    }
+
+    async getChar() {
+        // Browser doesn't have single character input
+        // Using prompt and taking first character
+        return new Promise(resolve => {
+            const input = window.prompt('');
+            resolve(input ? input[0] : '');
         });
     }
 

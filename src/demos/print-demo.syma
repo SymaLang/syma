@@ -1,65 +1,24 @@
 {Module
   Demo/Print
+
+  {Import Core/Plumb as CP open}
+  {Import Core/Effect as CE open}
+
   {Program
     App(
       State(Empty),
       {UI Div("Check console for print effect")}
     )
-    {Commands
-      {Print {Msg "Initial print command"}}
-      {Print {Msg "Second print command"}}
-    }
-    {Effects
-      {Pending
-        {Print
-          "startup"
-          {Message "Hello from Syma Effects System!"}
-        }
-        {Print
-          "startup2"
-          {Message "…and I can queue more than one!"}
-        }
-      }
-      {Inbox}
+    {EffQueue
+      {Print Format("Initial print command")}
+      {Print Format("Second print command")}
     }
   }
   {Rules
-    R("Enqueue/Generic",
-      {Plumb {Commands {Emit eff_} cmds...} {Effects {Pending pend...} inbox_}},
-      {PlumbEnd {Commands cmds...} {Effects {Pending pend... eff_} inbox_}}
-    )
-    R(
-      "Enque/Print",
-      {Plumb {Commands {Print {Msg m_}} rest...}},
-      {PlumbEnd {Commands {Emit {PrintEff m_}} rest...}}
-    )
-    R(
-      "PrintEff/New",
-      {PrintEff m_},
-      {Print FreshId() {Message {Format m_}}}
-    )
     R(
       "Format/Message",
       {Format m_},
       Concat("Printed message: ", m_)
-    )
-    R(
-      "PrintComplete",
-      {Program
-        app_
-        {Effects
-          pending_
-          {Inbox {PrintComplete id_ Success} rest...}
-        }
-      },
-      {Program app_ {Effects pending_ {Inbox rest...}}}
-    )
-  }
-  {RuleRules
-    R(
-      "PlumbThroughProgram",
-      R(n_, Plumb(acts...), PlumbEnd(endacts...)),
-      R(n_, {Program {/! pre...} acts... {/! post...}}, {Program {/! pre...} endacts... {/! post...}})
     )
   }
 }

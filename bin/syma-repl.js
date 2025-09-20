@@ -308,9 +308,9 @@ async function runProgram(filePath, platform, options) {
     }
 
     // Give effects processor time to process any pending effects
-    // Check periodically if there are still pending effects
+    // Check periodically if there are still pending effects or active I/O
     let waitCount = 0;
-    const maxWait = 100;  // Wait up to 1 second for effects
+    const maxWait = 6000;  // Wait up to 60 seconds for I/O operations
 
     while (waitCount < maxWait) {
         await new Promise(resolve => platform.setTimeout(resolve, 10));
@@ -318,13 +318,24 @@ async function runProgram(filePath, platform, options) {
         // Check if there are pending effects
         const program = engine.getProgram(universe);
         const effects = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === 'Effects');
+
+        let hasPending = false;
         if (effects) {
             const pending = effects.a[0];
-            if (isCall(pending) && pending.a.length === 0) {
-                // No pending effects, we can exit
-                break;
+            if (isCall(pending) && pending.a.length > 0) {
+                hasPending = true;
             }
         }
+
+        // Also check if there are active I/O operations or timers
+        const hasActiveIO = effectsProcessor && effectsProcessor.hasActiveIO && effectsProcessor.hasActiveIO();
+        const hasActiveTimers = effectsProcessor && effectsProcessor.hasActiveTimers && effectsProcessor.hasActiveTimers();
+
+        // If no pending effects, no active I/O, and no active timers, we can exit
+        if (!hasPending && !hasActiveIO && !hasActiveTimers) {
+            break;
+        }
+
         waitCount++;
     }
 

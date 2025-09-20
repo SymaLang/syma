@@ -161,6 +161,22 @@ export class EffectsProcessor {
         this.onUpdate = onUpdate;
         this.processing = false;
         this.webSocketHandlers = new Map();
+        this.activeIOOperations = new Set(); // Track active I/O operations
+        this.activeTimers = new Set(); // Track active timers
+    }
+
+    /**
+     * Check if there are active I/O operations
+     */
+    hasActiveIO() {
+        return this.activeIOOperations.size > 0;
+    }
+
+    /**
+     * Check if there are active timers
+     */
+    hasActiveTimers() {
+        return this.activeTimers.size > 0;
     }
 
     /**
@@ -237,7 +253,11 @@ export class EffectsProcessor {
         const delayMs = delay && isCall(delay) && delay.a[0] && isNum(delay.a[0])
             ? delay.a[0].v : 0;
 
+        const timerId = `timer-${id.v || id}`;
+        this.activeTimers.add(timerId);
+
         this.platform.setTimeout(() => {
+            this.activeTimers.delete(timerId);
             // Insert TimerComplete[id, Now[timestamp]]
             insertResponse(Call(
                 Sym("TimerComplete"),
@@ -453,7 +473,11 @@ export class EffectsProcessor {
         const [id] = req.a;
         if (!id) return;
 
+        const frameId = `frame-${id.v || id}`;
+        this.activeTimers.add(frameId);
+
         this.platform.requestAnimationFrame((timestamp) => {
+            this.activeTimers.delete(frameId);
             insertResponse(Call(
                 Sym("AnimationFrameComplete"),
                 id,
@@ -589,6 +613,64 @@ export class EffectsProcessor {
         } catch (error) {
             return Call(
                 Sym("WsCloseComplete"),
+                id,
+                Call(Sym("Error"), Str(error.message))
+            );
+        }
+    }
+
+    /**
+     * Process ReadLine effect
+     */
+    async processReadLine(req) {
+        // ReadLine[id]
+        const [id] = req.a;
+        if (!id) return null;
+
+        const ioId = `readline-${id.v || id}`;
+        this.activeIOOperations.add(ioId);
+
+        try {
+            const input = await this.platform.readLine();
+            this.activeIOOperations.delete(ioId);
+            return Call(
+                Sym("ReadLineComplete"),
+                id,
+                Call(Sym("Text"), Str(input || ""))
+            );
+        } catch (error) {
+            this.activeIOOperations.delete(ioId);
+            return Call(
+                Sym("ReadLineComplete"),
+                id,
+                Call(Sym("Error"), Str(error.message))
+            );
+        }
+    }
+
+    /**
+     * Process GetChar effect
+     */
+    async processGetChar(req) {
+        // GetChar[id]
+        const [id] = req.a;
+        if (!id) return null;
+
+        const ioId = `getchar-${id.v || id}`;
+        this.activeIOOperations.add(ioId);
+
+        try {
+            const char = await this.platform.getChar();
+            this.activeIOOperations.delete(ioId);
+            return Call(
+                Sym("GetCharComplete"),
+                id,
+                Call(Sym("Char"), Str(char || ""))
+            );
+        } catch (error) {
+            this.activeIOOperations.delete(ioId);
+            return Call(
+                Sym("GetCharComplete"),
                 id,
                 Call(Sym("Error"), Str(error.message))
             );
@@ -793,6 +875,15 @@ export class EffectsProcessor {
 
                     case "ClipboardRead":
                         response = await this.processClipboardRead(req);
+                        break;
+
+                    // Console I/O effects
+                    case "ReadLine":
+                        response = await this.processReadLine(req);
+                        break;
+
+                    case "GetChar":
+                        response = await this.processGetChar(req);
                         break;
 
                     // Navigation effects

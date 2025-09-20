@@ -484,10 +484,15 @@ Programs can include an Effects node alongside the main application:
 - **Navigate**: `{Navigate id {Url "/path"} {Replace True|False}}` → `{NavigateComplete id Ok}`
 - **Read Location**: `{ReadLocation id}` → `{ReadLocationComplete id {Location {Path "/"} {Query "?q=1"} {Hash "#top"}}}`
 
+#### Console I/O
+
+- **Print**: `{Print id {Message "text"}}` → `{PrintComplete id Success}`
+- **ReadLine**: `{ReadLine id}` → `{ReadLineComplete id {Text "input"}}`
+- **GetChar**: `{GetChar id}` → `{GetCharComplete id {Char "a"}}`
+
 #### Utilities
 
 - **Random**: `{RandRequest id {Min 0} {Max 100}}` → `{RandResponse id value}`
-- **Print**: `{Print id {Message "text"}}` → `{PrintComplete id Success}`
 
 ### Effect Examples
 

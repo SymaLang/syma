@@ -1,0 +1,31 @@
+{Module
+  Core/Effect
+  {Import Core/Plumb as CP open}
+  {Export PrintEff}
+  {Rules
+    R("EnqueueEffect/Generic",
+      {Plumb {EffQueue {Emit eff_} cmds...} {Effects {Pending pend...} inbox_}},
+      {PlumbEnd {EffQueue cmds...} {Effects {Pending pend... eff_} inbox_}}
+    )
+    R(
+      "EnqueueEffect/Print",
+      {Plumb {EffQueue {Print m_} rest...}},
+      {PlumbEnd {EffQueue {Emit {PrintEff m_}} rest...}}
+    )
+    R(
+      "PrintEff/New",
+      {PrintEff m_},
+      {Print FreshId() {Message m_}}
+    )
+    R(
+      "PrintComplete",
+      {Plumb
+        {Effects
+          pending_
+          {Inbox {PrintComplete id_ Success} rest...}
+        }
+      },
+      {PlumbEnd {Effects pending_ {Inbox rest...}}}
+    )
+  }
+}

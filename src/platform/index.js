@@ -33,8 +33,12 @@ export class Platform {
         throw new Error("print() must be implemented by platform adapter");
     }
 
-    async readLine(prompt = '') {
+    async readLine() {
         throw new Error("readLine() must be implemented by platform adapter");
+    }
+
+    async getChar() {
+        throw new Error("getChar() must be implemented by platform adapter");
     }
 
     clearScreen() {

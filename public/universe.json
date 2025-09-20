@@ -30,12 +30,12 @@
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "Count"
+                    "v": "Input"
                   },
                   "a": [
                     {
-                      "k": "Num",
-                      "v": 0
+                      "k": "Str",
+                      "v": ""
                     }
                   ]
                 }
@@ -56,14 +56,6 @@
                   },
                   "a": [
                     {
-                      "k": "Sym",
-                      "v": ":class"
-                    },
-                    {
-                      "k": "Str",
-                      "v": "card"
-                    },
-                    {
                       "k": "Call",
                       "h": {
                         "k": "Sym",
@@ -72,7 +64,7 @@
                       "a": [
                         {
                           "k": "Str",
-                          "v": "Counter"
+                          "v": "Console Input Demo"
                         }
                       ]
                     },
@@ -85,7 +77,20 @@
                       "a": [
                         {
                           "k": "Str",
-                          "v": "Value: "
+                          "v": "Check console for input prompts"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "P"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "Last input: "
                         },
                         {
                           "k": "Call",
@@ -96,44 +101,67 @@
                           "a": [
                             {
                               "k": "Sym",
-                              "v": "Count"
+                              "v": "Input"
                             }
                           ]
-                        }
-                      ]
-                    },
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "Button"
-                      },
-                      "a": [
-                        {
-                          "k": "Sym",
-                          "v": ":onClick"
-                        },
-                        {
-                          "k": "Sym",
-                          "v": "Demo/Counter/Inc"
-                        },
-                        {
-                          "k": "Sym",
-                          "v": ":class"
-                        },
-                        {
-                          "k": "Str",
-                          "v": "btn"
-                        },
-                        {
-                          "k": "Str",
-                          "v": "Increment"
                         }
                       ]
                     }
                   ]
                 }
               ]
+            }
+          ]
+        },
+        {
+          "k": "Call",
+          "h": {
+            "k": "Sym",
+            "v": "Effects"
+          },
+          "a": [
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Pending"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "ReadLine"
+                  },
+                  "a": [
+                    {
+                      "k": "Str",
+                      "v": "readline-1"
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Prompt"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "Enter your name: "
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Inbox"
+              },
+              "a": []
             }
           ]
         }
@@ -155,86 +183,7 @@
           "a": [
             {
               "k": "Str",
-              "v": "LiftApplyThroughProgramAndApp"
-            },
-            {
-              "k": "Call",
-              "h": {
-                "k": "Sym",
-                "v": "Apply"
-              },
-              "a": [
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "Var"
-                  },
-                  "a": [
-                    {
-                      "k": "Str",
-                      "v": "act"
-                    }
-                  ]
-                },
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "Program"
-                  },
-                  "a": [
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "App"
-                      },
-                      "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Var"
-                          },
-                          "a": [
-                            {
-                              "k": "Str",
-                              "v": "st"
-                            }
-                          ]
-                        },
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Var"
-                          },
-                          "a": [
-                            {
-                              "k": "Str",
-                              "v": "ui"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "Var"
-                      },
-                      "a": [
-                        {
-                          "k": "Str",
-                          "v": "eff"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
+              "v": "ProcessReadLine"
             },
             {
               "k": "Call",
@@ -254,22 +203,9 @@
                       "k": "Call",
                       "h": {
                         "k": "Sym",
-                        "v": "Apply"
+                        "v": "State"
                       },
                       "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Var"
-                          },
-                          "a": [
-                            {
-                              "k": "Str",
-                              "v": "act"
-                            }
-                          ]
-                        },
                         {
                           "k": "Call",
                           "h": {
@@ -304,111 +240,230 @@
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "Var"
+                    "v": "Effects"
                   },
                   "a": [
                     {
-                      "k": "Str",
-                      "v": "eff"
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "pending"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Inbox"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "ReadLineComplete"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "readline-1"
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Text"
+                              },
+                              "a": [
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Var"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Str",
+                                      "v": "input"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "VarRest"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "rest"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 }
               ]
-            }
-          ]
-        },
-        {
-          "k": "Call",
-          "h": {
-            "k": "Sym",
-            "v": "R"
-          },
-          "a": [
-            {
-              "k": "Str",
-              "v": "Inc"
             },
             {
               "k": "Call",
               "h": {
                 "k": "Sym",
-                "v": "Apply"
+                "v": "Program"
               },
               "a": [
                 {
-                  "k": "Sym",
-                  "v": "Demo/Counter/Inc"
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "App"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "State"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "Input"
+                          },
+                          "a": [
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Var"
+                              },
+                              "a": [
+                                {
+                                  "k": "Str",
+                                  "v": "input"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "ui"
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "k": "Call",
                   "h": {
                     "k": "Sym",
-                    "v": "State"
+                    "v": "Effects"
                   },
                   "a": [
                     {
                       "k": "Call",
                       "h": {
                         "k": "Sym",
-                        "v": "Count"
+                        "v": "Pending"
                       },
                       "a": [
                         {
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "Var"
+                            "v": "GetChar"
                           },
                           "a": [
                             {
                               "k": "Str",
-                              "v": "n"
+                              "v": "getchar-1"
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Prompt"
+                              },
+                              "a": [
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Concat"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Str",
+                                      "v": "Hello "
+                                    },
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "Var"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "input"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "k": "Str",
+                                      "v": "! Press any key: "
+                                    }
+                                  ]
+                                }
+                              ]
                             }
                           ]
                         }
                       ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "k": "Call",
-              "h": {
-                "k": "Sym",
-                "v": "State"
-              },
-              "a": [
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "Count"
-                  },
-                  "a": [
+                    },
                     {
                       "k": "Call",
                       "h": {
                         "k": "Sym",
-                        "v": "Add"
+                        "v": "Inbox"
                       },
                       "a": [
                         {
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "Var"
+                            "v": "VarRest"
                           },
                           "a": [
                             {
                               "k": "Str",
-                              "v": "n"
+                              "v": "rest"
                             }
                           ]
-                        },
-                        {
-                          "k": "Num",
-                          "v": 1
                         }
                       ]
                     }
@@ -427,7 +482,718 @@
           "a": [
             {
               "k": "Str",
-              "v": "ShowCount"
+              "v": "ProcessGetChar"
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Program"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "App"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "st"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "ui"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Effects"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "pending"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Inbox"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "GetCharComplete"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "getchar-1"
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Char"
+                              },
+                              "a": [
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Var"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Str",
+                                      "v": "ch"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "VarRest"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "rest"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Program"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "App"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "st"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "ui"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Effects"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Pending"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "Print"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "print-1"
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Message"
+                              },
+                              "a": [
+                                {
+                                  "k": "Call",
+                                  "h": {
+                                    "k": "Sym",
+                                    "v": "Concat"
+                                  },
+                                  "a": [
+                                    {
+                                      "k": "Str",
+                                      "v": "You pressed: "
+                                    },
+                                    {
+                                      "k": "Call",
+                                      "h": {
+                                        "k": "Sym",
+                                        "v": "Var"
+                                      },
+                                      "a": [
+                                        {
+                                          "k": "Str",
+                                          "v": "ch"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "Timer"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "timer-1"
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Delay"
+                              },
+                              "a": [
+                                {
+                                  "k": "Num",
+                                  "v": 2000
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Inbox"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "VarRest"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "rest"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "k": "Call",
+          "h": {
+            "k": "Sym",
+            "v": "R"
+          },
+          "a": [
+            {
+              "k": "Str",
+              "v": "PrintComplete"
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Program"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Var"
+                  },
+                  "a": [
+                    {
+                      "k": "Str",
+                      "v": "app"
+                    }
+                  ]
+                },
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Effects"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "pending"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Inbox"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "PrintComplete"
+                          },
+                          "a": [
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Var"
+                              },
+                              "a": [
+                                {
+                                  "k": "Str",
+                                  "v": "_"
+                                }
+                              ]
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Var"
+                              },
+                              "a": [
+                                {
+                                  "k": "Str",
+                                  "v": "_"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "VarRest"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "rest"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Program"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Var"
+                  },
+                  "a": [
+                    {
+                      "k": "Str",
+                      "v": "app"
+                    }
+                  ]
+                },
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Effects"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "pending"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Inbox"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "VarRest"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "rest"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "k": "Call",
+          "h": {
+            "k": "Sym",
+            "v": "R"
+          },
+          "a": [
+            {
+              "k": "Str",
+              "v": "RestartAfterTimer"
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Program"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "App"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "st"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "ui"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Effects"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "pending"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Inbox"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "TimerComplete"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "timer-1"
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Var"
+                              },
+                              "a": [
+                                {
+                                  "k": "Str",
+                                  "v": "_"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "VarRest"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "rest"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "k": "Call",
+              "h": {
+                "k": "Sym",
+                "v": "Program"
+              },
+              "a": [
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "App"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "st"
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Var"
+                      },
+                      "a": [
+                        {
+                          "k": "Str",
+                          "v": "ui"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "k": "Call",
+                  "h": {
+                    "k": "Sym",
+                    "v": "Effects"
+                  },
+                  "a": [
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Pending"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "ReadLine"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "readline-1"
+                            },
+                            {
+                              "k": "Call",
+                              "h": {
+                                "k": "Sym",
+                                "v": "Prompt"
+                              },
+                              "a": [
+                                {
+                                  "k": "Str",
+                                  "v": "Enter your name: "
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "k": "Call",
+                      "h": {
+                        "k": "Sym",
+                        "v": "Inbox"
+                      },
+                      "a": [
+                        {
+                          "k": "Call",
+                          "h": {
+                            "k": "Sym",
+                            "v": "VarRest"
+                          },
+                          "a": [
+                            {
+                              "k": "Str",
+                              "v": "rest"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "k": "Call",
+          "h": {
+            "k": "Sym",
+            "v": "R"
+          },
+          "a": [
+            {
+              "k": "Str",
+              "v": "ShowInput"
             },
             {
               "k": "Call",
@@ -445,7 +1211,7 @@
                   "a": [
                     {
                       "k": "Sym",
-                      "v": "Count"
+                      "v": "Input"
                     }
                   ]
                 },
@@ -467,7 +1233,7 @@
                           "k": "Call",
                           "h": {
                             "k": "Sym",
-                            "v": "Count"
+                            "v": "Input"
                           },
                           "a": [
                             {
@@ -479,7 +1245,7 @@
                               "a": [
                                 {
                                   "k": "Str",
-                                  "v": "n"
+                                  "v": "val"
                                 }
                               ]
                             }
@@ -513,7 +1279,7 @@
               "a": [
                 {
                   "k": "Str",
-                  "v": "n"
+                  "v": "val"
                 }
               ]
             }
@@ -527,223 +1293,7 @@
         "k": "Sym",
         "v": "RuleRules"
       },
-      "a": [
-        {
-          "k": "Call",
-          "h": {
-            "k": "Sym",
-            "v": "R"
-          },
-          "a": [
-            {
-              "k": "Str",
-              "v": "RewriteInc"
-            },
-            {
-              "k": "Call",
-              "h": {
-                "k": "Sym",
-                "v": "R"
-              },
-              "a": [
-                {
-                  "k": "Str",
-                  "v": "Inc"
-                },
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "Apply"
-                  },
-                  "a": [
-                    {
-                      "k": "Sym",
-                      "v": "Demo/Counter/Inc"
-                    },
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "State"
-                      },
-                      "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Count"
-                          },
-                          "a": [
-                            {
-                              "k": "Call",
-                              "h": {
-                                "k": "Sym",
-                                "v": "Var"
-                              },
-                              "a": [
-                                {
-                                  "k": "Str",
-                                  "v": "n"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "State"
-                  },
-                  "a": [
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "Count"
-                      },
-                      "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Add"
-                          },
-                          "a": [
-                            {
-                              "k": "Call",
-                              "h": {
-                                "k": "Sym",
-                                "v": "Var"
-                              },
-                              "a": [
-                                {
-                                  "k": "Str",
-                                  "v": "n"
-                                }
-                              ]
-                            },
-                            {
-                              "k": "Num",
-                              "v": 1
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "k": "Call",
-              "h": {
-                "k": "Sym",
-                "v": "R"
-              },
-              "a": [
-                {
-                  "k": "Str",
-                  "v": "Inc"
-                },
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "Apply"
-                  },
-                  "a": [
-                    {
-                      "k": "Sym",
-                      "v": "Demo/Counter/Inc"
-                    },
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "State"
-                      },
-                      "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Count"
-                          },
-                          "a": [
-                            {
-                              "k": "Call",
-                              "h": {
-                                "k": "Sym",
-                                "v": "Var"
-                              },
-                              "a": [
-                                {
-                                  "k": "Str",
-                                  "v": "n"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "k": "Call",
-                  "h": {
-                    "k": "Sym",
-                    "v": "State"
-                  },
-                  "a": [
-                    {
-                      "k": "Call",
-                      "h": {
-                        "k": "Sym",
-                        "v": "Count"
-                      },
-                      "a": [
-                        {
-                          "k": "Call",
-                          "h": {
-                            "k": "Sym",
-                            "v": "Add"
-                          },
-                          "a": [
-                            {
-                              "k": "Call",
-                              "h": {
-                                "k": "Sym",
-                                "v": "Var"
-                              },
-                              "a": [
-                                {
-                                  "k": "Str",
-                                  "v": "n"
-                                }
-                              ]
-                            },
-                            {
-                              "k": "Num",
-                              "v": 2
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
+      "a": []
     }
   ]
 }

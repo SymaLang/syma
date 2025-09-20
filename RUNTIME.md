@@ -227,6 +227,7 @@ While most code is identical, you can handle platform-specific needs:
 | Capability | Node.js | Browser | Notes |
 |------------|---------|---------|-------|
 | **Console Output** | ✅ `console.log` | ✅ `console.log` | Via Print effect |
+| **Console Input** | ✅ `readline` | ✅ `prompt/events` | Via ReadLine/GetChar effects |
 | **Timers** | ✅ `setTimeout` | ✅ `window.setTimeout` | Via Timer effect |
 | **HTTP** | ✅ `node-fetch` | ✅ `fetch API` | Via HttpReq effect |
 | **WebSocket** | ✅ `ws` library | ✅ Native WebSocket | Via WS effects |
