@@ -1,0 +1,213 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Syma",
+  "scopeName": "source.syma",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#var-patterns" },
+    { "include": "#keywords" },
+    { "include": "#operators" },
+    { "include": "#function-calls" },
+    { "include": "#brace-calls" },
+    { "include": "#symbols" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.syma",
+          "match": ";.*$"
+        },
+        {
+          "name": "comment.line.double-slash.syma",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.syma",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "captures": {
+            "0": { "name": "punctuation.definition.comment.syma" }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.syma",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.syma" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.syma" }
+      },
+      "patterns": [
+        {
+          "name": "constant.character.escape.syma",
+          "match": "\\\\[nrt\"\\\\]"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.syma",
+          "match": "-?\\d+\\.\\d+"
+        },
+        {
+          "name": "constant.numeric.integer.syma",
+          "match": "-?\\d+"
+        }
+      ]
+    },
+    "var-patterns": {
+      "patterns": [
+        {
+          "name": "variable.parameter.rest.syma",
+          "match": "\\b[a-zA-Z][a-zA-Z0-9_]*\\.\\.\\."
+        },
+        {
+          "name": "variable.parameter.rest.syma",
+          "match": "\\b[a-zA-Z][a-zA-Z0-9]*___"
+        },
+        {
+          "name": "variable.parameter.rest.syma",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "variable.parameter.rest.syma",
+          "match": "___"
+        },
+        {
+          "name": "variable.parameter.syma",
+          "match": "\\b[a-zA-Z][a-zA-Z0-9]*_(?!_)"
+        },
+        {
+          "name": "variable.parameter.wildcard.syma",
+          "match": "\\b_\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.module.syma",
+          "match": "\\b(Module|Export|Import|as|open|Defs|Program|Rules|RuleRules|Universe)\\b"
+        },
+        {
+          "name": "keyword.control.conditional.syma",
+          "match": "\\b(If|When|Cond|Match|Case)\\b"
+        },
+        {
+          "name": "keyword.control.flow.syma",
+          "match": "\\b(Apply|Project|Bundle|Seq)\\b"
+        },
+        {
+          "name": "keyword.other.special.syma",
+          "match": "\\b(R|Def|Var|VarRest)\\b"
+        },
+        {
+          "name": "constant.language.boolean.syma",
+          "match": "\\b(True|False|Nil)\\b"
+        },
+        {
+          "name": "support.function.builtin.arithmetic.syma",
+          "match": "\\b(Add|Sub|Mul|Div|Mod|Pow|Sqrt|Abs|Min|Max|Floor|Ceil|Round)\\b"
+        },
+        {
+          "name": "support.function.builtin.string.syma",
+          "match": "\\b(Concat|ToString|ToUpper|ToLower|Trim|StrLen|Substring|IndexOf|Replace)\\b"
+        },
+        {
+          "name": "support.function.builtin.comparison.syma",
+          "match": "\\b(Eq|Neq|Lt|Gt|Lte|Gte)\\b"
+        },
+        {
+          "name": "support.function.builtin.logical.syma",
+          "match": "\\b(And|Or|Not)\\b"
+        },
+        {
+          "name": "support.function.builtin.type.syma",
+          "match": "\\b(IsNum|IsStr|IsSym|IsTrue|IsFalse)\\b"
+        },
+        {
+          "name": "support.function.builtin.effects.syma",
+          "match": "\\b(Timer|HttpReq|WsConnect|StorageGet|StorageSet|Print|FreshId|Random|Debug)\\b"
+        },
+        {
+          "name": "support.function.ui.syma",
+          "match": "\\b(Div|Span|Button|Input|Form|H[1-6]|P|A|Img|UI|Show|State|App|Effects|Pending|Inbox)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.projection.syma",
+          "match": "/@"
+        },
+        {
+          "name": "keyword.operator.arrow.syma",
+          "match": "→|->|=>|<-"
+        },
+        {
+          "name": "keyword.operator.comparison.syma",
+          "match": "[<>=!]+"
+        },
+        {
+          "name": "keyword.operator.arithmetic.syma",
+          "match": "[+\\-*/%^]"
+        }
+      ]
+    },
+    "function-calls": {
+      "patterns": [
+        {
+          "name": "meta.function-call.syma",
+          "match": "([a-zA-Z_][a-zA-Z0-9_/]*)\\s*\\(",
+          "captures": {
+            "1": { "name": "entity.name.function.syma" }
+          }
+        }
+      ]
+    },
+    "brace-calls": {
+      "patterns": [
+        {
+          "name": "meta.brace-call.syma",
+          "begin": "{\\s*([a-zA-Z_][a-zA-Z0-9_/]*)?",
+          "end": "}",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.braces.begin.syma" },
+            "1": { "name": "entity.name.function.syma" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.section.braces.end.syma" }
+          },
+          "patterns": [
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+    "symbols": {
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.syma",
+          "match": ":[a-zA-Z_][a-zA-Z0-9_-]*"
+        },
+        {
+          "name": "variable.other.constant.syma",
+          "match": "\\b[A-Z][a-zA-Z0-9_/]*\\b"
+        },
+        {
+          "name": "variable.other.syma",
+          "match": "\\b[a-z][a-zA-Z0-9_/]*\\b"
+        }
+      ]
+    }
+  }
+}

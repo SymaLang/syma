@@ -1,0 +1,20 @@
+; Test file for formatter
+{Module Test/Format {Export Foo Bar Baz}
+{Defs
+{Foo {Add 1 2}}
+{Bar {Div {Mul 3 4} {Sub 5 2}}}
+; Nested structures
+{Baz {If {Eq x_ 0} "zero" {If {Gt x_ 0} "positive" "negative"}}}
+; UI components with attributes
+{Component {Div :class "container" :onClick HandleClick {Button :class "btn-primary" "Click me"} {P :class "text" {Show value_}}}}
+; Pattern matching
+{Process {Apply action_ {State {Counter count_ rest...}}} {State {Counter {Add count_ 1} rest...}}}
+; Lists and rest patterns
+{HandleList {List x_ y_ rest...} {Concat x_ ", " y_ ", and more"}}
+}
+{Program {App {State InitialState} {UI {Component}}}}
+{Rules
+{R "IncrementCounter" {Apply Inc state_} {Patch Counter state_ {KV count {Add {Get Counter count state_} 1}} {KV lastAction "incremented"}} 100}
+{R "DecrementCounter" {Apply Dec state_} {If {Gt {Get Counter count state_} 0} {Patch Counter state_ {KV count {Sub {Get Counter count state_} 1}} {KV lastAction "decremented"}} state_} 100}
+}
+}

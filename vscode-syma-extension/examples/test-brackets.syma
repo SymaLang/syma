@@ -1,0 +1,34 @@
+; Test file for bracket validation fixes
+
+{Module Test/Brackets
+  {Defs
+    ; This should NOT cause bracket errors:
+    {BFExec "[" left_ curr_ right_ ip_ code_ out_}
+
+    ; More test cases with brackets in strings:
+    {Operation "]" data_}
+    {Command "[[" args_}
+    {Pattern "[]" items_}
+    {Nested "{[(" values_}
+
+    ; Mixed brackets and strings:
+    {Process
+      "[start]"
+      {Data items...}
+      "]end["}
+
+    ; Comments should be ignored:
+    ; This is a comment with [ and ] and { and }
+    // Another comment with [ ] { }
+    /* Block comment with
+       brackets [ ] { } ( )
+       should be ignored */
+  }
+}
+
+; Valid bracket nesting:
+{Outer
+  {Inner
+    (FunctionCall arg1 arg2)
+  }
+}

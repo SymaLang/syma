@@ -1,0 +1,126 @@
+{
+  "name": "syma-language",
+  "displayName": "Syma Language Support",
+  "description": "Syntax highlighting and language support for Syma symbolic programming language",
+  "version": "0.1.2",
+  "publisher": "syma-lang",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Formatters"
+  ],
+  "keywords": [
+    "syma",
+    "symbolic",
+    "s-expression",
+    "lisp",
+    "functional"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/syma-lang/vscode-syma"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "syma",
+        "aliases": ["Syma", "syma"],
+        "extensions": [".syma", ".sym"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/syma-light.svg",
+          "dark": "./icons/syma-dark.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "syma",
+        "scopeName": "source.syma",
+        "path": "./syntaxes/syma.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.javascript": "javascript",
+          "meta.embedded.block.json": "json"
+        }
+      }
+    ],
+    "snippets": [
+      {
+        "language": "syma",
+        "path": "./snippets/syma.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[syma]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.wordWrap": "on",
+        "editor.autoClosingBrackets": "always",
+        "editor.autoClosingQuotes": "always",
+        "editor.bracketPairColorization.enabled": true,
+        "editor.guides.bracketPairs": true
+      }
+    },
+    "commands": [
+      {
+        "command": "syma.compile",
+        "title": "Syma: Compile Current File"
+      },
+      {
+        "command": "syma.run",
+        "title": "Syma: Run Current File"
+      },
+      {
+        "command": "syma.repl",
+        "title": "Syma: Open REPL"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "syma.compile",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "resourceExtname == .syma"
+      },
+      {
+        "command": "syma.run",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "resourceExtname == .syma"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "syma",
+        "required": ["task"],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "The Syma task to run"
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "^18.x",
+    "typescript": "^5.0.0",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "web-tree-sitter": "^0.20.8"
+  }
+}

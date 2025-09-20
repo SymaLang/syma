@@ -1,0 +1,109 @@
+; This is a test file for the Syma VS Code extension
+// It demonstrates all the syntax highlighting features
+/* And multiline comments
+   work too! */
+
+{Module Example/Test
+  {Export InitialState Counter Inc Dec Reset}
+
+  {Import Core/KV as KV open}
+
+  {Defs
+    ; Initial state with a counter at 0
+    {InitialState
+      {CounterState
+        {KV count 0}
+        {KV lastAction "none"}}}
+
+    ; UI Component
+    {Counter
+      {Div :class "counter-container"
+        {H1 "Syma Counter Demo"}
+        {P :class "count-display"
+          "Current count: " {Show count}}
+        {Div :class "buttons"
+          {Button :onClick Inc :class "btn-inc" "+"}
+          {Button :onClick Dec :class "btn-dec" "-"}
+          {Button :onClick Reset :class "btn-reset" "Reset"}}
+        {P :class "last-action"
+          "Last action: " {Show lastAction}}}}}
+
+  {Program
+    {App
+      {State InitialState}
+      {UI {Project {Counter}}}}}
+
+  {Rules
+    ; Increment rule with pattern variables
+    {R "Increment"
+       {Apply Inc state_}
+       {Patch CounterState state_
+         {KV count {Add {Get CounterState count state_} 1}}
+         {KV lastAction "incremented"}}
+       100}
+
+    ; Decrement rule using If expression
+    {R "Decrement"
+       {Apply Dec state_}
+       {If {Gt {Get CounterState count state_} 0}
+         {Patch CounterState state_
+           {KV count {Sub {Get CounterState count state_} 1}}
+           {KV lastAction "decremented"}}
+         state_}
+       100}
+
+    ; Reset rule with rest patterns
+    {R "Reset"
+       {Apply Reset {CounterState items...}}
+       {CounterState
+         {KV count 0}
+         {KV lastAction "reset"}}
+       100}
+
+    ; Projection rules with /@ operator
+    {R "ShowCount"
+       {/@ {Show count} {App {State state_} _}}
+       {ToString {Get CounterState count state_}}}
+
+    {R "ShowLastAction"
+       {/@ {Show lastAction} {App {State state_} _}}
+       {Get CounterState lastAction state_}}
+
+    ; Lifting rules with rest variables
+    {R "LiftApplyThroughApp"
+       {Apply act_ {App st_ ui_}}
+       {App {Apply act_ st_} ui_}
+       50}
+
+    {R "LiftApplyThroughState"
+       {Apply act_ {State st_}}
+       {State {Apply act_ st_}}
+       50}}}
+
+; Function call syntax examples
+Add(1, 2)
+Mul(3, Add(4, 5))
+If(Eq(x_, 0), "zero", "non-zero")
+
+; Variable patterns
+x_          ; Single variable
+xs...       ; Rest variable
+_           ; Wildcard
+items___    ; Alternative rest syntax
+
+; Built-in functions
+{FreshId}
+{Random 0 100}
+{Concat "Hello" " " "World"}
+{Debug "value" someExpression}
+
+; Effects examples
+{Timer {FreshId} {Delay 1000}}
+{HttpReq {FreshId}
+  {Method "GET"}
+  {Url "/api/data"}
+  {Headers {ContentType "application/json"}}}
+
+; Storage operations
+{StorageSet {FreshId} {Store Local} {Key "prefs"} {Value data_}}
+{StorageGet {FreshId} {Store Local} {Key "prefs"}}

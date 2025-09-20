@@ -1,0 +1,191 @@
+{
+  "Module": {
+    "prefix": "module",
+    "body": [
+      "{Module ${1:Module/Name}",
+      "  {Export ${2:symbol1 symbol2}}",
+      "  {Import ${3:Other/Module} as ${4:Alias}}",
+      "  ",
+      "  {Defs",
+      "    {${5:Name} ${6:value}}}",
+      "  ",
+      "  {Program",
+      "    ${7:{App {State InitialState} {UI {Div \"Hello\"}}}}",
+      "  ",
+      "  {Rules",
+      "    {R \"${8:RuleName}\"",
+      "       ${9:pattern}",
+      "       ${10:replacement}}}}}"
+    ],
+    "description": "Create a new Syma module"
+  },
+  "Rule": {
+    "prefix": "rule",
+    "body": [
+      "{R \"${1:RuleName}\"",
+      "   ${2:pattern}",
+      "   ${3:replacement}",
+      "   ${4:priority}}"
+    ],
+    "description": "Create a rewrite rule"
+  },
+  "Apply Rule": {
+    "prefix": "apply",
+    "body": [
+      "{R \"${1:ApplyRule}\"",
+      "   {Apply ${2:action_} ${3:state_}}",
+      "   ${4:newState}",
+      "   ${5:100}}"
+    ],
+    "description": "Create an Apply handler rule"
+  },
+  "Component": {
+    "prefix": "component",
+    "body": [
+      "{Def ${1:ComponentName}",
+      "  {Div :class \"${2:className}\"",
+      "    {H1 \"${3:Title}\"}",
+      "    {Button :onClick ${4:Action} \"${5:Click me}\"}}}"
+    ],
+    "description": "Create a UI component"
+  },
+  "State Container": {
+    "prefix": "state",
+    "body": [
+      "{${1:StateName}",
+      "  {KV ${2:key1} ${3:value1}}",
+      "  {KV ${4:key2} ${5:value2}}}"
+    ],
+    "description": "Create a state container with key-value pairs"
+  },
+  "Effect Handler": {
+    "prefix": "effect",
+    "body": [
+      "{R \"${1:EffectHandler}\"",
+      "   {Program ${2:app_} {Effects {Pending ${3:effect_}} ${4:inbox_}}}",
+      "   {Program",
+      "     ${5:app_}",
+      "     {Effects",
+      "       {Pending ${6:newPending}}",
+      "       ${7:inbox_}}}}"
+    ],
+    "description": "Create an effect handler rule"
+  },
+  "Function Definition": {
+    "prefix": "def",
+    "body": [
+      "{Def ${1:functionName}",
+      "  ${2:implementation}}"
+    ],
+    "description": "Define a function or constant"
+  },
+  "If Expression": {
+    "prefix": "if",
+    "body": [
+      "{If ${1:condition}",
+      "    ${2:thenBranch}",
+      "    ${3:elseBranch}}"
+    ],
+    "description": "Create an If expression"
+  },
+  "When Expression": {
+    "prefix": "when",
+    "body": [
+      "{When ${1:condition}",
+      "      ${2:action}}"
+    ],
+    "description": "Create a When expression"
+  },
+  "Pattern Variable": {
+    "prefix": "var",
+    "body": "${1:name}_",
+    "description": "Create a pattern variable"
+  },
+  "Rest Pattern": {
+    "prefix": "rest",
+    "body": "${1:items}...",
+    "description": "Create a rest pattern variable"
+  },
+  "Project": {
+    "prefix": "proj",
+    "body": "{Project ${1:expression}}",
+    "description": "Project an expression in UI context"
+  },
+  "Show": {
+    "prefix": "show",
+    "body": "{Show ${1:value}}",
+    "description": "Show a value in UI"
+  },
+  "Button": {
+    "prefix": "btn",
+    "body": [
+      "{Button :onClick ${1:Action} :class \"${2:btn}\" \"${3:Label}\"}"
+    ],
+    "description": "Create a button element"
+  },
+  "Input": {
+    "prefix": "input",
+    "body": [
+      "{Input :type \"${1:text}\"",
+      "       :value {Input ${2:fieldName}}",
+      "       :onInput {SetInput ${2:fieldName}}",
+      "       :placeholder \"${3:Enter text...}\"}"
+    ],
+    "description": "Create an input field"
+  },
+  "Div": {
+    "prefix": "div",
+    "body": [
+      "{Div :class \"${1:className}\"",
+      "  ${2:children}}"
+    ],
+    "description": "Create a div element"
+  },
+  "Timer Effect": {
+    "prefix": "timer",
+    "body": [
+      "{Timer {FreshId} {Delay ${1:1000}}}"
+    ],
+    "description": "Create a timer effect"
+  },
+  "HTTP Request": {
+    "prefix": "http",
+    "body": [
+      "{HttpReq {FreshId}",
+      "  {Method \"${1:GET}\"}",
+      "  {Url \"${2:/api/endpoint}\"}",
+      "  {Body ${3:data}}",
+      "  {Headers {ContentType \"application/json\"}}}"
+    ],
+    "description": "Create an HTTP request effect"
+  },
+  "Storage Get": {
+    "prefix": "storage-get",
+    "body": [
+      "{StorageGet {FreshId} {Store ${1:Local}} {Key \"${2:key}\"}}"
+    ],
+    "description": "Get value from storage"
+  },
+  "Storage Set": {
+    "prefix": "storage-set",
+    "body": [
+      "{StorageSet {FreshId} {Store ${1:Local}} {Key \"${2:key}\"} {Value ${3:data}}}"
+    ],
+    "description": "Set value in storage"
+  },
+  "Add": {
+    "prefix": "add",
+    "body": "Add(${1:a}, ${2:b})",
+    "description": "Add two numbers"
+  },
+  "Concat": {
+    "prefix": "concat",
+    "body": "Concat(${1:str1}, ${2:str2})",
+    "description": "Concatenate strings"
+  },
+  "Eq": {
+    "prefix": "eq",
+    "body": "Eq(${1:a}, ${2:b})",
+    "description": "Equality comparison"
+  }
+}

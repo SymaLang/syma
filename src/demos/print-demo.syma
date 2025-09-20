@@ -1,21 +1,35 @@
-{Module Demo/Print
-  ;; Minimal demo that prints a message on load via the effect system
-
+{Module
+  Demo/Print
   {Program
-    {App
-      {State Empty}
-      {UI {Div "Check console for print effect"}}}
-
+    App(
+      State(Empty),
+      {UI Div("Check console for print effect")}
+    )
     {Effects
       {Pending
-        {Print "startup"  {Message "Hello from Syma Effects System!"}}
-        {Print "startup2" {Message "…and I can queue more than one!"}}}
-      {Inbox}}}
-
+        {Print
+          "startup"
+          {Message "Hello from Syma Effects System!"}
+        }
+        {Print
+          "startup2"
+          {Message "…and I can queue more than one!"}
+        }
+      }
+      {Inbox}
+    }
+  }
   {Rules
-    ;; Handle Print completion - just consume the response
-    {R "PrintComplete"
-       {Program app_ {Effects pending_ {Inbox {PrintComplete id_ Success} rest...}}}
-       {Program app_ {Effects pending_ {Inbox rest...}}}}
+    R(
+      "PrintComplete",
+      {Program
+        app_
+        {Effects
+          pending_
+          {Inbox {PrintComplete id_ Success} rest...}
+        }
+      },
+      {Program app_ {Effects pending_ {Inbox rest...}}}
+    )
   }
 }

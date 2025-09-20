@@ -459,14 +459,14 @@ export class SymaParser {
     prefersFunctionSyntax(sym) {
         // Symbols that look better with function call syntax
         const functionLike = [
-            'Add', 'Sub', 'Mul', 'Div', 'Mod', 'Pow', 'Sqrt', 'Abs',
+            'Add', 'Sub', 'Mul', 'Mod', 'Pow', 'Sqrt', 'Abs',
             'Min', 'Max', 'Floor', 'Ceil', 'Round',
             'Concat', 'ToString', 'ToUpper', 'ToLower', 'Trim',
             'StrLen', 'Substring', 'IndexOf', 'Replace',
             'Eq', 'Neq', 'Lt', 'Gt', 'Lte', 'Gte',
             'And', 'Or', 'Not',
             'IsNum', 'IsStr', 'IsSym', 'IsTrue', 'IsFalse',
-            'FreshId', 'Random', 'ParseNum', 'Debug',
+            'Random', 'ParseNum', 'Debug',
             'R', 'Apply', '/@',
             'App', 'State'
         ];
