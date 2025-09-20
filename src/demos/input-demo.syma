@@ -13,7 +13,7 @@
     )
     {Effects
       {Pending
-        {Print "prompt-name" {Message "Enter your name: "}}
+        {Print "prompt-name" {Message "Enter your name: \n"}}
       }
       {Inbox}
     }
@@ -72,7 +72,6 @@
         {Effects
           {Pending
             {Print "print-1" {Message Concat("You pressed: ", ch_, "\n")}}
-            {Timer "timer-1" {Delay 2000}}
           }
           {Inbox rest...}
         }}
@@ -82,20 +81,6 @@
       "PrintComplete",
       {Program {App {State st_ {Phase phase_}} ui_} {Effects pending_ {Inbox {PrintComplete "print-1" _} rest...}}},
       {Program {App {State st_ {Phase phase_}} ui_} {Effects pending_ {Inbox rest...}}}
-    )
-
-    R(
-      "RestartAfterTimer",
-      {Program
-        {App {State st_ {Phase "ShowResult"}} ui_}
-        {Effects pending_ {Inbox {TimerComplete "timer-1" _} rest...}}
-      },
-      {Program
-        {App {State st_ {Phase "PromptName"}} ui_}
-        {Effects
-          {Pending {Print "prompt-name" {Message "\nEnter your name: "}}}
-          {Inbox rest...}
-        }}
     )
 
     R(

@@ -2,18 +2,56 @@
   Demo/Playground
 
   {Import Core/Plumb as CP open}
+  {Import Core/Effect as CE open}
 
-  {Export}
   {Program
     App(
+      State(
+        {Input}
+      )
     )
+    {Flow
+      {Emit {ReadLine "Poop"}}
+      ;op2
+    }
+    {EffQueue
+      {Print "Enter your name: \n"}
+    }
+    {Effects
+      {Pending}
+      {Inbox}
+    }
   }
   {Rules
     R(
-      "LiftApplyThroughProgramAndApp",
-      Apply(act_, {Program App(st_, ui_) eff_}),
-      {Program App(Apply(act_, st_), ui_) eff_}
+      "ProcessFlow/Many",
+      {Plumb {Flow a_ rest...} {EffQueue cmds...}},
+      {PlumbEnd {Flow rest...} {EffQueue cmds... a_}}
+    )
+    R(
+      "ProcessFlow/One",
+      {Plumb {Flow a_} {EffQueue cmds...}},
+      {PlumbEnd {Flow} {EffQueue cmds... a_}}
+    )
+
+    R(
+      "ProcessReadLine",
+      {Program
+        {App{State {Input}}}
+        omit...
+        {Effects pending_ {Inbox {ReadLineComplete id_ {Text input_}} rest...}}
+      },
+      {Program
+        {App{State {Input input_}}}
+        omit...
+        {Effects pending_ {Inbox rest...}}
+      }
+    )
+
+    R(
+      "ProcessReadLine/Echo",
+      {Program{App{State {Input input_}}} omit... {EffQueue cmds...} rest...},
+      {Program{App{State {Input}}} omit... {EffQueue cmds... {Print "echo" {Message Concat("You entered: ", input_, "\n")}}} rest...}
     )
   }
-  {RuleRules}
 }

@@ -12,15 +12,27 @@ export class TerminalProjector extends BaseProjector {
     constructor() {
         super();
         this.colorize = false; // Can be enabled for color output
+        this.universe = null;
+        this.normalizeFunc = null;
+        this.extractRulesFunc = null;
     }
 
     init(config) {
         super.init(config);
         this.colorize = config.options?.color || false;
+
+        // Store references to runtime functions (like DOM projector does)
+        this.normalizeFunc = config.options?.normalize;
+        this.extractRulesFunc = config.options?.extractRules;
+        this.universe = config.options?.universe;
+
         return this;
     }
 
     render(universe) {
+        // Store universe for /@ handling
+        this.universe = universe;
+
         // For REPL, we typically want to show the result of evaluation
         // rather than the full universe structure
         if (this.mount && this.mount.write) {
@@ -67,6 +79,16 @@ export class TerminalProjector extends BaseProjector {
             // Special formatting for certain constructs
             if (isSym(head)) {
                 switch (head.v) {
+                    case '/@':
+                        // Handle projection operator by normalizing it
+                        // This matches the DOM projector behavior
+                        if (this.normalizeFunc && this.extractRulesFunc && this.universe) {
+                            const currentRules = this.extractRulesFunc(this.universe);
+                            const reduced = this.normalizeFunc(node, currentRules);
+                            return this.prettyPrint(reduced, indent);
+                        }
+                        // If can't normalize, format as regular call
+                        return this.formatBraceCall(node, indent);
                     case 'R':
                         return this.formatRule(node, indent);
                     case 'Var':
