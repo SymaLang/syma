@@ -10,8 +10,8 @@
       {UI Div("Check console for print effect")}
     )
     {EffQueue
-      {Print Format("Initial print command")}
-      {Print Format("Second print command")}
+      {Print Format("Initial print command\n")}
+      {Print Format("Second print command\n")}
     }
   }
   {Rules

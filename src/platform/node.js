@@ -35,6 +35,7 @@ export class NodePlatform extends Platform {
     constructor(options = {}) {
         super();
         this.rl = null; // Will be created on demand
+        this.replMode = false; // Track if we're in REPL mode
         this.storage = new Map(); // In-memory storage for REPL
         this.storagePath = options.storagePath || '.syma-storage.json';
         this.historyPath = options.historyPath || '.syma-history';
@@ -42,6 +43,35 @@ export class NodePlatform extends Platform {
         this.timers = new Map();
         this.intervals = new Map();
         this.nextTimerId = 1;
+    }
+
+    // Set REPL mode
+    setReplMode(enabled) {
+        this.replMode = enabled;
+        if (enabled) {
+            // Create readline interface immediately for REPL mode
+            if (!this.rl) {
+                this.rl = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout,
+                    terminal: true,
+                    historySize: 1000
+                });
+            }
+        } else if (this.rl) {
+            this.rl.close();
+            this.rl = null;
+        }
+    }
+
+    // Add command to readline history
+    addToReplHistory(command) {
+        if (this.rl && this.rl.history && command) {
+            // Don't add duplicates of the immediate previous command
+            if (this.rl.history.length === 0 || this.rl.history[0] !== command) {
+                this.rl.history.unshift(command);
+            }
+        }
     }
 
     // File I/O
@@ -72,31 +102,51 @@ export class NodePlatform extends Platform {
 
     // Console I/O
     print(message) {
-        console.log(message);
+        process.stdout.write(message);
     }
 
-    async readLine() {
-        // Close existing readline interface if any (for getChar compatibility)
-        if (this.rl) {
-            this.rl.close();
-            this.rl = null;
-        }
+    async readLine(internalPrompt = '') {
+        // In REPL mode, keep the interface alive for history
+        if (this.replMode) {
+            // Create interface if it doesn't exist
+            if (!this.rl) {
+                this.rl = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout,
+                    terminal: true,
+                    historySize: 1000
+                });
+            }
 
-        // Create new readline interface
-        this.rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            terminal: true
-        });
-
-        return new Promise(resolve => {
-            this.rl.question('', answer => {
-                // Close after getting answer to allow getChar to work
+            return new Promise(resolve => {
+                this.rl.question(internalPrompt, answer => {
+                    resolve(answer);
+                });
+            });
+        } else {
+            // Non-REPL mode: create and destroy interface each time
+            // Close existing readline interface if any (for getChar compatibility)
+            if (this.rl) {
                 this.rl.close();
                 this.rl = null;
-                resolve(answer);
+            }
+
+            // Create new readline interface
+            this.rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout,
+                terminal: true
             });
-        });
+
+            return new Promise(resolve => {
+                this.rl.question(internalPrompt, answer => {
+                    // Close after getting answer to allow getChar to work
+                    this.rl.close();
+                    this.rl = null;
+                    resolve(answer);
+                });
+            });
+        }
     }
 
     async getChar() {

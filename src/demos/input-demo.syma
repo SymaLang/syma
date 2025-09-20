@@ -71,7 +71,7 @@
         {App {State st_ {Phase "ShowResult"}} ui_}
         {Effects
           {Pending
-            {Print "print-1" {Message Concat("You pressed: ", ch_)}}
+            {Print "print-1" {Message Concat("You pressed: ", ch_, "\n")}}
             {Timer "timer-1" {Delay 2000}}
           }
           {Inbox rest...}
@@ -93,7 +93,7 @@
       {Program
         {App {State st_ {Phase "PromptName"}} ui_}
         {Effects
-          {Pending {Print "prompt-name" {Message "Enter your name: "}}}
+          {Pending {Print "prompt-name" {Message "\nEnter your name: "}}}
           {Inbox rest...}
         }}
     )

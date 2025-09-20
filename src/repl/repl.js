@@ -55,6 +55,11 @@ export class SymaREPL {
         // Wait for parser to be ready
         await this.parserReady;
 
+        // Enable REPL mode on the platform (this creates the readline interface)
+        if (this.platform.setReplMode) {
+            this.platform.setReplMode(true);
+        }
+
         // Initialize effects processor
         this.effectsProcessor = createEffectsProcessor(
             this.platform,
@@ -76,8 +81,16 @@ export class SymaREPL {
             try {
                 const historyData = await this.platform.readFile(this.historyFile);
                 this.history = historyData.split('\n').filter(line => line.trim());
+
+                // Now that readline interface is created, populate its history
+                if (this.platform.rl && this.platform.rl.history) {
+                    // Add history in reverse order (most recent first for readline)
+                    for (let i = this.history.length - 1; i >= 0; i--) {
+                        this.platform.rl.history.unshift(this.history[i]);
+                    }
+                }
             } catch (error) {
-                this.platform.print(`Warning: Could not load history: ${error.message}`);
+                this.platform.print(`Warning: Could not load history: ${error.message}\n`);
             }
         }
 
@@ -85,9 +98,9 @@ export class SymaREPL {
         if (this.rcFile && await this.platform.fileExists(this.rcFile)) {
             try {
                 await this.loadFile(this.rcFile);
-                this.platform.print(`Loaded initialization file: ${this.rcFile}`);
+                this.platform.print(`Loaded initialization file: ${this.rcFile}\n`);
             } catch (error) {
-                this.platform.print(`Warning: Could not load RC file: ${error.message}`);
+                this.platform.print(`Warning: Could not load RC file: ${error.message}\n`);
             }
         }
     }
@@ -95,20 +108,21 @@ export class SymaREPL {
     async run() {
         await this.init();
 
-        this.platform.print("Syma REPL v1.0.0");
-        this.platform.print("Type :help for commands, :quit to exit");
-        this.platform.print("");
+        this.platform.print("Syma REPL v1.0.0\n");
+        this.platform.print("Type :help for commands, :quit to exit\n");
+        this.platform.print("\n");
 
         // Main REPL loop
         while (true) {
             try {
                 const prompt = this.multilineMode ? '... ' : 'syma> ';
+                // For REPL, pass prompt to readLine for proper display
                 const input = await this.platform.readLine(prompt);
 
                 // Handle EOF (Ctrl+D)
                 if (input === null || input === undefined) {
                     if (this.multilineMode) {
-                        this.platform.print("Multiline input cancelled");
+                        this.platform.print("Multiline input cancelled\n");
                         this.multilineMode = false;
                         this.multilineBuffer = [];
                         continue;
@@ -121,9 +135,9 @@ export class SymaREPL {
                 if (!shouldContinue) break;
 
             } catch (error) {
-                this.platform.print(`Error: ${error.message}`);
+                this.platform.print(`Error: ${error.message}\n`);
                 if (error.stack && this.trace) {
-                    this.platform.print(error.stack);
+                    this.platform.print(error.stack + "\n");
                 }
             }
         }
@@ -137,6 +151,11 @@ export class SymaREPL {
             this.history.push(input);
             if (this.history.length > this.maxHistory) {
                 this.history.shift();
+            }
+
+            // Also add to readline history
+            if (this.platform.addToReplHistory) {
+                this.platform.addToReplHistory(input);
             }
         }
 
@@ -206,11 +225,11 @@ export class SymaREPL {
 
                 // Show trace
                 if (trace.length > 0) {
-                    this.platform.print("\nTrace:");
+                    this.platform.print("\nTrace:\n");
                     for (const step of trace) {
-                        this.platform.print(`  Step ${step.i + 1}: Rule "${step.rule}" at path [${step.path.join(',')}]`);
+                        this.platform.print(`  Step ${step.i + 1}: Rule "${step.rule}" at path [${step.path.join(',')}]\n`);
                     }
-                    this.platform.print("");
+                    this.platform.print("\n");
                 }
             } else {
                 result = engine.normalize(expr, rules, this.maxSteps, false, foldPrims);
@@ -218,13 +237,13 @@ export class SymaREPL {
 
             // Display result
             const output = this.formatResult(result);
-            this.platform.print(`→ ${output}`);
+            this.platform.print(`→ ${output}\n`);
 
             // Store result in $it variable for future reference
             this.lastResult = result;
 
         } catch (error) {
-            this.platform.print(`Evaluation error: ${error.message}`);
+            this.platform.print(`Evaluation error: ${error.message}\n`);
         }
     }
 
@@ -290,11 +309,11 @@ export class SymaREPL {
             try {
                 await this.platform.writeFile(this.historyFile, this.history.join('\n'));
             } catch (error) {
-                this.platform.print(`Warning: Could not save history: ${error.message}`);
+                this.platform.print(`Warning: Could not save history: ${error.message}\n`);
             }
         }
 
-        this.platform.print("\nGoodbye!");
+        this.platform.print("\nGoodbye!\n");
 
         // Clean up effects processor
         if (this.effectsProcessor) {
@@ -349,9 +368,9 @@ export class SymaREPL {
             action,
             foldPrims,
             this.trace ? (action, trace) => {
-                this.platform.print("\nDispatch trace:");
+                this.platform.print("\nDispatch trace:\n");
                 for (const step of trace) {
-                    this.platform.print(`  Step ${step.i + 1}: Rule "${step.rule}"`);
+                    this.platform.print(`  Step ${step.i + 1}: Rule "${step.rule}"\n`);
                 }
             } : null
         );
