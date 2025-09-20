@@ -6,6 +6,7 @@
  ******************************************************************/
 
 import { K, Sym, Num, Str, Call } from '../ast-helpers.js';
+import { escapeStringForDisplay } from './parser.js';
 
 export class SymaTreeSitterParser {
     constructor() {
@@ -276,7 +277,7 @@ export class SymaTreeSitterParser {
         const isCall = n => n && n.k === K.Call;
 
         if (isNum(node)) return String(node.v);
-        if (isStr(node)) return `"${node.v.replace(/"/g, '\\"')}"`;
+        if (isStr(node)) return `"${escapeStringForDisplay(node.v)}"`;
         if (isSym(node)) return node.v;
 
         if (isCall(node)) {
@@ -353,7 +354,7 @@ export class SymaTreeSitterParser {
 
         // Atoms
         if (isNum(node)) return String(node.v);
-        if (isStr(node)) return `"${node.v.replace(/"/g, '\\"')}"`;
+        if (isStr(node)) return `"${escapeStringForDisplay(node.v)}"`;
         if (isSym(node)) return node.v;
 
         // Calls

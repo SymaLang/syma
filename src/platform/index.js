@@ -33,6 +33,10 @@ export class Platform {
         throw new Error("print() must be implemented by platform adapter");
     }
 
+    printWithNewline(message) {
+        this.print(message + '\n');
+    }
+
     async readLine() {
         throw new Error("readLine() must be implemented by platform adapter");
     }

@@ -10,6 +10,7 @@ import { CommandProcessor } from './commands.js';
 import { createParserSync, createParser } from '../core/parser-factory.js';
 import { getPlatform } from '../platform/index.js';
 import { createEffectsProcessor, freshId } from '../effects/processor.js';
+import { isCall, isSym } from '../ast-helpers.js';
 
 export class SymaREPL {
     constructor(platform, options = {}) {
@@ -82,12 +83,21 @@ export class SymaREPL {
                 const historyData = await this.platform.readFile(this.historyFile);
                 this.history = historyData.split('\n').filter(line => line.trim());
 
+                // Trim history to max size if needed
+                if (this.history.length > this.maxHistory) {
+                    // Keep only the most recent commands
+                    this.history = this.history.slice(-this.maxHistory);
+                    // Save the trimmed history back to file
+                    await this.platform.writeFile(this.historyFile, this.history.join('\n'));
+                }
+
                 // Now that readline interface is created, populate its history
                 if (this.platform.rl && this.platform.rl.history) {
-                    // Add history in reverse order (most recent first for readline)
-                    for (let i = this.history.length - 1; i >= 0; i--) {
-                        this.platform.rl.history.unshift(this.history[i]);
-                    }
+                    // Readline expects most recent at index 0, but our file has oldest first
+                    // So we need to reverse the order when adding to readline
+                    this.history.slice().reverse().forEach(cmd => {
+                        this.platform.rl.history.push(cmd);
+                    });
                 }
             } catch (error) {
                 this.platform.print(`Warning: Could not load history: ${error.message}\n`);
@@ -146,17 +156,33 @@ export class SymaREPL {
     }
 
     async processInput(input) {
-        // Add to history
-        if (input.trim()) {
+        const trimmed = input.trim();
+
+        // Don't save quit commands to history
+        const isQuitCommand = trimmed === ':q' || trimmed === ':quit' || trimmed === ':exit';
+
+        // Add to history (except quit commands)
+        if (trimmed && !isQuitCommand) {
             this.history.push(input);
-            if (this.history.length > this.maxHistory) {
+
+            // Trim history to max size
+            while (this.history.length > this.maxHistory) {
                 this.history.shift();
             }
 
-            // Also add to readline history
-            if (this.platform.addToReplHistory) {
-                this.platform.addToReplHistory(input);
+            // Save trimmed history immediately after each command
+            if (this.historyFile) {
+                try {
+                    await this.platform.writeFile(this.historyFile, this.history.join('\n'));
+                } catch (error) {
+                    // Silently ignore write errors to not disrupt REPL flow
+                }
             }
+        }
+
+        // Still add quit commands to readline history for the current session
+        if (trimmed && this.platform.addToReplHistory) {
+            this.platform.addToReplHistory(input);
         }
 
         // Handle multiline mode
@@ -242,8 +268,40 @@ export class SymaREPL {
             // Store result in $it variable for future reference
             this.lastResult = result;
 
+            // Wait for any pending effects to complete
+            await this.waitForEffects();
+
         } catch (error) {
             this.platform.print(`Evaluation error: ${error.message}\n`);
+        }
+    }
+
+    async waitForEffects(maxWaitMs = 30000) {
+        // Check if there are pending effects or active I/O
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < maxWaitMs) {
+            const program = engine.getProgram(this.universe);
+            const effects = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === 'Effects');
+
+            let hasPending = false;
+            if (effects && effects.a[0]) {
+                const pending = effects.a[0];
+                if (isCall(pending) && pending.a.length > 0) {
+                    hasPending = true;
+                }
+            }
+
+            // Check if effects processor has active I/O or timers
+            const hasActiveIO = this.effectsProcessor?.hasActiveIO?.() || false;
+            const hasActiveTimers = this.effectsProcessor?.hasActiveTimers?.() || false;
+
+            if (!hasPending && !hasActiveIO && !hasActiveTimers) {
+                break;
+            }
+
+            // Wait a bit before checking again
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
     }
 
@@ -272,6 +330,16 @@ export class SymaREPL {
             // Apply RuleRules to transform the Universe permanently
             this.universe = engine.applyRuleRules(this.universe);
         }
+
+        // Process any initial effects (like EffQueue, Flow, etc.)
+        // First normalize the program to trigger any effect-generating rules
+        const rules = engine.extractRules(this.universe);
+        const program = engine.getProgram(this.universe);
+        const normalized = engine.normalize(program, rules, this.maxSteps, false, foldPrims);
+        this.universe = engine.setProgram(this.universe, normalized);
+
+        // Now wait for effects to complete
+        await this.waitForEffects();
     }
 
     async saveFile(path, format = 'auto') {
@@ -359,7 +427,7 @@ export class SymaREPL {
         this.universe = engine.enrichProgramWithEffects(engine.createEmptyUniverse());
     }
 
-    applyAction(action) {
+    async applyAction(action) {
         this.pushUndo();
         const rules = this.getRules();
         this.universe = engine.dispatch(
@@ -374,6 +442,9 @@ export class SymaREPL {
                 }
             } : null
         );
+
+        // Wait for any effects generated by the action
+        await this.waitForEffects();
     }
 
     // Export freshId for command use

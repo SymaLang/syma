@@ -105,8 +105,8 @@ export class NodePlatform extends Platform {
         process.stdout.write(message);
     }
 
-    async readLine(internalPrompt = '') {
-        // In REPL mode, keep the interface alive for history
+    async readLine(internalPrompt = '', skipHistory = false) {
+        // In REPL mode, keep the interface alive
         if (this.replMode) {
             // Create interface if it doesn't exist
             if (!this.rl) {
@@ -118,8 +118,17 @@ export class NodePlatform extends Platform {
                 });
             }
 
+            // Clear any existing prompt first
+            if (this.rl._prompt && !internalPrompt) {
+                this.rl.write(null, { ctrl: true, name: 'u' }); // Clear current line
+            }
+
             return new Promise(resolve => {
                 this.rl.question(internalPrompt, answer => {
+                    // Remove the answer from history if skipHistory is true
+                    if (skipHistory && this.rl.history && this.rl.history[0] === answer) {
+                        this.rl.history.shift();
+                    }
                     resolve(answer);
                 });
             });

@@ -8,6 +8,20 @@
 
 import { K, Sym, Num, Str, Call } from '../ast-helpers.js';
 
+/**
+ * Escape a string value for display - shows escape sequences literally
+ * rather than interpreting them. Exported for use by projectors.
+ */
+export function escapeStringForDisplay(str) {
+    return str
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/"/g, '\\"')     // Escape quotes
+        .replace(/\n/g, '\\n')    // Show newlines as \n
+        .replace(/\r/g, '\\r')    // Show carriage returns as \r
+        .replace(/\t/g, '\\t')    // Show tabs as \t
+        .replace(/\f/g, '\\f')    // Show form feeds as \f
+}
+
 export class SymaParser {
     constructor() {
         this.sourceText = '';
@@ -413,7 +427,7 @@ export class SymaParser {
         const isCall = n => n && n.k === K.Call;
 
         if (isNum(node)) return String(node.v);
-        if (isStr(node)) return `"${node.v.replace(/"/g, '\\"')}"`;
+        if (isStr(node)) return `"${escapeStringForDisplay(node.v)}"`;
         if (isSym(node)) return node.v;
 
         if (isCall(node)) {
@@ -490,7 +504,7 @@ export class SymaParser {
 
         // Atoms
         if (isNum(node)) return String(node.v);
-        if (isStr(node)) return `"${node.v.replace(/"/g, '\\"')}"`;
+        if (isStr(node)) return `"${escapeStringForDisplay(node.v)}"`;
         if (isSym(node)) return node.v;
 
         // Calls

@@ -24,6 +24,7 @@ export class CommandProcessor {
             'import': this.import.bind(this),
             'clear': this.clear.bind(this),
             'universe': this.showUniverse.bind(this),
+            'u': this.showUniverse.bind(this),
             'rules': this.listRules.bind(this),
             'rule': this.showOrEditRule.bind(this),
             'apply': this.applyRule.bind(this),
@@ -36,7 +37,8 @@ export class CommandProcessor {
             'undo': this.undo.bind(this),
             'history': this.showHistory.bind(this),
             'set': this.setOption.bind(this),
-            'norm': this.normalizeUniverse.bind(this)
+            'norm': this.normalizeUniverse.bind(this),
+            'program': this.showProgram.bind(this),
         };
     }
 
@@ -48,7 +50,7 @@ export class CommandProcessor {
         if (command in this.commands) {
             return await this.commands[command](args, input.slice(command.length + 2));
         } else {
-            this.repl.platform.print(`Unknown command: ${command}. Type :help for available commands.`);
+            this.repl.platform.printWithNewline(`Unknown command: ${command}. Type :help for available commands.\n`);
             return true;
         }
     }
@@ -56,7 +58,7 @@ export class CommandProcessor {
     // Command implementations
 
     async help(args) {
-        this.repl.platform.print(`
+        this.repl.platform.printWithNewline(`
 Syma REPL Commands:
 
 Expression evaluation:
@@ -76,8 +78,9 @@ File operations:
 
 Universe management:
   :clear                    Reset universe to empty state
-  :universe                 Show current universe (pretty printed)
+  :universe, :u             Show current universe (pretty printed)
   :undo                     Undo last modification
+  :program                  Show current Program section
 
 Rule management:
   :rules                    List all rules
@@ -113,15 +116,15 @@ History:
     async save(args, rawArgs) {
         const filename = args[0];
         if (!filename) {
-            this.repl.platform.print("Usage: :save <filename>");
+            this.repl.platform.printWithNewline("Usage: :save <filename>\n");
             return true;
         }
 
         try {
             await this.repl.saveFile(filename);
-            this.repl.platform.print(`Universe saved to ${filename}`);
+            this.repl.platform.printWithNewline(`Universe saved to ${filename}`);
         } catch (error) {
-            this.repl.platform.print(`Failed to save: ${error.message}`);
+            this.repl.platform.printWithNewline(`Failed to save: ${error.message}`);
         }
         return true;
     }
@@ -129,26 +132,26 @@ History:
     async load(args, rawArgs) {
         const filename = args[0];
         if (!filename) {
-            this.repl.platform.print("Usage: :load <filename>");
+            this.repl.platform.printWithNewline("Usage: :load <filename>");
             return true;
         }
 
         try {
             await this.repl.loadFile(filename);
-            this.repl.platform.print(`Universe loaded from ${filename}`);
+            this.repl.platform.printWithNewline(`Universe loaded from ${filename}`);
 
             // Give effects processor a moment to process any pending effects
             await new Promise(resolve => this.repl.platform.setTimeout(resolve, 50));
         } catch (error) {
-            this.repl.platform.print(`Failed to load: ${error.message}`);
+            this.repl.platform.printWithNewline(`Failed to load: ${error.message}`);
         }
         return true;
     }
 
     async bundle(args, rawArgs) {
         if (args.length === 0) {
-            this.repl.platform.print("Usage: :bundle <module-file>");
-            this.repl.platform.print("Example: :bundle src/modules/app-main.syma");
+            this.repl.platform.printWithNewline("Usage: :bundle <module-file>");
+            this.repl.platform.printWithNewline("Example: :bundle src/modules/app-main.syma");
             return true;
         }
 
@@ -171,7 +174,7 @@ History:
             }
             const moduleName = nameNode.v;
 
-            this.repl.platform.print(`Bundling module ${moduleName}...`);
+            this.repl.platform.printWithNewline(`Bundling module ${moduleName}...\n`);
 
             // Find the directory containing the module
             const lastSlash = filename.lastIndexOf('/');
@@ -205,12 +208,15 @@ History:
             // Apply RuleRules to transform the Universe permanently
             this.repl.universe = engine.applyRuleRules(this.repl.universe);
 
-            this.repl.platform.print(`Module ${moduleName} bundled and loaded successfully`);
-            this.repl.platform.print(`Found ${allFiles.length} module files`);
+            this.repl.platform.printWithNewline(`Module ${moduleName} bundled and loaded successfully\n`);
+            this.repl.platform.printWithNewline(`Found ${allFiles.length} module files\n`);
+
+            // Don't automatically process effects on bundle - let :norm do that
+            // This gives user control over when to run the program
         } catch (error) {
-            this.repl.platform.print(`Failed to bundle: ${error.message}`);
+            this.repl.platform.printWithNewline(`Failed to bundle: ${error.message}\n`);
             if (error.stderr) {
-                this.repl.platform.print(`Compiler error: ${error.stderr}`);
+                this.repl.platform.printWithNewline(`Compiler error: ${error.stderr}\n`);
             }
         }
         return true;
@@ -221,11 +227,11 @@ History:
         const filename = args[1];
 
         if (!moduleName) {
-            this.repl.platform.print("Usage: :export <module> [filename]");
+            this.repl.platform.printWithNewline("Usage: :export <module> [filename]");
             return true;
         }
 
-        this.repl.platform.print("Module export not yet implemented");
+        this.repl.platform.printWithNewline("Module export not yet implemented");
         return true;
     }
 
@@ -235,8 +241,8 @@ History:
         // All imports are effectively added to the global namespace
 
         if (!filename) {
-            this.repl.platform.print("Usage: :import <filename>");
-            this.repl.platform.print("Note: Imports a module and its dependencies into the current universe");
+            this.repl.platform.printWithNewline("Usage: :import <filename>");
+            this.repl.platform.printWithNewline("Note: Imports a module and its dependencies into the current universe");
             return true;
         }
 
@@ -258,7 +264,7 @@ History:
             }
             const moduleName = nameNode.v;
 
-            this.repl.platform.print(`Importing module ${moduleName}...`);
+            this.repl.platform.printWithNewline(`Importing module ${moduleName}...`);
 
             // Run the compiler in library mode (no Program section required)
             // The compiler will handle dependency resolution automatically
@@ -274,16 +280,16 @@ History:
             // Apply RuleRules to transform the Universe permanently after merge
             this.repl.universe = engine.applyRuleRules(this.repl.universe);
 
-            this.repl.platform.print(`Module ${moduleName} imported successfully`);
+            this.repl.platform.printWithNewline(`Module ${moduleName} imported successfully`);
 
             // Show what was imported
             const importedRules = engine.extractRules(compiledUniverse);
-            this.repl.platform.print(`Added ${importedRules.length} rules from ${moduleName} and its dependencies`);
+            this.repl.platform.printWithNewline(`Added ${importedRules.length} rules from ${moduleName} and its dependencies`);
 
         } catch (error) {
-            this.repl.platform.print(`Failed to import: ${error.message}`);
+            this.repl.platform.printWithNewline(`Failed to import: ${error.message}`);
             if (error.stderr) {
-                this.repl.platform.print(`Compiler error: ${error.stderr}`);
+                this.repl.platform.printWithNewline(`Compiler error: ${error.stderr}`);
             }
         }
         return true;
@@ -298,7 +304,7 @@ History:
         const importedRules = engine.findSection(importedUniverse, "Rules");
 
         if (!importedRules || !isCall(importedRules) || importedRules.a.length === 0) {
-            this.repl.platform.print(`Warning: No rules found in module ${moduleName}`);
+            this.repl.platform.printWithNewline(`Warning: No rules found in module ${moduleName}`);
             return;
         }
 
@@ -335,7 +341,7 @@ History:
                 if (isStr(nameArg)) {
                     const ruleName = nameArg.v;
                     if (existingRuleNames.has(ruleName)) {
-                        this.repl.platform.print(`  Skipping rule "${ruleName}" (already exists)`);
+                        this.repl.platform.printWithNewline(`  Skipping rule "${ruleName}" (already exists)`);
                         skippedCount++;
                     } else {
                         currentRules.a.push(rule);
@@ -347,10 +353,10 @@ History:
         }
 
         if (addedCount > 0) {
-            this.repl.platform.print(`  Added ${addedCount} new rules`);
+            this.repl.platform.printWithNewline(`  Added ${addedCount} new rules`);
         }
         if (skippedCount > 0) {
-            this.repl.platform.print(`  Skipped ${skippedCount} existing rules`);
+            this.repl.platform.printWithNewline(`  Skipped ${skippedCount} existing rules`);
         }
 
         // Also merge RuleRules if present
@@ -361,7 +367,7 @@ History:
             if (!currentRuleRules) {
                 // Just add the entire RuleRules section if we don't have one
                 this.repl.universe.a.push(importedRuleRules);
-                this.repl.platform.print(`  Added ${importedRuleRules.a.length} meta-rules`);
+                this.repl.platform.printWithNewline(`  Added ${importedRuleRules.a.length} meta-rules`);
             } else {
                 // Merge meta-rules
                 let metaAdded = 0;
@@ -371,7 +377,7 @@ History:
                     metaAdded++;
                 }
                 if (metaAdded > 0) {
-                    this.repl.platform.print(`  Added ${metaAdded} meta-rules`);
+                    this.repl.platform.printWithNewline(`  Added ${metaAdded} meta-rules`);
                 }
             }
         }
@@ -379,25 +385,36 @@ History:
 
     async clear(args) {
         this.repl.clearUniverse();
-        this.repl.platform.print("Universe cleared");
+        this.repl.platform.printWithNewline("Universe cleared");
         return true;
     }
 
     async showUniverse(args) {
         const output = this.repl.formatResult(this.repl.universe);
-        this.repl.platform.print(output);
+        this.repl.platform.printWithNewline(output);
+        return true;
+    }
+
+    async showProgram(args) {
+        const program = engine.getProgram(this.repl.universe);
+        if (!program) {
+            this.repl.platform.printWithNewline("No Program section defined in the universe");
+            return true;
+        }
+        const output = this.repl.formatResult(program);
+        this.repl.platform.printWithNewline(output);
         return true;
     }
 
     async listRules(args) {
         const rules = this.repl.getRules();
         if (rules.length === 0) {
-            this.repl.platform.print("No rules defined");
+            this.repl.platform.printWithNewline("No rules defined");
         } else {
-            this.repl.platform.print(`Rules (${rules.length}):`);
+            this.repl.platform.printWithNewline(`Rules (${rules.length}):`);
             for (const rule of rules) {
                 const priority = rule.prio !== 0 ? ` [${rule.prio}]` : '';
-                this.repl.platform.print(`  ${rule.name}${priority}`);
+                this.repl.platform.printWithNewline(`  ${rule.name}${priority}`);
             }
         }
         return true;
@@ -406,7 +423,7 @@ History:
     async showOrEditRule(args, rawArgs) {
         if (args.length === 0) {
             // Enter multiline rule definition mode
-            this.repl.platform.print("Enter rule definition (end with '.' on a new line):");
+            this.repl.platform.printWithNewline("Enter rule definition (end with '.' on a new line):");
             this.repl.multilineMode = true;
             this.repl.multilineBuffer = [];
 
@@ -416,9 +433,9 @@ History:
                 try {
                     const ruleAst = this.repl.parser.parseString(input);
                     this.repl.addRule(ruleAst);
-                    this.repl.platform.print("Rule added");
+                    this.repl.platform.printWithNewline("Rule added");
                 } catch (error) {
-                    this.repl.platform.print(`Failed to parse rule: ${error.message}`);
+                    this.repl.platform.printWithNewline(`Failed to parse rule: ${error.message}`);
                 }
                 this.repl.processCompleteInput = originalProcess;
                 return true;
@@ -435,9 +452,9 @@ History:
                 const ruleText = rawArgs.slice(name.length).trim();
                 const ruleAst = this.repl.parser.parseInlineRule(name, ruleText);
                 this.repl.addRule(ruleAst);
-                this.repl.platform.print(`Rule "${name}" added`);
+                this.repl.platform.printWithNewline(`Rule "${name}" added`);
             } catch (error) {
-                this.repl.platform.print(`Failed to parse rule: ${error.message}`);
+                this.repl.platform.printWithNewline(`Failed to parse rule: ${error.message}`);
             }
             return true;
         }
@@ -458,16 +475,16 @@ History:
                 this.repl.parser.prettyPrint(rule.guard, 1) :
                 this.repl.parser.nodeToString(rule.guard)}` : '';
             const output = `R("${rule.name}",\n  ${lhsStr},\n  ${rhsStr}${guardStr}${prioStr})`;
-            this.repl.platform.print(output);
+            this.repl.platform.printWithNewline(output);
         } else {
-            this.repl.platform.print(`Rule "${name}" not found`);
+            this.repl.platform.printWithNewline(`Rule "${name}" not found`);
         }
         return true;
     }
 
     async applyRule(args, rawArgs) {
         if (args.length < 2) {
-            this.repl.platform.print("Usage: :apply <rule-name> <expression>");
+            this.repl.platform.printWithNewline("Usage: :apply <rule-name> <expression>");
             return true;
         }
 
@@ -480,7 +497,7 @@ History:
             const rule = rules.find(r => r.name === ruleName);
 
             if (!rule) {
-                this.repl.platform.print(`Rule "${ruleName}" not found`);
+                this.repl.platform.printWithNewline(`Rule "${ruleName}" not found`);
                 return true;
             }
 
@@ -489,19 +506,19 @@ History:
             if (env) {
                 const result = engine.subst(rule.rhs, env);
                 const output = this.repl.formatResult(result);
-                this.repl.platform.print(`→ ${output}`);
+                this.repl.platform.printWithNewline(`→ ${output}`);
             } else {
-                this.repl.platform.print(`Rule "${ruleName}" does not match expression`);
+                this.repl.platform.printWithNewline(`Rule "${ruleName}" does not match expression`);
             }
         } catch (error) {
-            this.repl.platform.print(`Error: ${error.message}`);
+            this.repl.platform.printWithNewline(`Error: ${error.message}`);
         }
         return true;
     }
 
     async smartExecRule(args, rawArgs) {
         if (args.length < 2) {
-            this.repl.platform.print("Usage: :exec <rule-name> <expression>");
+            this.repl.platform.printWithNewline("Usage: :exec <rule-name> <expression>");
             return true;
         }
 
@@ -514,7 +531,7 @@ History:
             const rule = rules.find(r => r.name === ruleName);
 
             if (!rule) {
-                this.repl.platform.print(`Rule "${ruleName}" not found`);
+                this.repl.platform.printWithNewline(`Rule "${ruleName}" not found`);
                 return true;
             }
 
@@ -522,22 +539,22 @@ History:
             const wrappedExpr = this.wrapExpressionForRule(rule.lhs, expr);
 
             if (!wrappedExpr) {
-                this.repl.platform.print(`Cannot adapt expression to match rule pattern`);
+                this.repl.platform.printWithNewline(`Cannot adapt expression to match rule pattern`);
                 return true;
             }
 
             // Show what we're doing
             const patternStr = this.repl.formatResult(rule.lhs);
             const wrappedStr = this.repl.formatResult(wrappedExpr);
-            this.repl.platform.print(`Wrapping to match pattern: ${patternStr}`);
-            this.repl.platform.print(`Wrapped expression: ${wrappedStr}`);
+            this.repl.platform.printWithNewline(`Wrapping to match pattern: ${patternStr}`);
+            this.repl.platform.printWithNewline(`Wrapped expression: ${wrappedStr}`);
 
             // Now just normalize the wrapped expression normally
             const normalized = engine.normalize(wrappedExpr, rules, this.repl.maxSteps, false, foldPrims);
             const output = this.repl.formatResult(normalized);
-            this.repl.platform.print(`→ ${output}`);
+            this.repl.platform.printWithNewline(`→ ${output}`);
         } catch (error) {
-            this.repl.platform.print(`Error: ${error.message}`);
+            this.repl.platform.printWithNewline(`Error: ${error.message}`);
         }
         return true;
     }
@@ -572,7 +589,7 @@ History:
         if (args.length === 0) {
             // Toggle trace mode
             this.repl.trace = !this.repl.trace;
-            this.repl.platform.print(`Trace mode: ${this.repl.trace ? 'on' : 'off'}`);
+            this.repl.platform.printWithNewline(`Trace mode: ${this.repl.trace ? 'on' : 'off'}`);
         } else {
             // Evaluate expression with trace
             const exprText = args.join(' ');
@@ -586,7 +603,7 @@ History:
 
     async explainStuck(args, rawArgs) {
         if (args.length === 0) {
-            this.repl.platform.print("Usage: :why <expression>");
+            this.repl.platform.printWithNewline("Usage: :why <expression>");
             return true;
         }
 
@@ -595,7 +612,7 @@ History:
             const expr = this.repl.parser.parseString(exprText);
             const rules = this.repl.getRules();
 
-            this.repl.platform.print("Checking why expression is stuck...\n");
+            this.repl.platform.printWithNewline("Checking why expression is stuck...\n");
 
             let foundCandidates = false;
             for (const rule of rules) {
@@ -603,21 +620,21 @@ History:
                 const analysis = this.analyzeRuleMatch(rule, expr);
                 if (analysis.partial) {
                     foundCandidates = true;
-                    this.repl.platform.print(`Rule "${rule.name}" partially matches:`);
+                    this.repl.platform.printWithNewline(`Rule "${rule.name}" partially matches:`);
                     const pattern = this.repl.prettyPrint ?
                         this.repl.parser.prettyPrint(rule.lhs, 1) :
                         this.repl.parser.nodeToString(rule.lhs);
-                    this.repl.platform.print(`  Pattern:\n    ${pattern}`);
-                    this.repl.platform.print(`  Issue: ${analysis.reason}`);
-                    this.repl.platform.print("");
+                    this.repl.platform.printWithNewline(`  Pattern:\n    ${pattern}`);
+                    this.repl.platform.printWithNewline(`  Issue: ${analysis.reason}`);
+                    this.repl.platform.printWithNewline("");
                 }
             }
 
             if (!foundCandidates) {
-                this.repl.platform.print("No rules come close to matching this expression");
+                this.repl.platform.printWithNewline("No rules come close to matching this expression");
             }
         } catch (error) {
-            this.repl.platform.print(`Error: ${error.message}`);
+            this.repl.platform.printWithNewline(`Error: ${error.message}`);
         }
         return true;
     }
@@ -647,7 +664,7 @@ History:
 
     async applyToState(args, rawArgs) {
         if (args.length === 0) {
-            this.repl.platform.print("Usage: :apply <action>");
+            this.repl.platform.printWithNewline("Usage: :apply <action>");
             return true;
         }
 
@@ -676,28 +693,28 @@ History:
                     if (isCall(lhs) && isSym(lhs.h) && lhs.h.v === 'Apply') {
                         if (lhs.a.length > 0 && isSym(lhs.a[0])) {
                             qualifiedAction = lhs.a[0];
-                            this.repl.platform.print(`Using qualified action: ${lhs.a[0].v}`);
+                            this.repl.platform.printWithNewline(`Using qualified action: ${lhs.a[0].v}`);
                         }
                     }
                 }
             }
 
-            this.repl.applyAction(qualifiedAction);
+            await this.repl.applyAction(qualifiedAction);
 
             // Show the updated program state
             const program = engine.getProgram(this.repl.universe);
             const output = this.repl.formatResult(program);
-            this.repl.platform.print('Program updated:');
-            this.repl.platform.print(output);
+            this.repl.platform.printWithNewline('Program updated:');
+            this.repl.platform.printWithNewline(output);
         } catch (error) {
-            this.repl.platform.print(`Error: ${error.message}`);
+            this.repl.platform.printWithNewline(`Error: ${error.message}`);
         }
         return true;
     }
 
     async dropRule(args) {
         if (args.length === 0) {
-            this.repl.platform.print("Usage: :drop <rule-name>");
+            this.repl.platform.printWithNewline("Usage: :drop <rule-name>");
             return true;
         }
 
@@ -707,16 +724,16 @@ History:
 
         if (exists) {
             this.repl.removeRule(name);
-            this.repl.platform.print(`Rule "${name}" removed`);
+            this.repl.platform.printWithNewline(`Rule "${name}" removed`);
         } else {
-            this.repl.platform.print(`Rule "${name}" not found`);
+            this.repl.platform.printWithNewline(`Rule "${name}" not found`);
         }
         return true;
     }
 
     async editRule(args, rawArgs) {
         if (args.length < 1) {
-            this.repl.platform.print("Usage: :edit <name> <pattern> → <replacement>");
+            this.repl.platform.printWithNewline("Usage: :edit <name> <pattern> → <replacement>");
             return true;
         }
 
@@ -724,7 +741,7 @@ History:
         const ruleText = rawArgs.slice(name.length).trim();
 
         if (!ruleText.includes('→') && !ruleText.includes('->')) {
-            this.repl.platform.print("Rule must contain → or ->");
+            this.repl.platform.printWithNewline("Rule must contain → or ->");
             return true;
         }
 
@@ -735,9 +752,9 @@ History:
             // Add new rule
             const ruleAst = this.repl.parser.parseInlineRule(name, ruleText);
             this.repl.addRule(ruleAst);
-            this.repl.platform.print(`Rule "${name}" updated`);
+            this.repl.platform.printWithNewline(`Rule "${name}" updated`);
         } catch (error) {
-            this.repl.platform.print(`Failed to parse rule: ${error.message}`);
+            this.repl.platform.printWithNewline(`Failed to parse rule: ${error.message}`);
         }
         return true;
     }
@@ -745,9 +762,9 @@ History:
     async undo(args) {
         try {
             this.repl.undo();
-            this.repl.platform.print("Last modification undone");
+            this.repl.platform.printWithNewline("Last modification undone");
         } catch (error) {
-            this.repl.platform.print(error.message);
+            this.repl.platform.printWithNewline(error.message);
         }
         return true;
     }
@@ -758,11 +775,11 @@ History:
         const slice = this.repl.history.slice(start);
 
         if (slice.length === 0) {
-            this.repl.platform.print("No history");
+            this.repl.platform.printWithNewline("No history");
         } else {
-            this.repl.platform.print(`History (last ${slice.length} entries):`);
+            this.repl.platform.printWithNewline(`History (last ${slice.length} entries):`);
             slice.forEach((entry, i) => {
-                this.repl.platform.print(`  ${start + i + 1}: ${entry}`);
+                this.repl.platform.printWithNewline(`  ${start + i + 1}: ${entry}`);
             });
         }
         return true;
@@ -770,11 +787,11 @@ History:
 
     async setOption(args) {
         if (args.length < 2) {
-            this.repl.platform.print("Usage: :set <option> <value>");
-            this.repl.platform.print("Available options:");
-            this.repl.platform.print("  trace on/off       - Enable/disable trace mode");
-            this.repl.platform.print("  maxsteps <n>       - Maximum normalization steps");
-            this.repl.platform.print("  prettyprint on/off - Enable/disable pretty printing");
+            this.repl.platform.printWithNewline("Usage: :set <option> <value>");
+            this.repl.platform.printWithNewline("Available options:");
+            this.repl.platform.printWithNewline("  trace on/off       - Enable/disable trace mode");
+            this.repl.platform.printWithNewline("  maxsteps <n>       - Maximum normalization steps");
+            this.repl.platform.printWithNewline("  prettyprint on/off - Enable/disable pretty printing");
             return true;
         }
 
@@ -784,27 +801,27 @@ History:
         switch (option) {
             case 'trace':
                 this.repl.trace = value === 'on' || value === 'true';
-                this.repl.platform.print(`Trace mode: ${this.repl.trace ? 'on' : 'off'}`);
+                this.repl.platform.printWithNewline(`Trace mode: ${this.repl.trace ? 'on' : 'off'}`);
                 break;
 
             case 'maxsteps':
                 const steps = parseInt(value);
                 if (isNaN(steps) || steps <= 0) {
-                    this.repl.platform.print("maxsteps must be a positive integer");
+                    this.repl.platform.printWithNewline("maxsteps must be a positive integer");
                 } else {
                     this.repl.maxSteps = steps;
-                    this.repl.platform.print(`Max steps set to ${steps}`);
+                    this.repl.platform.printWithNewline(`Max steps set to ${steps}`);
                 }
                 break;
 
             case 'prettyprint':
             case 'pretty':
                 this.repl.prettyPrint = value === 'on' || value === 'true';
-                this.repl.platform.print(`Pretty print: ${this.repl.prettyPrint ? 'on' : 'off'}`);
+                this.repl.platform.printWithNewline(`Pretty print: ${this.repl.prettyPrint ? 'on' : 'off'}`);
                 break;
 
             default:
-                this.repl.platform.print(`Unknown option: ${option}`);
+                this.repl.platform.printWithNewline(`Unknown option: ${option}`);
         }
         return true;
     }
@@ -818,7 +835,7 @@ History:
             const program = engine.findSection(this.repl.universe, "Program");
 
             if (!program) {
-                this.repl.platform.print("No Program section to normalize");
+                this.repl.platform.printWithNewline("No Program section to normalize");
                 return true;
             }
 
@@ -826,12 +843,12 @@ History:
             const rules = this.repl.getRules();
 
             if (rules.length === 0) {
-                this.repl.platform.print("No rules to apply");
+                this.repl.platform.printWithNewline("No rules to apply");
                 return true;
             }
 
             // Normalize the Program
-            this.repl.platform.print("Normalizing universe...");
+            this.repl.platform.printWithNewline("Normalizing universe...\n");
 
             const normalized = engine.normalize(program, rules, this.repl.maxSteps, false, foldPrims);
 
@@ -849,16 +866,19 @@ History:
                 }
             }
 
-            this.repl.platform.print("Universe normalized");
+            this.repl.platform.printWithNewline("Universe normalized\n");
 
             // Optionally show the normalized program
             if (args.length > 0 && args[0] === 'show') {
                 const output = this.repl.formatResult(normalized);
-                this.repl.platform.print("Normalized Program:");
-                this.repl.platform.print(output);
+                this.repl.platform.printWithNewline("Normalized Program:\n");
+                this.repl.platform.printWithNewline(output);
             }
+
+            // Wait for any effects generated by normalization
+            await this.repl.waitForEffects();
         } catch (error) {
-            this.repl.platform.print(`Normalization failed: ${error.message}`);
+            this.repl.platform.printWithNewline(`Normalization failed: ${error.message}\n`);
         }
         return true;
     }

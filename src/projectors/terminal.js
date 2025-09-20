@@ -7,6 +7,7 @@
 import { BaseProjector } from './base.js';
 import { K, isSym, isNum, isStr, isCall } from '../ast-helpers.js';
 import * as engine from '../core/engine.js';
+import { escapeStringForDisplay } from '../core/parser.js';
 
 export class TerminalProjector extends BaseProjector {
     constructor() {
@@ -125,8 +126,8 @@ export class TerminalProjector extends BaseProjector {
     }
 
     formatStr(value) {
-        const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        const str = `"${escaped}"`;
+        // Use the shared escape function for consistency
+        const str = `"${escapeStringForDisplay(value)}"`;
         if (this.colorize) {
             return `\x1b[32m${str}\x1b[0m`; // Green
         }

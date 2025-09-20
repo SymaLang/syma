@@ -13,9 +13,19 @@
       {PlumbEnd {EffQueue {Emit {PrintEff m_}} rest...}}
     )
     R(
+      "EnqueueEffect/ReadLine",
+      {Plumb {EffQueue {ReadLine} rest...}},
+      {PlumbEnd {EffQueue {Emit {ReadLineEff}} rest...}}
+    )
+    R(
       "PrintEff/New",
       {PrintEff m_},
       {Print FreshId() {Message m_}}
+    )
+    R(
+      "ReadLineEff/New",
+      {ReadLineEff},
+      {ReadLine FreshId()}
     )
     R(
       "PrintComplete",

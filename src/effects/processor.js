@@ -631,7 +631,8 @@ export class EffectsProcessor {
         this.activeIOOperations.add(ioId);
 
         try {
-            const input = await this.platform.readLine();
+            // Pass skipHistory=true to prevent effect input from being saved to REPL history
+            const input = await this.platform.readLine('', true);
             this.activeIOOperations.delete(ioId);
             return Call(
                 Sym("ReadLineComplete"),

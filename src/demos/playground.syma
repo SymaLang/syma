@@ -3,20 +3,29 @@
 
   {Import Core/Plumb as CP open}
   {Import Core/Effect as CE open}
+  {Import Core/KV as KV open}
 
   {Program
     App(
       State(
-        {Input}
+        Vars(
+          {KV Input Nil},
+          {KV Name  Nil},
+          {KV Age   Nil}
+        )
       )
     )
     {Flow
-      {Emit {ReadLine "Poop"}}
-      ;op2
-    }
-    {EffQueue
       {Print "Enter your name: \n"}
+      {ReadLine}
+      {StoreName}
+      // {PrintName}
+      // {Print "Enter your age: \n"}
+      // {ReadLine}
+      // {StoreAge}
+      // {PrintAge}
     }
+    {EffQueue}
     {Effects
       {Pending}
       {Inbox}
@@ -24,34 +33,43 @@
   }
   {Rules
     R(
-      "ProcessFlow/Many",
-      {Plumb {Flow a_ rest...} {EffQueue cmds...}},
-      {PlumbEnd {Flow rest...} {EffQueue cmds... a_}}
+      "ProcessFlow/StoreName",
+      {Plumb {App{State vars_}} {Flow {StoreName} flow...}},
+      {PlumbEnd {App{State Put(Vars, Name, 
+        Get(Vars, Input, vars_)
+        , vars_)}} {Flow flow...}}
     )
-    R(
-      "ProcessFlow/One",
-      {Plumb {Flow a_} {EffQueue cmds...}},
-      {PlumbEnd {Flow} {EffQueue cmds... a_}}
+    // R(
+    //   "ProcessFlow/PrintName",
+    //   {Plumb {App{State a... {Name name_} b...}} {Flow {PrintName} flow...} },
+    //   {PlumbEnd {App{State a... {Name name_} b...}} {Flow {Print Concat("Hello ", name_, "!\n")} flow...} }
+    // )
+    // R(
+    //   "ProcessFlow/StoreAge",
+    //   {Plumb {App{State {Input age_} rest... {Age}}} {Flow {StoreAge} flow...}},
+    //   {PlumbEnd {App{State {Input} rest... {Age age_}}} {Flow flow...}}
+    // )
+    // R(
+    //   "ProcessFlow/PrintAge",
+    //   {Plumb {App{State a... {Age age_} b...}} {Flow {PrintAge}}},
+    //   {PlumbEnd {App{State a... {Age age_} b...}} {Flow {Print Concat("You are ", age_, " years old!\n")} flow...} }
+    // )
+    R("Flow/StepWhenIdle",
+      {Plumb {Flow head_ rest...} {EffQueue} {Effects {Pending} {Inbox}}},
+      {PlumbEnd {Flow rest...} {EffQueue head_} {Effects {Pending} {Inbox}}}
     )
-
     R(
       "ProcessReadLine",
-      {Program
-        {App{State {Input}}}
+      {Plumb
+        {App{State vars_ st...}}
         omit...
         {Effects pending_ {Inbox {ReadLineComplete id_ {Text input_}} rest...}}
       },
-      {Program
-        {App{State {Input input_}}}
+      {PlumbEnd
+        {App{State Put(Vars, Input, input_, vars_) st...}}
         omit...
         {Effects pending_ {Inbox rest...}}
       }
-    )
-
-    R(
-      "ProcessReadLine/Echo",
-      {Program{App{State {Input input_}}} omit... {EffQueue cmds...} rest...},
-      {Program{App{State {Input}}} omit... {EffQueue cmds... {Print "echo" {Message Concat("You entered: ", input_, "\n")}}} rest...}
     )
   }
 }
