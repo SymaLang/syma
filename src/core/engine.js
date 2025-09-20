@@ -101,7 +101,8 @@ export function applyRuleRules(universe) {
 
     // Apply meta-rules to transform the Rules section
     // Don't fold primitives when normalizing rules - we need to preserve guards
-    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, true);
+    // Set preserveUnboundPatterns=true to preserve pattern variables in transformed rules
+    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, true, null, true);
 
     // Create new Universe with transformed Rules
     const newUniverse = clone(universe);
@@ -204,7 +205,7 @@ export function match(pat, subj, env = {}) {
     throw new Error("match: unknown pattern node");
 }
 
-export function subst(expr, env) {
+export function subst(expr, env, preserveUnboundPatterns = false) {
     // Handle /! nodes - prevent substitution of their contents (unbound variables)
     if (isCall(expr) && isSym(expr.h) && expr.h.v === "/!" && expr.a.length === 1) {
         // Return the content without substitution
@@ -225,22 +226,36 @@ export function subst(expr, env) {
         const name = expr.a[0].v;
         // Wildcard _ should never appear in RHS, but handle gracefully
         if (name === "_") throw new Error("subst: wildcard _ cannot be used in replacement");
-        if (!(name in env)) throw new Error(`subst: unbound var ${name}`);
+        if (!(name in env)) {
+            if (preserveUnboundPatterns) {
+                // In RuleRules context, preserve pattern variables
+                return expr;
+            }
+            throw new Error(`subst: unbound var ${name}`);
+        }
         return env[name];
     }
     if (isVarRest(expr)) {
         const name = expr.a[0].v;
         // Wildcard ___ should never appear in RHS, but handle gracefully
         if (name === "_") throw new Error("subst: wildcard ___ cannot be used in replacement");
-        const seq = env[name] || [];
+        if (!(name in env)) {
+            if (preserveUnboundPatterns) {
+                // In RuleRules context, preserve pattern variables
+                return expr;
+            }
+            // For VarRest, default to empty sequence if not bound
+            return Splice([]);
+        }
+        const seq = env[name];
         if (!Array.isArray(seq)) throw new Error(`subst: VarRest ${name} expected sequence`);
-        // Recursively substitute inside the sequence
-        return Splice(seq.map(n => subst(n, env)));
+        // Recursively substitute inside the sequence, passing the flag through
+        return Splice(seq.map(n => subst(n, env, preserveUnboundPatterns)));
     }
     if (isSym(expr) || isNum(expr) || isStr(expr)) return expr;
     if (isCall(expr)) {
-        const h = subst(expr.h, env);
-        const mapped = expr.a.map(a => subst(a, env));
+        const h = subst(expr.h, env, preserveUnboundPatterns);
+        const mapped = expr.a.map(a => subst(a, env, preserveUnboundPatterns));
         const flat = [];
         for (const m of mapped) {
             if (isSplice(m)) flat.push(...m.items);
@@ -254,7 +269,7 @@ export function subst(expr, env) {
 /* --------------------- Rewriting ----------------------------- */
 
 /* applyOnce: outermost-first, highest-priority rule wins */
-export function applyOnce(expr, rules, foldPrimsFn = null) {
+export function applyOnce(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
     // Try to rewrite this node
     for (const r of rules) {
         const env = match(r.lhs, expr, {});
@@ -262,7 +277,7 @@ export function applyOnce(expr, rules, foldPrimsFn = null) {
             // Check guard if present
             if (r.guard) {
                 // Substitute the guard with matched bindings
-                const guardValue = subst(r.guard, env);
+                const guardValue = subst(r.guard, env, preserveUnboundPatterns);
                 // Evaluate the guard expression
                 const evaluatedGuard = foldPrimsFn ? foldPrimsFn(guardValue) : guardValue;
                 // Guard must evaluate to the symbol True
@@ -270,7 +285,7 @@ export function applyOnce(expr, rules, foldPrimsFn = null) {
                     continue; // Guard failed, try next rule
                 }
             }
-            const out = subst(r.rhs, env);
+            const out = subst(r.rhs, env, preserveUnboundPatterns);
             return {changed: true, expr: out};
         }
     }
@@ -278,7 +293,7 @@ export function applyOnce(expr, rules, foldPrimsFn = null) {
     if (isCall(expr)) {
         for (let i = 0; i < expr.a.length; i++) {
             const child = expr.a[i];
-            const res = applyOnce(child, rules, foldPrimsFn);
+            const res = applyOnce(child, rules, foldPrimsFn, preserveUnboundPatterns);
             if (res.changed) {
                 const next = clone(expr);
                 next.a[i] = res.expr;
@@ -359,10 +374,10 @@ export function applyOnceTrace(expr, rules, foldPrimsFn = null) {
     return { changed: false, expr, rule: null, path: null, before: null, after: null };
 }
 
-export function normalize(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null) {
+export function normalize(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false) {
     let cur = expr;
     for (let i = 0; i < maxSteps; i++) {
-        const step = applyOnce(cur, rules, foldPrimsFn);
+        const step = applyOnce(cur, rules, foldPrimsFn, preserveUnboundPatterns);
         cur = (skipPrims || !foldPrimsFn) ? step.expr : foldPrimsFn(step.expr);
         if (!step.changed) return cur;
     }
