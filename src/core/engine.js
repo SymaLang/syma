@@ -90,13 +90,6 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
     if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
         throw new Error("Expected root Universe[...]");
 
-    // If foldPrimsFn is provided, we need to bind its second argument to an array with skipped primitives which should not be evaluated during RuleRules processing:
-    // To Claude: I commented this quick hack, it is not comprehensive
-    // if (foldPrimsFn) {
-    //     const originalFoldPrimsFn = foldPrimsFn;
-    //     foldPrimsFn = (expr) => originalFoldPrimsFn(expr, ['FreshId', 'ToNormalString']);
-    // }
-
     const ruleRulesNode = findSection(universe, "RuleRules");
     if (!ruleRulesNode) return universe; // No RuleRules, return as-is
 
@@ -106,10 +99,14 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
     // Extract meta-rules
     const metaRules = extractRulesFromNode(ruleRulesNode);
 
+    // Create a restricted fold function for meta-rule evaluation
+    // Only evaluate primitives needed for rule name generation and other meta-operations
+    const metaFoldPrimsFn = foldPrimsFn ? createMetaFoldPrimsFn(foldPrimsFn) : null;
+
     // Apply meta-rules to transform the Rules section
-    // Pass foldPrimsFn to allow evaluation of expressions in rule names (like Concat)
+    // Pass metaFoldPrimsFn to allow evaluation of expressions in rule names (like Concat)
     // Set preserveUnboundPatterns=true to preserve pattern variables in transformed rules
-    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, false, foldPrimsFn, true);
+    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, false, metaFoldPrimsFn, true);
 
     // Create new Universe with transformed Rules
     const newUniverse = clone(universe);
@@ -119,6 +116,48 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
     }
 
     return newUniverse;
+}
+
+/**
+ * Create a restricted fold function for meta-rule evaluation.
+ * This only evaluates primitives that are safe and necessary for meta-rule processing,
+ * avoiding side effects and preserving runtime-only expressions.
+ */
+function createMetaFoldPrimsFn(originalFoldPrimsFn) {
+    // Whitelist of primitives safe to evaluate during meta-rule processing
+    // These are pure functions needed for rule name generation and meta-operations
+    const META_SAFE_PRIMITIVES = [
+        'Concat',      // String concatenation for rule names
+        'ToString',    // Convert symbols to strings for rule names
+        'Add',         // Arithmetic for Arity calculation
+        'Sub',         // Basic arithmetic
+        'Mul',         // Basic arithmetic
+        'Div',         // Basic arithmetic
+        'Mod',         // Basic arithmetic
+        'ToNumber',    // Type conversion
+        'Length',      // String/array length
+        'Slice',       // String/array slicing
+        'Join',        // Array joining
+        'Split'        // String splitting
+        // Note: Explicitly exclude:
+        // - FreshId (side effects)
+        // - Comparison ops (Gt, Lt, Eq, etc.) - needed at runtime for guards
+        // - Logical ops (And, Or, Not) - needed at runtime for guards
+        // - Any I/O or effect-related primitives
+    ];
+
+    return (expr) => {
+        // Check if this is a primitive call we should evaluate
+        if (isCall(expr) && isSym(expr.h)) {
+            const primName = expr.h.v;
+            if (!META_SAFE_PRIMITIVES.includes(primName)) {
+                // Don't evaluate this primitive during meta-rule processing
+                return expr;
+            }
+        }
+        // Evaluate safe primitives
+        return originalFoldPrimsFn(expr);
+    };
 }
 
 /* --------------------- Pattern matching ---------------------- */
