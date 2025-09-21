@@ -331,17 +331,225 @@ export class SymaTreeSitterParser {
             'IsNum', 'IsStr', 'IsSym', 'IsTrue', 'IsFalse',
             'FreshId', 'Random', 'ParseNum', 'Debug',
             'R', 'Apply', '/@',
-            'App', 'State'
+            'State'
         ];
         return functionLike.includes(sym);
+    }
+
+    // Format source code preserving comments and optionally user formatting
+    formatSource(src, options = {}) {
+        const defaultOptions = {
+            preserveComments: true,
+            preserveNewlines: true,
+            preserveIndentation: false,
+            indentSize: 2,
+            bracketStyle: 'auto',
+        };
+        const opts = { ...defaultOptions, ...options };
+
+        if (!this.parser) {
+            throw new Error('Parser not initialized. Call initialize() first.');
+        }
+
+        this.sourceText = src;
+        const tree = this.parser.parse(src);
+
+        if (tree.rootNode.hasError) {
+            // If there are parse errors, return original source
+            return src;
+        }
+
+        // If preserving everything, just return the original
+        if (opts.preserveComments && opts.preserveNewlines && opts.preserveIndentation) {
+            return src;
+        }
+
+        // Otherwise, format using the tree-sitter tree directly
+        return this.formatNode(tree.rootNode, 0, opts);
+    }
+
+    // Format a tree-sitter node preserving comments
+    formatNode(node, indent = 0, opts) {
+        const spaces = ' '.repeat(indent * opts.indentSize);
+
+        // For comments, preserve them as-is
+        if (node.type === 'comment') {
+            return this.sourceText.substring(node.startIndex, node.endIndex);
+        }
+
+        // For simple nodes, get the original text
+        if (node.type === 'number' || node.type === 'string' || node.type === 'symbol' ||
+            node.type === 'var_pattern' || node.type === 'var_rest_pattern') {
+            return this.sourceText.substring(node.startIndex, node.endIndex);
+        }
+
+        // For source_file, format all children preserving their order
+        if (node.type === 'source_file') {
+            const formatted = [];
+            let lastEndIndex = 0;
+
+            for (let i = 0; i < node.childCount; i++) {
+                const child = node.child(i);
+
+                // Check for comments or whitespace between nodes
+                if (opts.preserveComments || opts.preserveNewlines) {
+                    const between = this.sourceText.substring(lastEndIndex, child.startIndex);
+
+                    if (opts.preserveComments) {
+                        // Keep comments
+                        const commentMatches = between.match(/;[^\n]*/g);
+                        if (commentMatches) {
+                            formatted.push(...commentMatches);
+                        }
+                    }
+
+                    if (opts.preserveNewlines) {
+                        // Preserve user's newlines
+                        const newlineCount = (between.match(/\n/g) || []).length;
+                        if (newlineCount > 1) {
+                            // User added extra newlines, preserve them
+                            formatted.push('\n'.repeat(newlineCount - 1));
+                        }
+                    }
+                }
+
+                formatted.push(this.formatNode(child, indent, opts));
+                lastEndIndex = child.endIndex;
+            }
+
+            // Handle trailing comments
+            if (opts.preserveComments && lastEndIndex < node.endIndex) {
+                const trailing = this.sourceText.substring(lastEndIndex, node.endIndex);
+                const commentMatches = trailing.match(/;[^\n]*/g);
+                if (commentMatches) {
+                    formatted.push(...commentMatches);
+                }
+            }
+
+            return formatted.filter(s => s.trim() || s.includes('\n')).join('\n');
+        }
+
+        // For expressions, unwrap
+        if (node.type === 'expression' && node.childCount > 0) {
+            return this.formatNode(node.child(0), indent, opts);
+        }
+
+        // For calls (brace_call, function_call), format with proper spacing
+        if (node.type === 'brace_call' || node.type === 'function_call') {
+            return this.formatCall(node, indent, opts);
+        }
+
+        // Default: return original text
+        return this.sourceText.substring(node.startIndex, node.endIndex);
+    }
+
+    // Format a call preserving internal structure and comments
+    formatCall(node, indent, opts) {
+        const spaces = ' '.repeat(indent * opts.indentSize);
+        const result = [];
+
+        // Check if there are any comments inside this call
+        let hasInternalComments = false;
+        for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i);
+            if (child && child.type === 'comment') {
+                hasInternalComments = true;
+                break;
+            }
+        }
+
+        // If no internal structure to preserve, use original formatting
+        if (!hasInternalComments && opts.preserveNewlines) {
+            const original = this.sourceText.substring(node.startIndex, node.endIndex);
+            const hasNewlines = original.includes('\n');
+
+            if (!hasNewlines) {
+                // Single line, return as-is
+                return original;
+            }
+        }
+
+        // Build formatted version
+        if (node.type === 'function_call') {
+            const funcNode = node.childForFieldName('function');
+            const funcName = this.sourceText.substring(funcNode.startIndex, funcNode.endIndex);
+
+            const args = [];
+            let hasTrailingComment = false;
+
+            // Collect arguments
+            for (let i = 0; i < node.childCount; i++) {
+                const child = node.child(i);
+                if (child && child.type === 'expression') {
+                    args.push(this.formatNode(child, indent + 1, opts));
+                } else if (child && child.type === 'comment' && opts.preserveComments) {
+                    hasTrailingComment = true;
+                    args.push(this.sourceText.substring(child.startIndex, child.endIndex));
+                }
+            }
+
+            // Format based on content
+            if (args.length === 0) {
+                return `${funcName}()`;
+            } else if (args.length === 1 && !hasTrailingComment && !args[0].includes('\n')) {
+                return `${funcName}(${args[0]})`;
+            } else {
+                const nextIndent = ' '.repeat((indent + 1) * opts.indentSize);
+                return `${funcName}(\n${args.map(a => nextIndent + a).join(',\n')}\n${spaces})`;
+            }
+        } else if (node.type === 'brace_call') {
+            const head = node.childForFieldName('head');
+            const headStr = this.formatNode(head, indent, opts);
+
+            const args = [];
+            const argNodes = node.childrenForFieldName('arguments');
+
+            // Check for inline comments
+            let lastEndIndex = head.endIndex;
+            for (const argNode of argNodes) {
+                // Check for comments before this arg
+                if (opts.preserveComments) {
+                    const between = this.sourceText.substring(lastEndIndex, argNode.startIndex);
+                    const commentMatch = between.match(/;[^\n]*/);
+                    if (commentMatch) {
+                        args.push(commentMatch[0]);
+                    }
+                }
+
+                args.push(this.formatNode(argNode, indent + 1, opts));
+                lastEndIndex = argNode.endIndex;
+            }
+
+            // Format based on content
+            if (args.length === 0) {
+                return `{${headStr}}`;
+            }
+
+            // Check if should be inline
+            const inline = `{${headStr} ${args.filter(a => !a.startsWith(';')).join(' ')}}`;
+            const hasComments = args.some(a => a.startsWith(';'));
+            const isLong = inline.length > 80;
+            const hasNewlines = args.some(a => a.includes('\n'));
+
+            if (!hasComments && !isLong && !hasNewlines) {
+                return inline;
+            }
+
+            // Multiline format
+            const nextIndent = ' '.repeat((indent + 1) * opts.indentSize);
+            return `{${headStr}\n${args.map(a => nextIndent + a).join('\n')}\n${spaces}}`;
+        }
+
+        // Fallback
+        return this.sourceText.substring(node.startIndex, node.endIndex);
     }
 
     // Pretty print (copied from original parser)
     prettyPrint(node, indent = 0, options = {}) {
         const defaultOptions = {
             indentSize: 2,
-            maxInlineLength: 60,
-            maxInlineArgs: 3,
+            maxInlineLength: 120,
+            maxInlineArgs: 5,
             bracketStyle: 'auto',
         };
         const opts = { ...defaultOptions, ...options };

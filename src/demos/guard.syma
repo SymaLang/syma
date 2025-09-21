@@ -1,0 +1,28 @@
+{Module
+  Demo/Guard
+  {Import Core/Main as C open}
+  {Import Core/Plumb as CP open}
+  {Import Core/Effect as CE open}
+  {Import Core/KV as KV}
+  {Program
+    {PrintThis "Starting..."}
+    {Experiment}
+    {App State(Empty)}
+    {EffQueue}
+    {Effects {Pending} {Inbox}}
+  }
+  {Rules
+    R(
+      "Experiment",
+      Plumb({Experiment}),
+      PlumbEnd(PrintThis("Hello")),
+      Eq(1, 1)
+    )
+
+    R(
+      "PrintThis",
+      Plumb({PrintThis msg_}, rest..., {EffQueue}),
+      PlumbEnd(msg_, rest..., {EffQueue {Print Concat(ToNormalString(msg_), "\n")}})
+    )
+  }
+}

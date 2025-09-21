@@ -245,13 +245,37 @@ When modules are bundled, they produce a **Universe** structure:
 Rules define pattern-based transformations:
 
 ```lisp
-{R "Name" pattern replacement priority?}
+{R "Name" pattern replacement guard? priority?}
+R("Name", pattern, replacement, guard?, priority?)
 ```
 
 - `"Name"`: A string identifier for the rule
 - `pattern`: An expression pattern to match
 - `replacement`: The expression that replaces matches
+- `guard`: Optional condition that must evaluate to `True` (4th argument)
 - `priority`: Optional numeric priority (higher values apply first)
+  - If 4th argument is a number, it's treated as priority
+  - If 4th argument is an expression and 5th is a number, they're guard and priority respectively
+
+**Examples:**
+```lisp
+; Priority only (4th argument is a number)
+{R "HighPriority" pattern replacement 100}
+R("HighPriority", pattern, replacement, 100)
+
+; Guard only (4th argument is an expression)
+{R "IsPositive" {Check n_} "positive" {Gt n_ 0}}
+R("IsPositive", Check(n_), "positive", Gt(n_, 0))
+
+; Both guard and priority
+{R "GuardedRule" pattern replacement {IsNum n_} 50}
+R("GuardedRule", pattern, replacement, IsNum(n_), 50)
+```
+
+**Important Notes:**
+- Guards are evaluated after primitive folding, so `IsNum(n_)` works correctly
+- The named syntax (`:guard`, `:prio`) shown in some examples does NOT currently work
+- Use positional arguments (4th for guard/priority, 5th for priority if guard present)
 
 ### Pattern Matching
 
@@ -264,11 +288,27 @@ Patterns can include:
 
 ### Normalization Strategy
 
-The runtime uses an outermost-first strategy:
-1. Try to match rules at the current expression level
-2. If no match, recurse into sub-expressions
-3. Apply the highest-priority matching rule
-4. Repeat until fixed point (no rules match)
+The runtime uses an outermost-first strategy with integrated primitive folding:
+
+1. **Rule Application**: Try to match rules at the current expression level
+2. **Recursion**: If no match, recursively try children (still outermost-first)
+3. **Priority**: Apply the highest-priority matching rule when found
+4. **Primitive Folding**: After each rule application, fold any primitive operations
+5. **Fixed Point**: Repeat until neither rules nor primitives can make changes
+
+**Important Details:**
+- **Outermost-first is critical for determinism** - rules at higher levels take precedence
+- **Primitives fold after each step** - expressions like `Eq(6, -1)` become `False` immediately
+- **The loop continues if either rules OR primitives change the expression** - this ensures complete normalization
+- **Guards are evaluated with primitive folding** - allowing rules like `R("name", pattern, replacement, :guard IsNum(x_))` to work correctly
+
+**Example Normalization Sequence:**
+```lisp
+If(Eq(IndexOf("abc", "z"), -1), "not found", "found")
+→ If(Eq(-1, -1), "not found", "found")     ; IndexOf primitive folded
+→ If(True, "not found", "found")           ; Eq primitive folded
+→ "not found"                              ; If/True rule applied
+```
 
 ### Built-in Primitives
 
@@ -291,7 +331,8 @@ The runtime provides a comprehensive standard library of primitive operations th
 
 **String Operations:**
 - `{Concat s1 s2 ...}` → concatenates strings/numbers into a string
-- `{ToString value}` → converts value to string
+- `{ToString value}` → converts value to string representation immediately
+- `{ToNormalString value}` → waits for full normalization before stringifying (see note below)
 - `{ToUpper str}` → converts to uppercase
 - `{ToLower str}` → converts to lowercase
 - `{Trim str}` → removes leading/trailing whitespace
@@ -299,6 +340,10 @@ The runtime provides a comprehensive standard library of primitive operations th
 - `{Substring str start end?}` → extract substring
 - `{IndexOf str search}` → find position of substring (-1 if not found)
 - `{Replace str search replacement}` → replace first occurrence
+
+**Note on ToString vs ToNormalString:**
+- `ToString` immediately converts its argument to a string representation. For example, `ToString(Add(2, 3))` produces `"{Add 2 3}"` showing the expression structure.
+- `ToNormalString` defers stringification until its argument is fully normalized. It returns `null` (remains unevaluated) if the argument contains rule-based constructs like `If`, `Apply`, etc. For example, `ToNormalString(If(True, "yes", "no"))` will wait until `If` reduces to `"yes"` before stringifying.
 
 **Comparison Operations:**
 - `{Eq a b}` → equality check, returns `True` or `False`
@@ -626,6 +671,26 @@ This shows each rule application with the matched pattern and replacement.
 - `.syma` - Source files in S-expression syntax (module format)
 - `.lisp` or `.sym` - Legacy source files (non-module format)
 - `.json` - Compiled AST representation
+
+### Code Formatting
+
+The compiler includes a Tree-Sitter based formatter that preserves comments and user formatting:
+
+```bash
+# Format a .syma file
+syma-compile file.syma --format
+
+# Format and save to a new file
+syma-compile messy.syma --format --out clean.syma
+```
+
+**Formatter Features:**
+- **Preserves comments** - Unlike AST-based formatting, comments are retained
+- **Preserves blank lines** - User-added spacing for readability is kept
+- **Smart indentation** - Automatically indents nested structures
+- **Mixed syntax support** - Handles both brace `{}` and function call `()` syntax
+
+The formatter uses the Tree-Sitter parse tree directly rather than converting to AST, ensuring nothing is lost during formatting.
 
 ### Running Programs
 

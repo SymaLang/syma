@@ -1,28 +1,26 @@
 {Module
-  Demo/Playground
+  Demo/StrToChars
   {Import Core/Main as C open}
   {Import Core/Plumb as CP open}
   {Import Core/Effect as CE open}
-  {Import Core/KV as KV}
   {Import Core/String as CS open}
   {Program
-    {PrintThis "Starting..."}
-    {Experiment1}
-    {Experiment2}
+    {SplitToCharsDemo}
+    {SplitByDemo}
     {App State({Zipper {Before a b c} {Curr d} {After e f g}})}
     {EffQueue}
     {Effects {Pending} {Inbox}}
   }
   {Rules
     R(
-      "Experiment1",
-      Plumb({Experiment1}),
-      PlumbEnd(SplitBy(",", "Apples,Bananas,Cherries"))
+      "SplitToCharsDemo",
+      Plumb({SplitToCharsDemo}),
+      PlumbEnd(SplitToChars("Apples"))
     )
     R(
-      "Experiment2",
-      Plumb({Experiment2}),
-      PlumbEnd(SplitToChars("Apples"))
+      "SplitByDemo",
+      Plumb({SplitByDemo}),
+      PlumbEnd(SplitBy(",", "Apples,Bananas,Cherries"))
     )
     R(
       "PrintChars",

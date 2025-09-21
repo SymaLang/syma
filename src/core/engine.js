@@ -378,8 +378,12 @@ export function normalize(expr, rules, maxSteps = 10000, skipPrims = false, fold
     let cur = expr;
     for (let i = 0; i < maxSteps; i++) {
         const step = applyOnce(cur, rules, foldPrimsFn, preserveUnboundPatterns);
-        cur = (skipPrims || !foldPrimsFn) ? step.expr : foldPrimsFn(step.expr);
-        if (!step.changed) return cur;
+        const afterRules = step.expr;
+        cur = (skipPrims || !foldPrimsFn) ? afterRules : foldPrimsFn(afterRules);
+
+        // Check if either rules or primitives changed the expression
+        const changed = step.changed || !deq(afterRules, cur);
+        if (!changed) return cur;
     }
     throw new Error("normalize: exceeded maxSteps (possible non-termination)");
 }
@@ -390,16 +394,32 @@ export function normalizeWithTrace(expr, rules, maxSteps = 10000, skipPrims = fa
     const trace = [];
     for (let i = 0; i < maxSteps; i++) {
         const step = applyOnceTrace(cur, rules, foldPrimsFn);
-        cur = (skipPrims || !foldPrimsFn) ? step.expr : foldPrimsFn(step.expr);
-        if (!step.changed) return {result: cur, trace};
+        const afterRules = step.expr;
+        cur = (skipPrims || !foldPrimsFn) ? afterRules : foldPrimsFn(afterRules);
+
+        // Check if either rules or primitives changed the expression
+        const changed = step.changed || !deq(afterRules, cur);
+        if (!changed) return {result: cur, trace};
+
         // Human-friendly snapshot of *this* rewrite
-        trace.push({
-            i,
-            rule: step.rule,
-            path: step.path,
-            before: step.before,
-            after: step.after
-        });
+        if (step.changed) {
+            trace.push({
+                i,
+                rule: step.rule,
+                path: step.path,
+                before: step.before,
+                after: step.after
+            });
+        } else {
+            // Primitive folding happened
+            trace.push({
+                i,
+                rule: "[primitive folding]",
+                path: [],
+                before: afterRules,
+                after: cur
+            });
+        }
     }
     throw new Error("normalizeWithTrace: exceeded maxSteps (possible non-termination)");
 }

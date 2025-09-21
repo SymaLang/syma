@@ -4,11 +4,12 @@
   {RuleRules
     R(
       "PlumbThroughProgram",
-      R(SYMARULENAME_, {Plumb acts...}, {PlumbEnd endacts...}),
+      R(SYMARULENAME_, {Plumb SYMAACTS...}, {PlumbEnd SYMAENDACTS...}, SYMARULEREST...),
       R(
         SYMARULENAME_,
-        {Program {/! pre...} acts... {/! post...}},
-        {Program {/! pre...} endacts... {/! post...}}
+        {Program {/! pre...} SYMAACTS... {/! post...}},
+        {Program {/! pre...} SYMAENDACTS... {/! post...}},
+        SYMARULEREST...
       )
     )
   }

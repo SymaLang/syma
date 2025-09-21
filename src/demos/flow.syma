@@ -1,26 +1,31 @@
 {Module
-  Demo/Flow
+  Demo/Playground
 
+  {Import Core as C open}
   {Import Core/Plumb as CP open}
   {Import Core/Effect as CE open}
+  {Import Core/KV as KV}
 
   {Program
     App(
       State(
-        {Input},
-        {Name},
-        {Age}
+        Vars(
+          {KV Input Nil},
+          {KV Name  Nil},
+          {KV Age   Nil}
+        )
       )
     )
     {Flow
+      Idle
       {Print "Enter your name: \n"}
       {ReadLine}
-      {StoreName}
-      {PrintName}
+      {Store Name}
+      {Print+ Name}
       {Print "Enter your age: \n"}
       {ReadLine}
-      {StoreAge}
-      {PrintAge}
+      {Store Age}
+      {Print+ Age}
     }
     {EffQueue}
     {Effects
@@ -30,38 +35,41 @@
   }
   {Rules
     R(
-      "ProcessFlow/StoreName",
-      {Plumb {App{State {Input name_} {Name} rest...}} {Flow {StoreName} flow...}},
-      {PlumbEnd {App{State {Input} {Name name_} rest...}} {Flow flow...}}
+      "Flow/Print",
+      {Plumb {Flow Idle {Print msg_} flow...} {EffQueue}},
+      {PlumbEnd {Flow Idle flow...} {EffQueue {Print msg_}}}
     )
     R(
-      "ProcessFlow/PrintName",
-      {Plumb {App{State a... {Name name_} b...}} {Flow {PrintName} flow...} },
-      {PlumbEnd {App{State a... {Name name_} b...}} {Flow {Print Concat("Hello ", name_, "!\n")} flow...} }
+      "Flow/ReadLine",
+      {Plumb {Flow Idle {ReadLine} flow...} {EffQueue}},
+      {PlumbEnd {Flow Busy flow...} {EffQueue {ReadLine}}}
     )
     R(
-      "ProcessFlow/StoreAge",
-      {Plumb {App{State {Input age_} rest... {Age}}} {Flow {StoreAge} flow...}},
-      {PlumbEnd {App{State {Input} rest... {Age age_}}} {Flow flow...}}
+      "Flow/Store",
+      {Plumb {App{State vars_}} {Flow Idle {Store where_} flow...}},
+      {PlumbEnd {App{State KV/Copy(Vars, Input, where_, vars_)}} {Flow Idle flow...}}
     )
+
+    R("Answer/Name", {Answer Name}, "Hello ")
+    R("Answer/Age",  {Answer Age},  "Your age is ")
+
     R(
-      "ProcessFlow/PrintAge",
-      {Plumb {App{State a... {Age age_} b...}} {Flow {PrintAge}}},
-      {PlumbEnd {App{State a... {Age age_} b...}} {Flow {Print Concat("You are ", age_, " years old!\n")} flow...} }
+      "Flow/PrintName",
+      {Plumb {App{State vars_}} {Flow Idle {Print+ n_} flow...}},
+      {PlumbEnd {App{State vars_}} {Flow Idle {Print Concat(Answer(n_), KV/Get(Vars, n_, vars_), "!\n")} flow...}}
     )
-    R("Flow/StepWhenIdle",
-      {Plumb {Flow head_ rest...} {EffQueue} {Effects {Pending} {Inbox}}},
-      {PlumbEnd {Flow rest...} {EffQueue head_} {Effects {Pending} {Inbox}}}
-    )
+
     R(
       "ProcessReadLine",
       {Plumb
-        {App{State {Input} st...}}
+        {App{State vars_ st...}}
+        {Flow idle_ flow...}
         omit...
         {Effects pending_ {Inbox {ReadLineComplete id_ {Text input_}} rest...}}
       },
       {PlumbEnd
-        {App{State {Input input_} st...}}
+        {App{State KV/Put(Vars, Input, input_, vars_) st...}}
+        {Flow Idle flow...}
         omit...
         {Effects pending_ {Inbox rest...}}
       }

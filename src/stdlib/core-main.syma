@@ -1,4 +1,4 @@
-{Module Core
+{Module Core/Main
   {Export If}
   {Rules
     R("If/True",  {If True  a_ b_}, a_)

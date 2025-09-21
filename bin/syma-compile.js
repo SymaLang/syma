@@ -484,8 +484,23 @@ async function compile(options) {
     }
 
     const content = fs.readFileSync(files[0], 'utf-8');
-    const ast = parser.parseString(content, files[0]);
-    const formatted = parser.prettyPrint(ast);
+
+    // Use formatSource if available (tree-sitter parser), otherwise fallback to prettyPrint
+    let formatted;
+    if (parser.formatSource) {
+      // Tree-sitter parser with comment preservation
+      formatted = parser.formatSource(content, {
+        preserveComments: true,
+        preserveNewlines: true,
+        preserveIndentation: false,
+        indentSize: 2
+      });
+    } else {
+      // Fallback to old method (loses comments)
+      console.warn('Warning: Using legacy formatter that strips comments. Consider using tree-sitter parser.');
+      const ast = parser.parseString(content, files[0]);
+      formatted = parser.prettyPrint(ast);
+    }
 
     if (output) {
       fs.writeFileSync(output, formatted);

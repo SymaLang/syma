@@ -59,6 +59,7 @@ function foldPrimitive(op, args) {
     switch (op) {
         case "Concat": return foldConcat(args);
         case "ToString": return foldToString(args);
+        case "ToNormalString": return foldToNormalString(args);
         case "ToUpper": return foldToUpper(args);
         case "ToLower": return foldToLower(args);
         case "Trim": return foldTrim(args);
@@ -187,6 +188,66 @@ function foldToString(args) {
     }
 
     return null;
+}
+
+/**
+ * ToNormalString: Like ToString but waits for full normalization first
+ * Returns null if the argument contains rule-based constructs that need reduction
+ */
+function foldToNormalString(args) {
+    if (args.length !== 1) return null;
+
+    const arg = args[0];
+
+    if (isStr(arg)) {
+        return arg; // Already a string
+    } else if (isNum(arg)) {
+        return Str(String(arg.v));
+    } else if (isSym(arg)) {
+        return Str(arg.v);
+    } else if (isCall(arg)) {
+        // Check if the expression contains constructs that need rule-based normalization
+        // If so, return null to defer stringification until after normalization
+        if (containsRuleBasedConstructs(arg)) {
+            return null; // Can't stringify yet - needs more normalization
+        }
+        // Convert complex expressions to S-expression string format
+        return Str(exprToString(arg));
+    }
+
+    return null;
+}
+
+/**
+ * Check if an expression contains constructs that need rule-based normalization
+ * rather than just primitive folding (like If, Apply, etc.)
+ */
+function containsRuleBasedConstructs(expr) {
+    if (isSym(expr) || isNum(expr) || isStr(expr)) {
+        return false;
+    }
+
+    if (isCall(expr)) {
+        // These constructs need rules to reduce, not just primitive folding
+        if (isSym(expr.h)) {
+            const ruleBasedOps = ['If', 'Apply', 'Match', 'Let', 'Case'];
+            if (ruleBasedOps.includes(expr.h.v)) {
+                return true;
+            }
+        }
+
+        // Recursively check arguments
+        if (isCall(expr.h) && containsRuleBasedConstructs(expr.h)) {
+            return true;
+        }
+        for (const arg of expr.a) {
+            if (containsRuleBasedConstructs(arg)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -657,5 +718,3 @@ function formatDebugValue(node) {
     // Fallback to JSON for complex structures
     return JSON.stringify(node);
 }
-
-

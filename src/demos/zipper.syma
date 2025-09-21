@@ -1,0 +1,29 @@
+{Module
+  Demo/Zipper
+
+  {Import Core as C open}
+  {Import Core/Plumb as CP open}
+  {Import Core/Effect as CE open}
+  {Import Core/KV as KV}
+
+  {Program
+    {MoveRight}
+    App(
+      State(
+        {Zipper {Before a b c} {Curr d} {After e f g}}
+      )
+    )
+    {EffQueue}
+    {Effects
+      {Pending}
+      {Inbox}
+    }
+  }
+  {Rules
+    R(
+      "Zipper/MoveRight",
+      {Plumb {MoveRight} {App{State {Zipper {Before before...} {Curr c_} {After a_ after...}}}} {EffQueue}},
+      {PlumbEnd {App{State {Zipper {Before before... c_} {Curr a_} {After after...}}}} {EffQueue {Print Concat("Moved right\n", "Before: ", ToString(c_), "\nCurr: ", ToString(a_), "\n")}}}
+    )
+  }
+}
