@@ -1,43 +1,14 @@
 {Module
   Demo/Playground
-  {Import Core/Main as C open}
-  {Import Core/Plumb as CP open}
-  {Import Core/Effect as CE open}
-  {Import Core/KV as KV}
-  {Import Core/String as CS open}
-  {Program
-    {PrintThis "Starting..."}
-    {Experiment1}
-    {Experiment2}
-    {App State({Zipper {Before a b c} {Curr d} {After e f g}})}
-    {EffQueue}
-    {Effects {Pending} {Inbox}}
-  }
+  {Import Core/Fun as CF open}
+  {Program}
   {Rules
-    R(
-      "Experiment1",
-      Plumb({Experiment1}),
-      PlumbEnd(SplitBy(",", "Apples,Bananas,Cherries"))
-    )
-    R(
-      "Experiment2",
-      Plumb({Experiment2}),
-      PlumbEnd(SplitToChars("Apples"))
-    )
-    R(
-      "PrintChars",
-      Plumb({Chars chars...}),
-      PlumbEnd(PrintThis(Chars(chars...)))
-    )
-    R(
-      "PrintStrings",
-      Plumb({Strings strs...}),
-      PlumbEnd(PrintThis(Strings(strs...)))
-    )
-    R(
-      "PrintThis",
-      Plumb({PrintThis msg_}, rest..., {EffQueue}),
-      PlumbEnd({Printed msg_}, rest..., {EffQueue {Print Concat(ToNormalString(msg_), "\n")}})
-    )
+    {Def Fib    {Args n_}       Call(FibAcc, n_, 0, 1)}
+    {Def FibAcc {Args 0 a_ _}   a_}
+    {Def FibAcc {Args n_ a_ b_} Call(FibAcc, {- n_ 1}, b_, {+ a_ b_}) :guard {> n_ 0}}
+
+    {.some-class {
+      color: red;
+    }}
   }
 }

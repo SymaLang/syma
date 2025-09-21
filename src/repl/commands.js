@@ -189,13 +189,16 @@ History:
             const parentDir = dir.substring(0, dir.lastIndexOf('/')) || '.';
             const parentModuleFiles = await glob(`${parentDir}/modules/*.syma`).catch(() => []);
 
-            const allFiles = [...new Set([...moduleFiles, ...parentModuleFiles])];
+            // Include stdlib files
+            const stdlibFiles = await glob('src/stdlib/*.syma').catch(() => []);
+
+            const allFiles = [...new Set([...moduleFiles, ...parentModuleFiles, ...stdlibFiles])];
 
             if (allFiles.length === 0) {
                 throw new Error('No module files found');
             }
 
-            const command = `node bin/syma-compile.js ${allFiles.join(' ')} --bundle --entry "${moduleName}"`;
+            const command = `node bin/syma-compile.js ${allFiles.join(' ')} --bundle --entry "${moduleName}" --stdlib src/stdlib`;
 
             const result = execSync(command, { encoding: 'utf8', cwd: process.cwd() });
 
@@ -206,7 +209,7 @@ History:
             this.repl.universe = universe;
             this.repl.universe = engine.enrichProgramWithEffects(this.repl.universe);
             // Apply RuleRules to transform the Universe permanently
-            this.repl.universe = engine.applyRuleRules(this.repl.universe);
+            this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
 
             this.repl.platform.printWithNewline(`Module ${moduleName} bundled and loaded successfully\n`);
             this.repl.platform.printWithNewline(`Found ${allFiles.length} module files\n`);
@@ -278,7 +281,7 @@ History:
             this.mergeUniverses(compiledUniverse, moduleName);
 
             // Apply RuleRules to transform the Universe permanently after merge
-            this.repl.universe = engine.applyRuleRules(this.repl.universe);
+            this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
 
             this.repl.platform.printWithNewline(`Module ${moduleName} imported successfully`);
 

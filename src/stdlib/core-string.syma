@@ -1,6 +1,6 @@
 {Module
   Core/String
-  {Export Chars Strings SplitToChars SplitBy}
+  {Export Chars Strings SplitToChars SplitBy CharsToStrings StringsToChars}
   {Rules
     R(
       "Str/SplitToChars/Done",
@@ -11,6 +11,11 @@
       "Str/SplitToChars/Step",
       SplitToChars(str_, chars...),
       SplitToChars(Substring(str_, 1), chars..., Substring(str_, 0, 1))
+    )
+    R(
+      "Str/SplitBy/EmptySep",
+      SplitBy("", str_, parts...),
+      CharsToStrings(SplitToChars(str_))
     )
     R(
       "Str/SplitBy/Done",
@@ -29,5 +34,8 @@
       ),
       Neq(IndexOf(str_, s_), -1)
     )
+    
+    R("Str/CharsToStrings", CharsToStrings({Chars chars...}), Strings(chars...))
+    R("Str/StringsToChars", StringsToChars({Strings strs...}), Chars(strs...))
   }
 }

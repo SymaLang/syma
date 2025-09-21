@@ -86,9 +86,16 @@ export function extractRules(universe) {
  * Apply RuleRules to transform the Universe itself
  * This makes RuleRules permanent transformations on the Universe data structure
  */
-export function applyRuleRules(universe) {
+export function applyRuleRules(universe, foldPrimsFn = null) {
     if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
         throw new Error("Expected root Universe[...]");
+
+    // If foldPrimsFn is provided, we need to bind its second argument to an array with skipped primitives which should not be evaluated during RuleRules processing:
+    // To Claude: I commented this quick hack, it is not comprehensive
+    // if (foldPrimsFn) {
+    //     const originalFoldPrimsFn = foldPrimsFn;
+    //     foldPrimsFn = (expr) => originalFoldPrimsFn(expr, ['FreshId', 'ToNormalString']);
+    // }
 
     const ruleRulesNode = findSection(universe, "RuleRules");
     if (!ruleRulesNode) return universe; // No RuleRules, return as-is
@@ -100,9 +107,9 @@ export function applyRuleRules(universe) {
     const metaRules = extractRulesFromNode(ruleRulesNode);
 
     // Apply meta-rules to transform the Rules section
-    // Don't fold primitives when normalizing rules - we need to preserve guards
+    // Pass foldPrimsFn to allow evaluation of expressions in rule names (like Concat)
     // Set preserveUnboundPatterns=true to preserve pattern variables in transformed rules
-    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, true, null, true);
+    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, false, foldPrimsFn, true);
 
     // Create new Universe with transformed Rules
     const newUniverse = clone(universe);
@@ -224,8 +231,14 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
     }
     if (isVar(expr)) {
         const name = expr.a[0].v;
-        // Wildcard _ should never appear in RHS, but handle gracefully
-        if (name === "_") throw new Error("subst: wildcard _ cannot be used in replacement");
+        // Wildcard _ in replacements - only allow in RuleRules context
+        if (name === "_") {
+            if (preserveUnboundPatterns) {
+                // In RuleRules context, preserve wildcards
+                return expr;
+            }
+            throw new Error("subst: wildcard _ cannot be used in replacement");
+        }
         if (!(name in env)) {
             if (preserveUnboundPatterns) {
                 // In RuleRules context, preserve pattern variables
@@ -237,8 +250,14 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
     }
     if (isVarRest(expr)) {
         const name = expr.a[0].v;
-        // Wildcard ___ should never appear in RHS, but handle gracefully
-        if (name === "_") throw new Error("subst: wildcard ___ cannot be used in replacement");
+        // Wildcard ... in replacements - only allow in RuleRules context
+        if (name === "_") {
+            if (preserveUnboundPatterns) {
+                // In RuleRules context, preserve wildcard rest patterns
+                return expr;
+            }
+            throw new Error("subst: wildcard ... cannot be used in replacement");
+        }
         if (!(name in env)) {
             if (preserveUnboundPatterns) {
                 // In RuleRules context, preserve pattern variables

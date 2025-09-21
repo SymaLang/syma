@@ -6,30 +6,44 @@
  * to computed values.
  ******************************************************************/
 
-import { K, Sym, Num, Str, isNum, isStr, isSym, isCall } from './ast-helpers.js';
+import { K, Sym, Num, Str, isNum, isStr, isSym, isCall, Splice, isSplice } from './ast-helpers.js';
 import { freshId } from './effects/processor.js';
 
 /**
  * Fold primitive operations into their computed values
  * Called during normalization to evaluate built-in functions
  */
-export function foldPrims(node) {
+export function foldPrims(node, skipFolds = []) {
     if (isCall(node)) {
-        const h = foldPrims(node.h);
-        const a = node.a.map(foldPrims);
+        const h = foldPrims(node.h, skipFolds);
+        const a = node.a.map((a) => foldPrims(a, skipFolds));
+
+        // Flatten any Splice objects in the arguments
+        const flattened = [];
+        for (const arg of a) {
+            if (isSplice(arg)) {
+                flattened.push(...arg.items);
+            } else {
+                flattened.push(arg);
+            }
+        }
 
         // Delegate to specific primitive handlers
         if (isSym(h)) {
-            const result = foldPrimitive(h.v, a);
+            const result = foldPrimitive(h.v, flattened, skipFolds);
             if (result !== null) return result;
-            return {k: K.Call, h, a};
+            return {k: K.Call, h, a: flattened};
         }
 
-        return {k: K.Call, h, a};
+        return {k: K.Call, h, a: flattened};
     }
 
     // Atoms unchanged
     if (isSym(node) || isNum(node) || isStr(node)) return node;
+
+    // Splice objects pass through unchanged
+    // They only get flattened during substitution in rule application
+    if (isSplice(node)) return node;
 
     throw new Error("foldPrims: unknown node type");
 }
@@ -37,15 +51,25 @@ export function foldPrims(node) {
 /**
  * Central dispatcher for primitive operations
  */
-function foldPrimitive(op, args) {
+function foldPrimitive(op, args, skipFolds) {
+    // Skip specified folds
+    if (skipFolds.includes(op)) {
+        return null;
+    }
     // Arithmetic operations
     switch (op) {
         case "Add": return foldAdd(args);
+        case "+": return foldAdd(args); // Alias
         case "Sub": return foldSub(args);
+        case "-": return foldSub(args); // Alias
         case "Mul": return foldMul(args);
+        case "*": return foldMul(args); // Alias
         case "Div": return foldDiv(args);
+        case "/": return foldDiv(args); // Alias
         case "Mod": return foldMod(args);
+        case "%": return foldMod(args); // Alias
         case "Pow": return foldPow(args);
+        case "^": return foldPow(args); // Alias
         case "Sqrt": return foldSqrt(args);
         case "Abs": return foldAbs(args);
         case "Min": return foldMin(args);
@@ -73,11 +97,17 @@ function foldPrimitive(op, args) {
     // Comparison operations
     switch (op) {
         case "Eq": return foldEq(args);
+        case "==": return foldEq(args); // Alias
         case "Neq": return foldNeq(args);
+        case "!=": return foldNeq(args); // Alias
         case "Lt": return foldLt(args);
+        case "<": return foldLt(args); // Alias
         case "Gt": return foldGt(args);
+        case ">": return foldGt(args); // Alias
         case "Lte": return foldLte(args);
+        case "<=": return foldLte(args); // Alias
         case "Gte": return foldGte(args);
+        case ">=": return foldGte(args); // Alias
     }
 
     // Boolean operations
@@ -103,6 +133,8 @@ function foldPrimitive(op, args) {
         case "ParseNum": return foldParseNum(args);
         case "Debug": return foldDebug(args);
         case "CharFromCode": return foldCharFromCode(args);
+        case "Splat": return foldSplat(args);
+        case "...!": return foldSplat(args);
     }
 
     return null;
@@ -487,6 +519,21 @@ function foldEq(args) {
         if (isSym(a) && isSym(b)) {
             return Sym(a.v === b.v ? "True" : "False");
         }
+        if (isCall(a) && isCall(b)) {
+            // Deep equality check for calls
+            const callsEqual = (a.h.k === b.h.k) &&
+                ((isSym(a.h) && isSym(b.h) && a.h.v === b.h.v) ||
+                 (isNum(a.h) && isNum(b.h) && a.h.v === b.h.v) ||
+                 (isStr(a.h) && isStr(b.h) && a.h.v === b.h.v)) &&
+                (a.a.length === b.a.length) &&
+                a.a.every((arg, idx) => {
+                    const otherArg = b.a[idx];
+                    return foldEq([arg, otherArg]).v === "True";
+                });
+            return Sym(callsEqual ? "True" : "False");
+        }
+        // Different types are not equal
+        return Sym("False");
     }
     return null;
 }
@@ -701,6 +748,17 @@ function foldCharFromCode(args) {
         }
     }
     return null;
+}
+
+/**
+ * Splat/spread operator: ...![arg1, arg2, ...] -> Splice([arg1, arg2, ...])
+ * Returns a Splice object that will be flattened when used in a Call
+ * This allows spreading arguments into function calls
+ */
+function foldSplat(args) {
+    // Simply wrap all arguments in a Splice
+    // When this Splice is used in a Call, it will be automatically flattened
+    return Splice(args);
 }
 
 /**

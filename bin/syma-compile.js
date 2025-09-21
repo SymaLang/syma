@@ -411,7 +411,7 @@ async function resolveModule(importSpec, currentFile, stdlibPath = null) {
       ];
 
       for (const stdPath of possiblePaths) {
-        const modulePath = path.join(stdPath, `${moduleName.toLowerCase().replace('/', '-')}.syma`);
+        const modulePath = path.join(stdPath, `${moduleName.toLowerCase().replace(/\//g, '-')}.syma`);
         if (fs.existsSync(modulePath)) {
           return modulePath;
         }
@@ -420,7 +420,7 @@ async function resolveModule(importSpec, currentFile, stdlibPath = null) {
       throw new Error(`Cannot find standard module ${moduleName}. Searched in: ${possiblePaths.join(', ')}`);
     }
 
-    const modulePath = path.join(stdlibPath, `${moduleName.toLowerCase().replace('/', '-')}.syma`);
+    const modulePath = path.join(stdlibPath, `${moduleName.toLowerCase().replace(/\//g, '-')}.syma`);
     if (!fs.existsSync(modulePath)) {
       throw new Error(`Cannot find standard module ${moduleName} in ${stdlibPath}`);
     }

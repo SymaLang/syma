@@ -7,6 +7,7 @@
   {Program
     {SplitToCharsDemo}
     {SplitByDemo}
+    {SplitByEmptySepDemo}
     {App State({Zipper {Before a b c} {Curr d} {After e f g}})}
     {EffQueue}
     {Effects {Pending} {Inbox}}
@@ -21,6 +22,11 @@
       "SplitByDemo",
       Plumb({SplitByDemo}),
       PlumbEnd(SplitBy(",", "Apples,Bananas,Cherries"))
+    )
+    R(
+      "SplitByEmptySepDemo",
+      Plumb({SplitByEmptySepDemo}),
+      PlumbEnd(SplitBy("", "Apples"))
     )
     R(
       "PrintChars",

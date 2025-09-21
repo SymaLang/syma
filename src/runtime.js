@@ -84,7 +84,7 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
 
     // Apply RuleRules to transform the Universe itself
     // This makes the transformations permanent in the Universe data structure
-    uni = applyRuleRules(uni);
+    uni = applyRuleRules(uni, foldPrims);
 
     GLOBAL_UNIVERSE = uni;
     GLOBAL_RULES = extractRules(uni);

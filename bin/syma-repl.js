@@ -255,7 +255,7 @@ async function runProgram(filePath, platform, options) {
     universe = engine.enrichProgramWithEffects(universe);
 
     // Apply RuleRules to transform the Universe permanently
-    universe = engine.applyRuleRules(universe);
+    universe = engine.applyRuleRules(universe, foldPrims);
 
     // Extract rules (now from the transformed universe)
     const rules = engine.extractRules(universe);
