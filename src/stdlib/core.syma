@@ -1,0 +1,7 @@
+{Module Core
+  {Export If}
+  {Rules
+    R("If/True",  {If True  a_ b_}, a_)
+    R("If/False", {If False a_ b_}, b_)
+  }
+}

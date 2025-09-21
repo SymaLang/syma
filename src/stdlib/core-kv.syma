@@ -1,6 +1,6 @@
 ;; Core KV operations module
 {Module Core/KV
-  {Export Get Put Set Patch}
+  {Export Get Put Set Patch Copy}
 
   {Rules
     ;; Get value from KV list
@@ -23,6 +23,12 @@
        {Put tag_ key_ v_ {tag_ fields...}}
        {tag_ fields... {KV key_ v_}}
        -100}
+
+    ;; Copy value from one key to another
+    {R "Copy"
+       {Copy tag_ from_ to_ st_}
+       {Put tag_ to_ {Get tag_ from_ st_} st_}
+    }
 
     ;; Set is just Put with better name
     {R "SetField"

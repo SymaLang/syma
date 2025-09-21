@@ -4,9 +4,9 @@
   {RuleRules
     R(
       "PlumbThroughProgram",
-      R(n_, {Plumb acts...}, {PlumbEnd endacts...}),
+      R(SYMARULENAME_, {Plumb acts...}, {PlumbEnd endacts...}),
       R(
-        n_,
+        SYMARULENAME_,
         {Program {/! pre...} acts... {/! post...}},
         {Program {/! pre...} endacts... {/! post...}}
       )
