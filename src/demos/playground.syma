@@ -1,14 +1,22 @@
-{Module
-  Demo/Playground
-  {Import Core/Fun as CF open}
+{Module Demo/Template
   {Program}
   {Rules
-    {Def Fib    {Args n_}       Call(FibAcc, n_, 0, 1)}
-    {Def FibAcc {Args 0 a_ _}   a_}
-    {Def FibAcc {Args n_ a_ b_} Call(FibAcc, {- n_ 1}, b_, {+ a_ b_}) :guard {> n_ 0}}
+    R("Get/Here",  Get(k_, {KV k_ v_ rest...}), v_)
+    R("Get/Skip",  Get(k_, {KV _ _ rest...}),   Get(k_, {KV rest...}), -100)
 
-    {.some-class {
-      color: red;
-    }}
+    R("Render/done",
+      Render(txt_, kv_),
+      txt_, Eq(IndexOf(txt_, "{{"), -1))
+
+    R("Render/step",
+      Render(txt_, kv_),
+      Render(
+        Concat(Substring(txt_, 0, s_),
+               Get(Substring(txt_, Add(s_,2), e_), kv_),
+               Substring(txt_, Add(e_,2))),
+        kv_),
+      ; s = start {{, e = end }}
+      Let s_ = IndexOf(txt_, "{{"),
+      Let e_ = IndexOf(Substring(txt_, Add(s_,2)), "}}"))
   }
 }

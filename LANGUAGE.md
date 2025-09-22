@@ -371,6 +371,8 @@ The runtime provides a comprehensive standard library of primitive operations th
 - `{Random min max}` → random number in range
 - `{ParseNum str}` → parse string to number (remains symbolic if invalid)
 - `{Debug label? value}` → logs to console and returns value (for debugging)
+- `{Splat arg1 arg2 ...}` → creates a splice that expands in context (see Meta-Rules)
+- `{...! arg1 arg2 ...}` → alias for Splat, commonly used in RuleRules
 
 ### Note on Lists
 
@@ -605,18 +607,67 @@ Programs can include an Effects node alongside the main application:
 
 ---
 
-## 12. Meta-Rules
+## 12. Meta-Rules (RuleRules)
 
-Meta-rules in the `RuleRules` section can transform other rules before they're compiled:
+RuleRules are meta-rules that transform the Rules section before runtime. They enable powerful meta-programming by treating rules as data that can be pattern-matched and transformed.
+
+### Basic RuleRule Structure
 
 ```lisp
 {RuleRules
-  {R "ModifyRule"
-    {R "OriginalName" {Var lhs} {Var rhs}}
-    {R "OriginalName" {Var lhs} {ModifiedRhs ...}}}}
+  {R "MetaRuleName"
+    pattern_in_rules_section     ; What to match in Rules
+    replacement_rules}}           ; What to replace it with
 ```
 
-This enables dynamic rule modification and DSL extensions.
+### The Power of Splat in RuleRules
+
+The `Splat` primitive (alias `...!`) allows generating multiple rules from a single meta-rule:
+
+```lisp
+{RuleRules
+  {R "GenerateMultiple"
+    {Generate name_}
+    {Splat                       ; or use ...!
+      {R {Concat name_ "/A"} patternA resultA}
+      {R {Concat name_ "/B"} patternB resultB}}}}
+
+{Rules
+  {Generate "Test"}}  ; Expands to two rules: Test/A and Test/B
+```
+
+### Example: Function Definition System
+
+A practical example showing how RuleRules create function definition syntax:
+
+```lisp
+{RuleRules
+  {R "DefineFunction"
+    {Def fname_ {Args pats...} body_}
+    {R {Concat "fun/" {ToString fname_} "/" {Arity pats...}}
+       {Call fname_ pats...}
+       body_}}}
+
+{Rules
+  {Def Double {Args x} {Mul x 2}}}  ; Becomes a proper rule
+```
+
+After RuleRules transformation, this becomes:
+
+```lisp
+{Rules
+  {R "fun/Double/1" {Call Double x_} {Mul x_ 2}}}
+```
+
+### Execution Timeline
+
+1. **Compile time**: RuleRules transform the Rules section
+2. **Runtime**: Transformed rules execute normally
+3. RuleRules themselves are NOT available at runtime
+
+This enables DSL creation, boilerplate reduction, and syntactic sugar without runtime overhead.
+
+For a comprehensive guide, see the [RuleRules Tutorial](RULERULES-TUTORIAL.md).
 
 ---
 

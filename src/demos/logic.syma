@@ -1,0 +1,9 @@
+{Module Demo/Logic
+  {Program}
+  {Rules
+    R("Humans→Mortals",
+      Mortal(x_), Human(x_))
+
+    R("Fact", Human(Socrates), True)
+  }
+}
