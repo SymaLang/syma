@@ -5,7 +5,7 @@
  * platform-specific dependencies (no DOM, no window object)
  ******************************************************************/
 
-import { Sym, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from '../ast-helpers.js';
+import { Sym, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from '../ast-helpers.js';
 
 /* --------------------- Rule extraction ----------------------- */
 const isR = n => isCall(n) && isSym(n.h) && n.h.v === "R";
@@ -77,14 +77,36 @@ export function extractRules(universe) {
     const baseRulesNode = findSection(universe, "Rules");
     if (!baseRulesNode) throw new Error("Universe missing Rules[...]");
 
-    // RuleRules should have already transformed the Universe
-    // Just extract the rules as-is
-    return extractRulesFromNode(baseRulesNode);
+    // Rules are now wrapped in TaggedRule, need to unwrap them
+    const rules = [];
+    for (const node of baseRulesNode.a) {
+        let actualRule = node;
+
+        // Unwrap TaggedRule if present
+        if (isCall(node) && isSym(node.h) && node.h.v === "TaggedRule") {
+            if (node.a.length >= 2) {
+                actualRule = node.a[1]; // Skip module tag, get the actual rule
+            }
+        }
+
+        // Extract the rule from the R node
+        if (isR(actualRule)) {
+            const rule = extractRuleFromRNode(actualRule);
+            if (rule) {
+                rules.push(rule);
+            }
+        }
+    }
+
+    // Sort by priority
+    rules.sort((a, b) => b.prio - a.prio);
+    return rules;
 }
 
 /**
  * Apply RuleRules to transform the Universe itself
  * This makes RuleRules permanent transformations on the Universe data structure
+ * Now respects module scoping - only applies RuleRules to rules from modules that imported them
  */
 export function applyRuleRules(universe, foldPrimsFn = null) {
     if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
@@ -96,26 +118,180 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
     const baseRulesNode = findSection(universe, "Rules");
     if (!baseRulesNode) return universe; // No Rules to transform
 
-    // Extract meta-rules
-    const metaRules = extractRulesFromNode(ruleRulesNode);
+    // Extract MacroScopes to understand which modules can use which RuleRules
+    const macroScopesNode = findSection(universe, "MacroScopes");
+    const macroScopes = extractMacroScopes(macroScopesNode);
 
-    // Create a restricted fold function for meta-rule evaluation
-    // Only evaluate primitives needed for rule name generation and other meta-operations
-    const metaFoldPrimsFn = foldPrimsFn ? createMetaFoldPrimsFn(foldPrimsFn) : null;
+    // Extract all tagged rules (they're wrapped in TaggedRule)
+    const taggedRules = baseRulesNode.a;
+    const taggedRuleRules = ruleRulesNode.a;
 
-    // Apply meta-rules to transform the Rules section
-    // Pass metaFoldPrimsFn to allow evaluation of expressions in rule names (like Concat)
-    // Set preserveUnboundPatterns=true to preserve pattern variables in transformed rules
-    const transformedRulesNode = normalize(baseRulesNode, metaRules, 10000, false, metaFoldPrimsFn, true);
+    // Transform rules respecting module scopes
+    const transformedRules = [];
+
+    for (const taggedRule of taggedRules) {
+        // Extract module tag and actual rule
+        let ruleModule = null;
+        let actualRule = taggedRule;
+
+        if (isCall(taggedRule) && isSym(taggedRule.h) && taggedRule.h.v === "TaggedRule") {
+            if (taggedRule.a.length >= 2 && isStr(taggedRule.a[0])) {
+                ruleModule = taggedRule.a[0].v;
+                actualRule = taggedRule.a[1];
+            }
+        }
+
+        // Get the RuleRules this module can use
+        const allowedRuleRuleModules = macroScopes.get(ruleModule) || new Set();
+
+        // Build the set of applicable RuleRules for this rule
+        const applicableMetaRules = [];
+
+        for (const taggedRuleRule of taggedRuleRules) {
+            let ruleRuleModule = null;
+            let actualRuleRule = taggedRuleRule;
+
+            if (isCall(taggedRuleRule) && isSym(taggedRuleRule.h) &&
+                taggedRuleRule.h.v === "TaggedRuleRule") {
+                if (taggedRuleRule.a.length >= 2 && isStr(taggedRuleRule.a[0])) {
+                    ruleRuleModule = taggedRuleRule.a[0].v;
+                    actualRuleRule = taggedRuleRule.a[1];
+                }
+            }
+
+            // Only include this RuleRule if it's in scope for the rule's module
+            if (ruleRuleModule && allowedRuleRuleModules.has(ruleRuleModule)) {
+                // Extract the actual meta-rule from the tagged wrapper
+                if (isR(actualRuleRule)) {
+                    const metaRule = extractRuleFromRNode(actualRuleRule);
+                    if (metaRule) {
+                        applicableMetaRules.push(metaRule);
+                    }
+                }
+            }
+        }
+
+        // Apply only the applicable meta-rules to this rule
+        let transformed = actualRule;
+        if (applicableMetaRules.length > 0) {
+            // Create a restricted fold function for meta-rule evaluation
+            const metaFoldPrimsFn = foldPrimsFn ? createMetaFoldPrimsFn(foldPrimsFn) : null;
+
+            // Wrap the single rule in a Rules node for normalization
+            const singleRuleNode = Call(Sym("Rules"), actualRule);
+
+            // Apply the applicable meta-rules
+            const transformedNode = normalize(
+                singleRuleNode,
+                applicableMetaRules,
+                10000,
+                false,
+                metaFoldPrimsFn,
+                true
+            );
+
+            // Extract the transformed rule from the Rules wrapper
+            if (isCall(transformedNode) && transformedNode.a.length > 0) {
+                transformed = transformedNode.a[0];
+            }
+        }
+
+        // Keep the module tag on the transformed rule
+        if (ruleModule) {
+            transformedRules.push(Call(Sym("TaggedRule"), Str(ruleModule), transformed));
+        } else {
+            transformedRules.push(transformed);
+        }
+    }
 
     // Create new Universe with transformed Rules
     const newUniverse = clone(universe);
     const rulesIndex = newUniverse.a.findIndex(n => isCall(n) && isSym(n.h) && n.h.v === "Rules");
     if (rulesIndex >= 0) {
-        newUniverse.a[rulesIndex] = transformedRulesNode;
+        newUniverse.a[rulesIndex] = Call(Sym("Rules"), ...transformedRules);
     }
 
     return newUniverse;
+}
+
+/**
+ * Extract a rule from an R node
+ */
+function extractRuleFromRNode(rNode) {
+    if (!isR(rNode)) return null;
+
+    if (rNode.a.length < 3) return null;
+
+    const [nm, lhs, rhs, ...rest] = rNode.a;
+    if (!isStr(nm)) return null;
+
+    let prio = 0;
+    let guard = null;
+
+    // Parse optional arguments
+    let i = 0;
+    while (i < rest.length) {
+        const arg = rest[i];
+        if (isSym(arg) && arg.v === ":guard" && i + 1 < rest.length) {
+            guard = rest[i + 1];
+            i += 2;
+        } else if (isSym(arg) && arg.v === ":prio" && i + 1 < rest.length) {
+            const prioArg = rest[i + 1];
+            if (isNum(prioArg)) {
+                prio = prioArg.v;
+            }
+            i += 2;
+        } else {
+            // Legacy positional args
+            if (i === 0) {
+                if (isNum(arg)) {
+                    prio = arg.v;
+                } else {
+                    guard = arg;
+                }
+            } else if (i === 1 && guard && isNum(arg)) {
+                prio = arg.v;
+            }
+            i++;
+        }
+    }
+
+    return { name: nm.v, lhs, rhs, guard, prio };
+}
+
+/**
+ * Extract macro scopes from MacroScopes section
+ * Returns Map<moduleName, Set<allowedRuleRuleModules>>
+ */
+function extractMacroScopes(macroScopesNode) {
+    const scopes = new Map();
+
+    if (!macroScopesNode || !isCall(macroScopesNode)) {
+        return scopes;
+    }
+
+    // Each entry is {Module "ModName" {RuleRulesFrom "Mod1" "Mod2" ...}}
+    for (const entry of macroScopesNode.a) {
+        if (!isCall(entry) || !isSym(entry.h) || entry.h.v !== "Module") continue;
+        if (entry.a.length < 2 || !isStr(entry.a[0])) continue;
+
+        const moduleName = entry.a[0].v;
+        const ruleRulesFrom = entry.a[1];
+
+        if (!isCall(ruleRulesFrom) || !isSym(ruleRulesFrom.h) ||
+            ruleRulesFrom.h.v !== "RuleRulesFrom") continue;
+
+        const allowedModules = new Set();
+        for (const mod of ruleRulesFrom.a) {
+            if (isStr(mod)) {
+                allowedModules.add(mod.v);
+            }
+        }
+
+        scopes.set(moduleName, allowedModules);
+    }
+
+    return scopes;
 }
 
 /**

@@ -1,5 +1,5 @@
 {Module Core/Set
-  {Import Core/Rules/Sugar as CRS open}
+  {Import Core/Rules/Sugar as CRS open macro}
   {Export
     IsEmpty Has Len Add Remove Union Intersect Difference SymmetricDifference Toggle
     IsSubset IsEqual

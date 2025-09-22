@@ -45,9 +45,10 @@ export default function symaPlugin(options = {}) {
         const imports = [];
 
         // Match both syntaxes for imports with optional 'from' clause
-        // Brace syntax: {Import X/Y as Z [from "path"] [open]}
-        const importRegexBrace = /\{Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+from\s+"([^"]+)")?(?:\s+open)?\}/g;
-        const importRegexFunc = /Import\s*\(\s*([A-Za-z0-9/_-]+)\s*,\s*as\s*,\s*([A-Za-z0-9]+)(?:\s*,\s*from\s*,\s*"([^"]+)")?(?:\s*,\s*open)?\s*\)/g;
+        // Brace syntax: {Import X/Y as Z [from "path"] [open] [macro]}
+        // Now supports both 'open' and 'macro' modifiers in any order
+        const importRegexBrace = /\{Import\s+([A-Za-z0-9/_-]+)\s+as\s+([A-Za-z0-9]+)(?:\s+from\s+"([^"]+)")?(?:\s+(?:open|macro))*\}/g;
+        const importRegexFunc = /Import\s*\(\s*([A-Za-z0-9/_-]+)\s*,\s*as\s*,\s*([A-Za-z0-9]+)(?:\s*,\s*from\s*,\s*"([^"]+)")?(?:\s*,\s*(?:open|macro))*\s*\)/g;
 
         let match;
         // Check brace syntax imports

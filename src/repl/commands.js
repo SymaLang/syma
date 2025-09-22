@@ -40,6 +40,7 @@ export class CommandProcessor {
             'norm': this.normalizeUniverse.bind(this),
             'program': this.showProgram.bind(this),
             'p': this.showProgram.bind(this),
+            'macro-scopes': this.showMacroScopes.bind(this),
         };
     }
 
@@ -106,6 +107,9 @@ Settings:
 
 History:
   :history [n]              Show last n history entries (default: 20)
+
+Debugging:
+  :macro-scopes             Show which modules can use which RuleRules
 `);
         return true;
     }
@@ -884,6 +888,69 @@ History:
         } catch (error) {
             this.repl.platform.printWithNewline(`Normalization failed: ${error.message}\n`);
         }
+        return true;
+    }
+
+    async showMacroScopes(args) {
+        // Extract MacroScopes section from the universe
+        const macroScopesNode = engine.findSection(this.repl.universe, "MacroScopes");
+
+        if (!macroScopesNode || !isCall(macroScopesNode) || macroScopesNode.a.length === 0) {
+            this.repl.platform.printWithNewline("No macro scopes defined (modules may not use 'macro' imports)");
+            return true;
+        }
+
+        this.repl.platform.printWithNewline("Macro Scopes (which modules can use which RuleRules):\n");
+
+        // Each entry is {Module "ModName" {RuleRulesFrom "Mod1" "Mod2" ...}}
+        for (const entry of macroScopesNode.a) {
+            if (!isCall(entry) || !isSym(entry.h) || entry.h.v !== "Module") continue;
+            if (entry.a.length < 2 || !isStr(entry.a[0])) continue;
+
+            const moduleName = entry.a[0].v;
+            const ruleRulesFrom = entry.a[1];
+
+            if (!isCall(ruleRulesFrom) || !isSym(ruleRulesFrom.h) ||
+                ruleRulesFrom.h.v !== "RuleRulesFrom") continue;
+
+            // Collect the allowed RuleRule source modules
+            const allowedModules = [];
+            for (const mod of ruleRulesFrom.a) {
+                if (isStr(mod)) {
+                    allowedModules.push(mod.v);
+                }
+            }
+
+            if (allowedModules.length > 0) {
+                this.repl.platform.printWithNewline(`  ${moduleName}:`);
+                for (const allowed of allowedModules) {
+                    this.repl.platform.printWithNewline(`    - Can use RuleRules from: ${allowed}`);
+                }
+            } else {
+                this.repl.platform.printWithNewline(`  ${moduleName}: No RuleRules in scope`);
+            }
+        }
+
+        // Also show which modules have RuleRules defined
+        const ruleRulesNode = engine.findSection(this.repl.universe, "RuleRules");
+        if (ruleRulesNode && isCall(ruleRulesNode) && ruleRulesNode.a.length > 0) {
+            this.repl.platform.printWithNewline("\nModules with RuleRules defined:");
+
+            const modulesWithRuleRules = new Set();
+            for (const taggedRuleRule of ruleRulesNode.a) {
+                if (isCall(taggedRuleRule) && isSym(taggedRuleRule.h) &&
+                    taggedRuleRule.h.v === "TaggedRuleRule") {
+                    if (taggedRuleRule.a.length >= 2 && isStr(taggedRuleRule.a[0])) {
+                        modulesWithRuleRules.add(taggedRuleRule.a[0].v);
+                    }
+                }
+            }
+
+            for (const mod of modulesWithRuleRules) {
+                this.repl.platform.printWithNewline(`  - ${mod}`);
+            }
+        }
+
         return true;
     }
 }

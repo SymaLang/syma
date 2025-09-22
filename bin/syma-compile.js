@@ -78,7 +78,7 @@ class Module {
   }
 
   parseImports(nodes) {
-    // Parse {Import X/Y as Z [from "path"] [open]}
+    // Parse {Import X/Y as Z [from "path"] [open] [macro]}
     let i = 0;
     while (i < nodes.length) {
       const moduleNode = nodes[i++];
@@ -96,6 +96,7 @@ class Module {
 
       let fromPath = null;
       let open = false;
+      let macro = false;
 
       // Check for 'from' clause
       if (i < nodes.length && isSym(nodes[i]) && nodes[i].v === 'from') {
@@ -106,17 +107,26 @@ class Module {
         fromPath = nodes[i++].v;
       }
 
-      // Check for 'open' modifier
-      if (i < nodes.length && isSym(nodes[i]) && nodes[i].v === 'open') {
-        open = true;
-        i++;
+      // Check for 'open' and 'macro' modifiers (can have both in any order)
+      while (i < nodes.length && isSym(nodes[i])) {
+        if (nodes[i].v === 'open') {
+          open = true;
+          i++;
+        } else if (nodes[i].v === 'macro') {
+          macro = true;
+          i++;
+        } else {
+          // Unknown modifier, stop parsing
+          break;
+        }
       }
 
       this.imports.push({
         module: moduleNode.v,
         alias,
         fromPath,
-        open
+        open,
+        macro
       });
     }
   }
@@ -322,43 +332,90 @@ class ModuleLinker {
     const allRules = [];
     const allRuleRules = [];
 
+    // Build macro scopes map: which modules can use which RuleRules
+    const macroScopes = new Map(); // module name -> Set of RuleRule module names
+
+    for (const mod of sorted) {
+      const scope = new Set();
+
+      // Module's own RuleRules always apply to its own rules
+      if (mod.ruleRules.length > 0) {
+        scope.add(mod.name);
+      }
+
+      // Add modules imported with 'macro' qualifier
+      for (const imp of mod.imports) {
+        if (imp.macro) {
+          scope.add(imp.module);
+        }
+      }
+
+      macroScopes.set(mod.name, scope);
+    }
+
     // Process each module in dependency order
     for (const mod of sorted) {
       const qualifier = new SymbolQualifier(mod, this.moduleMap);
 
-      // Qualify all rules
-      const qualifiedRules = mod.rules.map(rule => qualifier.qualify(rule));
+      // Tag and qualify all rules with their source module
+      const qualifiedRules = mod.rules.map(rule => {
+        const qualified = qualifier.qualify(rule);
+        // Wrap rule with module tag
+        return Call(Sym('TaggedRule'), Str(mod.name), qualified);
+      });
       allRules.push(...qualifiedRules);
-      // To Claude: This was my idea to tag rules with their module, and then resolve RuleRules based on that
-      // allRules.push(...qualifiedRules.map(r => Call(Sym('TaggedRule'), Str(mod.name), r)));
 
-      // Qualify meta-rules
-      const qualifiedRuleRules = mod.ruleRules.map(rule => qualifier.qualify(rule));
+      // Tag and qualify meta-rules with their source module
+      const qualifiedRuleRules = mod.ruleRules.map(rule => {
+        const qualified = qualifier.qualify(rule);
+        // Wrap rule with module tag
+        return Call(Sym('TaggedRuleRule'), Str(mod.name), qualified);
+      });
       allRuleRules.push(...qualifiedRuleRules);
-      // allRuleRules.push(...qualifiedRuleRules.map(r => Call(Sym('TaggedRuleRule'), Str(mod.name), r)));
 
-      // Expand defs - add as rules
+      // Expand defs - add as rules (also tagged with module)
       for (const [name, expr] of Object.entries(mod.defs)) {
         const qualName = `${mod.name}/${name}`;
         const qualExpr = qualifier.qualify(expr);
         // Add two rules: one for symbol, one for nullary call
         const defRuleSym = Call(
-          Sym('R'),
-          Str(`${qualName}/Def`),
-          Sym(qualName),
-          qualExpr,
-          Num(1000)  // Very high priority
+          Sym('TaggedRule'),
+          Str(mod.name),
+          Call(
+            Sym('R'),
+            Str(`${qualName}/Def`),
+            Sym(qualName),
+            qualExpr,
+            Num(1000)  // Very high priority
+          )
         );
         const defRuleCall = Call(
-          Sym('R'),
-          Str(`${qualName}/DefCall`),
-          Call(Sym(qualName)),  // Match nullary call
-          qualExpr,
-          Num(999)  // Slightly lower priority
+          Sym('TaggedRule'),
+          Str(mod.name),
+          Call(
+            Sym('R'),
+            Str(`${qualName}/DefCall`),
+            Call(Sym(qualName)),  // Match nullary call
+            qualExpr,
+            Num(999)  // Slightly lower priority
+          )
         );
         allRules.unshift(defRuleCall); // Add both rules
         allRules.unshift(defRuleSym);
       }
+    }
+
+    // Serialize macro scopes for inclusion in Universe
+    const macroScopesData = [];
+    for (const [modName, scopeSet] of macroScopes) {
+      // Each entry is {Module "ModName" {RuleRulesFrom "Mod1" "Mod2" ...}}
+      macroScopesData.push(
+        Call(
+          Sym('Module'),
+          Str(modName),
+          Call(Sym('RuleRulesFrom'), ...Array.from(scopeSet).map(m => Str(m)))
+        )
+      );
     }
 
     if (libraryMode) {
@@ -366,7 +423,8 @@ class ModuleLinker {
       return Call(
         Sym('Universe'),
         Call(Sym('Rules'), ...allRules),
-        Call(Sym('RuleRules'), ...allRuleRules)
+        Call(Sym('RuleRules'), ...allRuleRules),
+        Call(Sym('MacroScopes'), ...macroScopesData)
       );
     } else {
       // Normal mode - require entry module with Program
@@ -383,7 +441,8 @@ class ModuleLinker {
         Sym('Universe'),
         qualifiedProgram,
         Call(Sym('Rules'), ...allRules),
-        Call(Sym('RuleRules'), ...allRuleRules)
+        Call(Sym('RuleRules'), ...allRuleRules),
+        Call(Sym('MacroScopes'), ...macroScopesData)
       );
     }
   }

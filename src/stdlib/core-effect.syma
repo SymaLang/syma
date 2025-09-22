@@ -1,6 +1,6 @@
 {Module
   Core/Effect
-  {Import Core/Plumb as CP open}
+  {Import Core/Plumb as CP open macro}
   {Export PrintEff}
   {Rules
     R("EnqueueEffect/Generic",
