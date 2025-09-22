@@ -185,13 +185,23 @@ Modules can import symbols from other modules using either syntax:
 
 ```lisp
 ;; Brace syntax
-{Import Core/KV as KV}          ; Qualified: use as KV/Get, KV/Set
-{Import Core/KV as KV open}     ; Open: use as Get, Set
+{Import Core/KV as KV}               ; Qualified: use as KV/Get, KV/Set
+{Import Core/KV as KV open}          ; Open: use as Get, Set
+{Import Core/Rules/Sugar as CRS macro}  ; Import RuleRules: apply to this module's rules
+{Import Core/Set as CS open macro}   ; Both: open symbols AND apply RuleRules
 
 ;; Function syntax
-Import(Core/KV, as, KV)         ; Qualified: use as KV/Get, KV/Set
-Import(Core/KV, as, KV, open)   ; Open: use as Get, Set
+Import(Core/KV, as, KV)              ; Qualified: use as KV/Get, KV/Set
+Import(Core/KV, as, KV, open)        ; Open: use as Get, Set
+Import(Core/Rules/Sugar, as, CRS, macro)  ; Import RuleRules
+Import(Core/Set, as, CS, open, macro)     ; Both modifiers
 ```
+
+#### Import Modifiers
+
+- **`open`**: Makes exported symbols available without qualification
+- **`macro`**: Applies the imported module's RuleRules to this module's rules
+- Both can be used together: `{Import Module as M open macro}`
 
 ### Symbol Qualification
 
@@ -227,14 +237,25 @@ When modules are bundled, they produce a **Universe** structure:
 
 ```lisp
 {Universe
-  {Program …}      ; From entry module
-  {Rules …}        ; Combined from all modules
-  {RuleRules …}}   ; Combined meta-rules
+  {Program …}          ; From entry module
+  {Rules …}            ; Combined from all modules (tagged with source)
+  {RuleRules …}        ; Combined meta-rules (tagged with source)
+  {MacroScopes …}}    ; Tracks which modules can use which RuleRules
 ```
 
 - **Program**: Main program from the entry module
-- **Rules**: All rules from all modules, with qualified names
-- **RuleRules**: Combined meta-rules that can rewrite rules before application
+- **Rules**: All rules from all modules, wrapped in `TaggedRule` with module source
+- **RuleRules**: Combined meta-rules, wrapped in `TaggedRuleRule` with module source
+- **MacroScopes**: Maps each module to the RuleRules it can use (based on `macro` imports)
+
+Example MacroScopes structure:
+```lisp
+{MacroScopes
+  {Module "Core/Set"
+    {RuleRulesFrom "Core/Rules/Sugar"}}  ; Core/Set can use Sugar RuleRules
+  {Module "App/Main"
+    {RuleRulesFrom}}}                     ; App/Main uses no RuleRules
+```
 
 ---
 
@@ -620,6 +641,34 @@ RuleRules are meta-rules that transform the Rules section before runtime. They e
     replacement_rules}}           ; What to replace it with
 ```
 
+### Module-Scoped RuleRules
+
+**Important:** RuleRules are scoped to modules. They only transform rules in modules that explicitly import them with the `macro` modifier:
+
+```lisp
+;; Module Core/Rules/Sugar defines RuleRules
+{Module Core/Rules/Sugar
+  {Export}
+  {RuleRules
+    {R "Sugar/Rule"
+       {:rule name_ pattern_ -> replacement_}
+       {R name_ pattern_ replacement_}}}}
+
+;; Module Core/Set imports with 'macro' - gets sugar transformation
+{Module Core/Set
+  {Import Core/Rules/Sugar as CRS macro}  ; 'macro' applies RuleRules
+  {Rules
+    {:rule "MyRule" pattern -> result}}}  ; This gets transformed
+
+;; Module App/Main doesn't import with 'macro' - no transformation
+{Module App/Main
+  {Import Core/Set as CS}  ; No 'macro', no RuleRule application
+  {Rules
+    {:rule "Test" x -> y}}}  ; Error! :rule syntax not available
+```
+
+This scoping prevents RuleRules from leaking across module boundaries, avoiding unexpected transformations and bugs.
+
 ### The Power of Splat in RuleRules
 
 The `Splat` primitive (alias `...!`) allows generating multiple rules from a single meta-rule:
@@ -641,15 +690,19 @@ The `Splat` primitive (alias `...!`) allows generating multiple rules from a sin
 A practical example showing how RuleRules create function definition syntax:
 
 ```lisp
-{RuleRules
-  {R "DefineFunction"
-    {Def fname_ {Args pats...} body_}
-    {R {Concat "fun/" {ToString fname_} "/" {Arity pats...}}
-       {Call fname_ pats...}
-       body_}}}
+{Module Core/Functions
+  {Export Def}
+  {RuleRules
+    {R "DefineFunction"
+      {Def fname_ {Args pats...} body_}
+      {R {Concat "fun/" {ToString fname_} "/" {Arity pats...}}
+         {Call fname_ pats...}
+         body_}}}}
 
-{Rules
-  {Def Double {Args x} {Mul x 2}}}  ; Becomes a proper rule
+{Module MyApp
+  {Import Core/Functions as F macro}  ; Need 'macro' to use Def syntax
+  {Rules
+    {Def Double {Args x} {Mul x 2}}}}  ; Becomes a proper rule
 ```
 
 After RuleRules transformation, this becomes:
@@ -661,11 +714,12 @@ After RuleRules transformation, this becomes:
 
 ### Execution Timeline
 
-1. **Compile time**: RuleRules transform the Rules section
+1. **Compile time**: RuleRules transform the Rules section of modules that import them with `macro`
 2. **Runtime**: Transformed rules execute normally
-3. RuleRules themselves are NOT available at runtime
+3. RuleRules themselves remain visible for debugging but don't execute at runtime
+4. The MacroScopes section tracks which modules can use which RuleRules
 
-This enables DSL creation, boilerplate reduction, and syntactic sugar without runtime overhead.
+This enables DSL creation, boilerplate reduction, and syntactic sugar without runtime overhead, while maintaining clean module boundaries.
 
 For a comprehensive guide, see the [RuleRules Tutorial](RULERULES-TUTORIAL.md).
 

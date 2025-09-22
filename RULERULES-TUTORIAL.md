@@ -33,15 +33,36 @@ RuleRules are Syma's meta-programming system. They're rules that transform the R
 
 In Syma, rules are just data—symbolic expressions like everything else. RuleRules pattern-match on rule definitions and transform them into new rules. This is homoiconicity at its finest: code that writes code.
 
+### Module-Scoped RuleRules (New!)
+
+**Important:** RuleRules are now module-scoped. They only transform rules in modules that explicitly import them with the `macro` modifier. This prevents unexpected transformations and keeps your code predictable:
+
+```lisp
+;; Module A defines RuleRules
+{Module A
+  {Export}
+  {RuleRules {...}}}
+
+;; Module B imports with 'macro' - gets transformations
+{Module B
+  {Import A as A macro}  ; ← 'macro' enables RuleRules from A
+  {Rules {...}}}         ; These rules can be transformed by A's RuleRules
+
+;; Module C imports without 'macro' - no transformations
+{Module C
+  {Import A as A}        ; ← No 'macro', no RuleRules applied
+  {Rules {...}}}         ; These rules are NOT transformed
+```
+
 ### When RuleRules Execute
 
 ```
-Source Code → Parse → RuleRules Applied → Final Rules → Runtime
+Source Code → Parse → Module-Scoped RuleRules Applied → Final Rules → Runtime
                       ↑
-                This is where the magic happens
+                Only applies to modules with 'macro' imports
 ```
 
-RuleRules transform your Rules section ONCE at compile time, not during program execution.
+RuleRules transform your Rules section ONCE at compile time, not during program execution, and only in modules that explicitly request them.
 
 ---
 
@@ -160,7 +181,7 @@ The `...!` operator is an alias for Splat, making the syntax more concise:
 Let's build a complete function definition system using RuleRules, inspired by `core-fun-withsugar.syma`:
 
 ```lisp
-{Module Functions
+{Module Core/Functions
   {Export Def Fn}
 
   {RuleRules
@@ -186,10 +207,14 @@ Let's build a complete function definition system using RuleRules, inspired by `
 
     ; Helper to count arguments
     {R "Arity/Empty" {Arity} 0}
-    {R "Arity/Count" {Arity _ rest...} {Add 1 {Arity rest...}}}}
+    {R "Arity/Count" {Arity _ rest...} {Add 1 {Arity rest...}}}}}
+
+{Module MyApp
+  {Import Core/Functions as F open macro}  ; Both modifiers!
 
   {Rules
-    ; These will be transformed by RuleRules
+    ; Now we can use Def and Fn syntax (from 'macro')
+    ; And reference them without qualification (from 'open')
     {Def Double {Args n} {Mul n 2}}
     {Fn {Triple n} {Mul n 3}}}}
 ```
@@ -372,7 +397,23 @@ Add cross-cutting concerns:
 
 ## 9. Debugging RuleRules
 
-### Technique 1: See the Transformation
+### Technique 1: Check Macro Scopes
+
+Use the REPL's `:macro-scopes` command to verify which modules can use which RuleRules:
+
+```bash
+syma> :macro-scopes
+Macro Scopes (which modules can use which RuleRules):
+
+  Core/Set:
+    - Can use RuleRules from: Core/Rules/Sugar
+  MyApp:
+    - Can use RuleRules from: Core/Functions
+  OtherModule:
+    No RuleRules in scope  ; ← Forgot 'macro' in import!
+```
+
+### Technique 2: See the Transformation
 
 Temporarily convert your RuleRule into a regular rule to see what it generates:
 
@@ -388,7 +429,7 @@ Temporarily convert your RuleRule into a regular rule to see what it generates:
      {Debug "Would generate:" replacement}}}
 ```
 
-### Technique 2: Use ToNormalString
+### Technique 3: Use ToNormalString
 
 Generate rule names that show their origin:
 
@@ -401,7 +442,7 @@ Generate rule names that show their origin:
         replacement}}}
 ```
 
-### Technique 3: Incremental Testing
+### Technique 4: Incremental Testing
 
 Test RuleRules incrementally:
 
@@ -409,6 +450,21 @@ Test RuleRules incrementally:
 2. Write a RuleRule that generates it
 3. Compare the generated vs manual version
 4. Iterate until they match
+
+### Technique 5: Common Scoping Mistakes
+
+```lisp
+;; ❌ Wrong: Forgot 'macro' modifier
+{Import Core/Rules/Sugar as S}
+{Rules {:rule "Test" x -> y}}  ; Error: :rule not recognized
+
+;; ✅ Right: Include 'macro' to enable RuleRules
+{Import Core/Rules/Sugar as S macro}
+{Rules {:rule "Test" x -> y}}  ; Works!
+
+;; ✅ Also right: Both open and macro
+{Import Core/Rules/Sugar as S open macro}
+```
 
 ---
 
@@ -488,14 +544,23 @@ RuleRules are Syma's secret weapon for building powerful abstractions. They let 
 - **Create DSLs**: Build domain-specific languages that compile to rules
 - **Add syntax sugar**: Make your code more readable without runtime overhead
 - **Stay DRY**: Define patterns once, use everywhere
+- **Maintain clean boundaries**: Module scoping prevents unexpected transformations
 
 The key insight: In Syma, transformation rules are just data, and RuleRules are transformations on that data. This recursive beauty enables unlimited meta-programming power.
 
+The module scoping system ensures:
+- **No surprises**: RuleRules only affect modules that explicitly request them with `macro`
+- **Clear dependencies**: You can see which modules use which transformations
+- **Easier debugging**: Use `:macro-scopes` in REPL to understand what's happening
+- **Better composability**: Libraries can provide RuleRules without forcing them on users
+
 Remember:
 - RuleRules execute at compile time, not runtime
+- Use `macro` import modifier to enable RuleRules from a module
 - Use `Splat` (or `...!`) to generate multiple rules
 - Pattern variables in rules are preserved during transformation
 - Test incrementally—see what your RuleRules generate
+- Debug with `:macro-scopes` command in REPL
 
 Master RuleRules, and you master the art of writing programs that write themselves!
 
@@ -527,8 +592,17 @@ Master RuleRules, and you master the art of writing programs that write themselv
 
 ### Execution Order
 1. Parse source code
-2. Apply RuleRules to transform Rules section
+2. Apply RuleRules to transform Rules section (only in modules with `macro` imports)
 3. Resulting rules used at runtime
-4. RuleRules are NOT available at runtime
+4. RuleRules remain visible for debugging but don't execute at runtime
+5. MacroScopes section tracks which modules can use which RuleRules
+
+### Import Modifiers for RuleRules
+```lisp
+{Import Module as M}           ; Regular import (no RuleRules)
+{Import Module as M macro}     ; Enable RuleRules from Module
+{Import Module as M open}      ; Open symbols (no RuleRules)
+{Import Module as M open macro} ; Both: open symbols AND enable RuleRules
+```
 
 Happy meta-programming!

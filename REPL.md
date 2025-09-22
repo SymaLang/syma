@@ -607,6 +607,28 @@ Last 50 entries:
   ...
 ```
 
+### Macro Scopes Inspection
+
+View which modules can use which RuleRules (based on `macro` imports):
+
+```lisp
+syma> :macro-scopes
+Macro Scopes (which modules can use which RuleRules):
+
+  Core/Set:
+    - Can use RuleRules from: Core/Rules/Sugar
+  Demo/Math:
+    - Can use RuleRules from: Core/Rules/Sugar
+  App/Main:
+    No RuleRules in scope
+
+Modules with RuleRules defined:
+  - Core/Rules/Sugar
+  - Core/Functions
+```
+
+This command helps debug why certain syntactic sugar works in some modules but not others.
+
 ---
 
 ## 8. Debugging and Tracing
@@ -843,6 +865,9 @@ syma> {ComplexRule {Nested {Deep 42}}}
 
 ### History
 - `:history [n]` - Show last n history entries (default: 20)
+
+### Debugging
+- `:macro-scopes` - Show which modules can use which RuleRules (macro import tracking)
 
 ---
 
@@ -1115,4 +1140,7 @@ SETTINGS
 
 HISTORY
   :history [n]             Show history
+
+DEBUGGING
+  :macro-scopes            Show RuleRules scope map
 ```

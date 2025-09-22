@@ -124,12 +124,20 @@ The architecture supports any JavaScript environment:
    ↓
 2. Parser (platform-independent)
    ↓
-3. AST (JSON - universal format)
+3. Module-scoped RuleRules applied (compile-time)
    ↓
-4. Runtime (loads AST)
+4. AST (JSON - universal format with MacroScopes)
    ↓
-5. Platform Adapter (handles effects)
+5. Runtime (loads AST)
+   ↓
+6. Platform Adapter (handles effects)
 ```
+
+The compiled AST includes:
+- **Rules**: Tagged with their source module
+- **RuleRules**: Preserved for debugging
+- **MacroScopes**: Tracks which modules used which RuleRules
+- **Program**: The main application structure
 
 ### Example: Timer Effect Across Platforms
 
