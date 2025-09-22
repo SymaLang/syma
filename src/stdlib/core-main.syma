@@ -1,7 +1,15 @@
-{Module Core/Main
-  {Export If}
+{Module
+  Core/Main
+  {Export If IsEmpty NotEmpty Alt Default}
   {Rules
     R("If/True",  {If True  a_ b_}, a_)
     R("If/False", {If False a_ b_}, b_)
+    {R "IsEmpty/True" IsEmpty(Empty) True}
+    {R "IsEmpty/False" IsEmpty(_) False}
+    {R "NotEmpty/True" NotEmpty(Empty) False}
+    {R "NotEmpty/False" NotEmpty(_) True}
+    {R "Alt/Left" Alt(x_, _) x_ Neq(x_, Empty)}
+    {R "Alt/Right" Alt(Empty, y_) y_}
+    {R "Default" Default(x_, d_) Alt(x_, d_)}
   }
 }

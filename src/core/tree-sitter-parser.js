@@ -275,6 +275,13 @@ export class SymaTreeSitterParser {
         const isNum = n => n && n.k === K.Num;
         const isStr = n => n && n.k === K.Str;
         const isCall = n => n && n.k === K.Call;
+        const isSplice = n => n && n.__splice === true && Array.isArray(n.items);
+
+        // Handle Splice objects (internal representation from Splat)
+        if (isSplice(node)) {
+            const items = node.items.map(item => this.nodeToString(item, indent));
+            return `<splat> ${items.join(' ')}`;
+        }
 
         if (isNum(node)) return String(node.v);
         if (isStr(node)) return `"${escapeStringForDisplay(node.v)}"`;
@@ -558,7 +565,14 @@ export class SymaTreeSitterParser {
         const isNum = n => n && n.k === K.Num;
         const isStr = n => n && n.k === K.Str;
         const isCall = n => n && n.k === K.Call;
+        const isSplice = n => n && n.__splice === true && Array.isArray(n.items);
         const spaces = ' '.repeat(indent * opts.indentSize);
+
+        // Handle Splice objects (internal representation from Splat)
+        if (isSplice(node)) {
+            const items = node.items.map(item => this.prettyPrint(item, indent, opts));
+            return `<splat> ${items.join(' ')}`;
+        }
 
         // Atoms
         if (isNum(node)) return String(node.v);

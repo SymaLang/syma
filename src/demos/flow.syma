@@ -1,7 +1,7 @@
 {Module
   Demo/Playground
 
-  {Import Core as C open}
+  {Import Core/Main as C open}
   {Import Core/Plumb as CP open}
   {Import Core/Effect as CE open}
   {Import Core/KV as KV}
@@ -10,9 +10,9 @@
     App(
       State(
         Vars(
-          {KV Input Nil},
-          {KV Name  Nil},
-          {KV Age   Nil}
+          {KV Input Empty},
+          {KV Name  Empty},
+          {KV Age   Empty}
         )
       )
     )

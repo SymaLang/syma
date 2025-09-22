@@ -27,7 +27,7 @@ export class CommandProcessor {
             'u': this.showUniverse.bind(this),
             'rules': this.listRules.bind(this),
             'rule': this.showOrEditRule.bind(this),
-            'apply': this.applyRule.bind(this),
+            // 'apply': this.applyRule.bind(this),
             'exec': this.smartExecRule.bind(this),
             'trace': this.trace.bind(this),
             'why': this.explainStuck.bind(this),
@@ -39,6 +39,7 @@ export class CommandProcessor {
             'set': this.setOption.bind(this),
             'norm': this.normalizeUniverse.bind(this),
             'program': this.showProgram.bind(this),
+            'p': this.showProgram.bind(this),
         };
     }
 

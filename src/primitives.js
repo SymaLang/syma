@@ -752,12 +752,16 @@ function foldCharFromCode(args) {
 
 /**
  * Splat/spread operator: ...![arg1, arg2, ...] -> Splice([arg1, arg2, ...])
- * Returns a Splice object that will be flattened when used in a Call
- * This allows spreading arguments into function calls
+ * Returns a Splice object that will be flattened in specific contexts:
+ * - As arguments in function calls (automatically flattened during normalization)
+ * - In RuleRules for generating multiple rules (handled by meta-rule processor)
+ *
+ * Note: Splice is an internal representation. When displayed at top level,
+ * it will be shown as Bundle[...] for clarity.
  */
 function foldSplat(args) {
-    // Simply wrap all arguments in a Splice
-    // When this Splice is used in a Call, it will be automatically flattened
+    // Return Splice object - it will be expanded by context-specific processors
+    // The display layer will handle showing it as Bundle[...] for clarity
     return Splice(args);
 }
 
