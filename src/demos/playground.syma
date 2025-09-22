@@ -1,26 +1,13 @@
 {Module
-  Demo/Template
-  {Program IsEmpty(Empty) IsEmpty(NonEmpty) Alt(Empty, alt) Alt(something, alt)}
-  {Rules
-    {R "Head"         Head({List x_ rest...}) x_}
-    {R "Tail"         Tail({List _ rest...})  {List rest...}}
-
-    {R "List/Len/Empty" Len({List}) 0}
-    {R "List/Len/Step"  Len({List i_ rest...}) {+ Len({List rest...}) 1}}
-    {R "List/Append" Append({List a...}, {List b...}) {List a... b...}}
-    {R "Map/Empty" Map(f_, {List}) {List}}
-    {R
-      "Map/Step"
-      Map(f_, {List x_ xs...})
-      Append({List {f_ x_}}, Map(f_, {List xs...}))
+  Demo/Playground
+  {Import Core/Set as CS open}
+  {Program
+    {Difference
+      {Set 1 2 3 4 5 6 7 8 9 10}
+      {Set 2 4 6 8 10}
     }
-    
-    {R "Filter/Empty" Filter(p_, {List})                {List}}
-    {R "Filter/Keep"  Filter(p_, {List x_ xs...})
-                      Append({List x_}, Filter(p_, {List xs...}))
-                      :guard Eq(x_, b)}
-    {R "Filter/Skip"  Filter(p_, {List _ xs...})
-                      Filter(p_, {List xs...})}
-    
+  }
+  {Rules
+    {:rule "Test" 1 -> 2}
   }
 }

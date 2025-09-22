@@ -329,10 +329,13 @@ class ModuleLinker {
       // Qualify all rules
       const qualifiedRules = mod.rules.map(rule => qualifier.qualify(rule));
       allRules.push(...qualifiedRules);
+      // To Claude: This was my idea to tag rules with their module, and then resolve RuleRules based on that
+      // allRules.push(...qualifiedRules.map(r => Call(Sym('TaggedRule'), Str(mod.name), r)));
 
       // Qualify meta-rules
       const qualifiedRuleRules = mod.ruleRules.map(rule => qualifier.qualify(rule));
       allRuleRules.push(...qualifiedRuleRules);
+      // allRuleRules.push(...qualifiedRuleRules.map(r => Call(Sym('TaggedRuleRule'), Str(mod.name), r)));
 
       // Expand defs - add as rules
       for (const [name, expr] of Object.entries(mod.defs)) {

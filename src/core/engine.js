@@ -336,8 +336,9 @@ export function applyOnce(expr, rules, foldPrimsFn = null, preserveUnboundPatter
             if (r.guard) {
                 // Substitute the guard with matched bindings
                 const guardValue = subst(r.guard, env, preserveUnboundPatterns);
-                // Evaluate the guard expression
-                const evaluatedGuard = foldPrimsFn ? foldPrimsFn(guardValue) : guardValue;
+                // Fully normalize the guard expression (not just fold primitives)
+                // This allows guards to use user-defined predicates, not just primitives
+                const evaluatedGuard = normalize(guardValue, rules, 100, false, foldPrimsFn, preserveUnboundPatterns);
                 // Guard must evaluate to the symbol True
                 if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
                     continue; // Guard failed, try next rule
@@ -376,8 +377,9 @@ export function applyOnceTrace(expr, rules, foldPrimsFn = null) {
                 if (r.guard) {
                     // Substitute the guard with matched bindings
                     const guardValue = subst(r.guard, env);
-                    // Evaluate the guard expression
-                    const evaluatedGuard = foldPrimsFn ? foldPrimsFn(guardValue) : guardValue;
+                    // Fully normalize the guard expression (not just fold primitives)
+                    // This allows guards to use user-defined predicates, not just primitives
+                    const evaluatedGuard = normalize(guardValue, rules, 100, false, foldPrimsFn);
                     // Guard must evaluate to the symbol True
                     if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
                         continue; // Guard failed, try next rule
