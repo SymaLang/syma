@@ -411,6 +411,7 @@ Available notebook commands:
   :rules                  List all rules
   :rule multiline         Start a multiline rule definition (end with :end)
   :add multiline          Start a multiline expression (end with :end)
+  :render multiline       Start a multiline UI node (end with :end)
   :help                   Show this help
 
 Examples:
@@ -426,6 +427,20 @@ Examples:
     {Pattern x_}
     ->
     {Result x_}
+  :end
+
+  ; Multiline render example
+  :render multiline
+  {Div
+    :class "card"
+    {H1 "Counter"}
+    {P "Value: " {Show Count}}
+    {Button
+      :onClick Inc
+      :class "btn"
+      "Increment"
+    }
+  }
   :end
 
   ; Render interactive UI that modifies the global state

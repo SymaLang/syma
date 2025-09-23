@@ -187,9 +187,8 @@ export class NotebookEngine {
 
                 if (trimmedLine.startsWith(':')) {
                     // Check if this is a multiline command
-                    if (trimmedLine === ':rule multiline' || trimmedLine === ':add multiline') {
-                        console.log('Detected multiline command');
-                        const commandType = trimmedLine.split(' ')[0]; // :rule or :add
+                    if (trimmedLine === ':rule multiline' || trimmedLine === ':add multiline' || trimmedLine === ':render multiline') {
+                        const commandType = trimmedLine.split(' ')[0]; // :rule, :add, or :render
                         // Collect everything until :end
                         let ruleLines = [];
                         let j = i + 1;
