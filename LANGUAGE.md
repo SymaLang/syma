@@ -643,7 +643,7 @@ RuleRules are meta-rules that transform the Rules section before runtime. They e
 
 ### Module-Scoped RuleRules
 
-**Important:** RuleRules are scoped to modules. They only transform rules in modules that explicitly import them with the `macro` modifier:
+RuleRules are scoped to modules. They only transform rules in modules that explicitly import them with the `macro` modifier:
 
 ```lisp
 ;; Module Core/Rules/Sugar defines RuleRules
@@ -668,6 +668,33 @@ RuleRules are meta-rules that transform the Rules section before runtime. They e
 ```
 
 This scoping prevents RuleRules from leaking across module boundaries, avoiding unexpected transformations and bugs.
+
+### Global Syntax (Core/Syntax/Global)
+
+**Special Exception:** The module `Core/Syntax/Global` is automatically included in every compilation and its RuleRules apply globally to ALL modules:
+
+```lisp
+;; src/stdlib/core-syntax-global.syma
+{Module Core/Syntax/Global
+  {Export}
+  {RuleRules
+    ; This :rule syntax is available EVERYWHERE
+    {R "Sugar/Rule"
+       {:rule name_ pattern_ -> replacement_}
+       {R name_ pattern_ replacement_}}}}
+
+;; Any module can now use :rule syntax without importing anything
+{Module MyApp
+  {Rules
+    {:rule "Test" x -> y}}}  ; Works! Global syntax is always available
+```
+
+This provides fundamental syntactic sugar that should be universally available, like the `:rule` shorthand. The compiler:
+1. Automatically loads `Core/Syntax/Global` if it exists in stdlib
+2. Adds a special `"*"` scope in MacroScopes that applies to all modules
+3. These global RuleRules transform rules in every module
+
+Use global syntax sparingly—only for truly universal constructs that every module should have access to.
 
 ### The Power of Splat in RuleRules
 

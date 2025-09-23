@@ -523,6 +523,23 @@ syma> :load program.syma
 Universe loaded from program.syma
 ```
 
+Reload after making changes:
+
+```lisp
+syma> :bundle src/demos/math.syma
+Module Demo/Math bundled and loaded successfully
+
+syma> ; Edit math.syma in your editor...
+
+syma> :reload
+Reloading: :bundle src/demos/math.syma
+Module Demo/Math bundled and loaded successfully
+
+syma> ; Your changes are now loaded!
+```
+
+The `:reload` command remembers the last `:bundle` or `:load` command, making iterative development much faster.
+
 ### File Formats
 
 - `.syma` - S-expression source format (human-readable)
@@ -560,6 +577,63 @@ syma> :universe
     {R "Increment" ... }
     {R "ShowCount" ... }}}
 ```
+
+View specific sections of the universe:
+
+```lisp
+syma> :program
+{Program
+  {App
+    {State {Count 5}}
+    {UI {Button :onClick Inc "+"}}}}
+
+syma> :rules-section
+{Rules
+  {TaggedRule "App/Counter"
+    {R "Increment" ... }}
+  {TaggedRule "UI/Core"
+    {R "ShowCount" ... }}}
+
+syma> :rulerules
+{RuleRules
+  {TaggedRuleRule "Core/Syntax"
+    {R "Def->R" ... }}}
+```
+
+### Pattern Matching on Universe
+
+The `:match` command lets you extract parts of the universe using pattern matching:
+
+```lisp
+syma> :match {Program p_}
+Pattern matched successfully!
+
+p_ =
+  {App
+    {State {Count 5}}
+    {UI {Button :onClick Inc "+"}}}
+
+syma> :match {Rules r...}
+Pattern matched successfully!
+
+r... = [
+  {TaggedRule "App/Counter" {R "Increment" ...}}
+  {TaggedRule "UI/Core" {R "ShowCount" ...}}
+]
+
+syma> :match {Program {App {State s_} ui_} ...}
+Pattern matched successfully!
+
+s_ = {Count 5}
+ui_ = {UI {Button :onClick Inc "+"}}
+```
+
+Pattern syntax:
+- `x_` - Variable (matches any single expression)
+- `x...` - Rest variable (matches zero or more expressions)
+- `_` - Wildcard (matches without binding)
+
+Note: The pattern is automatically wrapped in `{Universe ...}` and the command intelligently adds `...` before/after as needed.
 
 ### Applying Actions to State
 
@@ -615,19 +689,24 @@ View which modules can use which RuleRules (based on `macro` imports):
 syma> :macro-scopes
 Macro Scopes (which modules can use which RuleRules):
 
+  *:
+    - Can use RuleRules from: Core/Syntax/Global  ; Global syntax for ALL modules
   Core/Set:
+    - Can use RuleRules from: Core/Syntax/Global
     - Can use RuleRules from: Core/Rules/Sugar
   Demo/Math:
+    - Can use RuleRules from: Core/Syntax/Global
     - Can use RuleRules from: Core/Rules/Sugar
   App/Main:
-    No RuleRules in scope
+    - Can use RuleRules from: Core/Syntax/Global  ; Always has global syntax
 
 Modules with RuleRules defined:
+  - Core/Syntax/Global  ; Auto-loaded, applies everywhere
   - Core/Rules/Sugar
   - Core/Functions
 ```
 
-This command helps debug why certain syntactic sugar works in some modules but not others.
+This command helps debug why certain syntactic sugar works in some modules but not others. The special `*` scope indicates global RuleRules that apply to all modules.
 
 ---
 
@@ -682,6 +761,41 @@ Rule "MyRule" partially matches:
 
 No other rules come close to matching this expression
 ```
+
+### Inspecting Rule Transformations
+
+Use the new inspection commands to understand how RuleRules transform your code:
+
+```lisp
+syma> :bundle src/demos/fun.syma
+Module Demo/Fun bundled and loaded successfully
+
+syma> :rules-section
+{Rules
+  {TaggedRule "Demo/Fun"
+    {R "fun/Fib/1" {Core/Fun/WithSugar/Call Fib n_} {FibAcc n_ 0 1}}}
+  {TaggedRule "Demo/Fun"
+    {R "fun/Factorial/1" {Core/Fun/WithSugar/Call Factorial 0} 1}}
+  ...}
+
+syma> :rulerules
+{RuleRules
+  {TaggedRuleRule "Core/Fun/WithSugar"
+    {R "Def->R:fn"
+      {Fn {SYMAFNNAME_ pats...} {SYMAFNBODY_}}
+      {Splat ...}
+      100}}}
+
+syma> :match {Rules r...}
+Pattern matched successfully!
+
+r... = [
+  {TaggedRule "Demo/Fun" {R "fun/Fib/1" ...}}
+  {TaggedRule "Demo/Fun" {R "fun/Factorial/1" ...}}
+]
+```
+
+This shows how the `{Fn ...}` syntactic sugar was transformed into actual rules by RuleRules.
 
 ### REPL Settings
 
@@ -792,6 +906,21 @@ syma> :save my-module.syma
 Universe saved to my-module.syma
 ```
 
+5. Use `:reload` for rapid iteration:
+```lisp
+syma> :bundle my-module.syma
+Module MyModule bundled and loaded successfully
+
+syma> ; Make edits in your text editor...
+syma> ; Add new rules, fix bugs, refactor...
+
+syma> :reload  ; No need to retype the path!
+Reloading: :bundle my-module.syma
+Module MyModule bundled and loaded successfully
+
+syma> ; Test your changes immediately
+```
+
 ### Live Debugging Session
 
 ```lisp
@@ -833,12 +962,17 @@ syma> {ComplexRule {Nested {Deep 42}}}
 - `:save <file>` - Save universe to file (.syma or .json)
 - `:load <file>` - Load universe from file
 - `:bundle <file>` - Bundle module and dependencies, replacing universe
+- `:reload` - Re-run last `:bundle` or `:load` command
 - `:import <file>` - Import module and dependencies into current universe
 - `:export <module>` - Export single module to file (not yet implemented)
 
 ### Universe Management
 - `:clear` - Reset universe to empty state
-- `:universe` - Show current universe (pretty printed)
+- `:universe`, `:u` - Show current universe (pretty printed)
+- `:program`, `:p` - Show Program section
+- `:rules-section`, `:rs` - Show raw Rules section
+- `:rulerules`, `:rr` - Show RuleRules section
+- `:match <pattern>` - Match pattern against universe and show bindings
 - `:undo` - Undo last modification
 
 ### Rule Management
@@ -1063,7 +1197,25 @@ syma> ; ... try risky changes ...
 syma> :load checkpoint.json   ; Restore if needed
 ```
 
-#### 4. Bundle for Production
+#### 4. Iterative Development with :reload
+
+```lisp
+syma> :bundle src/demos/math.syma
+Module Demo/Math bundled and loaded successfully
+
+syma> {Simplify {Add 2 3}}
+→ 5
+
+syma> ; Edit the file in your editor...
+
+syma> :reload
+Reloading: :bundle src/demos/math.syma
+Module Demo/Math bundled and loaded successfully
+
+syma> ; Test your changes immediately
+```
+
+#### 5. Bundle for Production
 
 ```lisp
 syma> ; During development
@@ -1110,12 +1262,17 @@ FILES
   :save file               Save universe
   :load file               Load universe
   :bundle file             Replace universe with module
+  :reload                  Re-run last :bundle/:load
   :import file             Add module to universe
   :export module           Export module
 
 UNIVERSE
   :clear                   Reset universe
-  :universe                Show universe
+  :universe, :u            Show universe
+  :program, :p             Show Program section
+  :rules-section, :rs      Show Rules section
+  :rulerules, :rr          Show RuleRules section
+  :match pattern           Extract with pattern matching
   :undo                    Undo last change
 
 RULES

@@ -37,21 +37,26 @@ In Syma, rules are just data—symbolic expressions like everything else. RuleRu
 
 **Important:** RuleRules are now module-scoped. They only transform rules in modules that explicitly import them with the `macro` modifier. This prevents unexpected transformations and keeps your code predictable:
 
+**Special Exception:** The module `Core/Syntax/Global` is automatically included in all compilations and provides global syntax that applies to ALL modules without requiring imports. This is where fundamental syntactic sugar like `:rule` lives:
+
 ```lisp
-;; Module A defines RuleRules
-{Module A
-  {Export}
-  {RuleRules {...}}}
+;; Core/Syntax/Global provides universal syntax (no import needed!)
+{Module MyApp
+  {Rules
+    {:rule "Test" x_ -> {Process x_}}  ; Works everywhere!
+  }}
 
-;; Module B imports with 'macro' - gets transformations
+;; Regular module-scoped RuleRules still require 'macro' import
 {Module B
-  {Import A as A macro}  ; ← 'macro' enables RuleRules from A
-  {Rules {...}}}         ; These rules can be transformed by A's RuleRules
+  {Import CustomSyntax as CS macro}  ; ← Need 'macro' for non-global RuleRules
+  {Rules {...}}}
 
-;; Module C imports without 'macro' - no transformations
+;; Module C doesn't get CustomSyntax (only global syntax)
 {Module C
-  {Import A as A}        ; ← No 'macro', no RuleRules applied
-  {Rules {...}}}         ; These rules are NOT transformed
+  {Import CustomSyntax as CS}        ; ← No 'macro', no custom RuleRules
+  {Rules
+    {:rule "Works" x -> y}            ; Global :rule syntax works
+    {CustomSyntax ...}}}              ; But custom syntax doesn't
 ```
 
 ### When RuleRules Execute

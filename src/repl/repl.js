@@ -381,7 +381,20 @@ export class SymaREPL {
             }
         }
 
-        this.platform.print("\nGoodbye!\n");
+        const possibleShutdownMessages = [
+            "Goodbye!",
+            "See you later!",
+            "Have a great day!",
+            "Farewell!",
+            "Until next time!",
+            "Bye!",
+            "Take care!",
+            "Stay safe!",
+        ];
+
+        const message = possibleShutdownMessages[Math.floor(Math.random() * possibleShutdownMessages.length)];
+
+        this.platform.print(`\n${message}\n`);
 
         // Clean up effects processor
         if (this.effectsProcessor) {

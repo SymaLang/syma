@@ -11,6 +11,7 @@ import { foldPrims } from '../primitives.js';
 export class CommandProcessor {
     constructor(repl) {
         this.repl = repl;
+        this.lastFileOperation = null; // Track last :bundle or :load for :reload
         this.commands = {
             'help': this.help.bind(this),
             'h': this.help.bind(this),
@@ -20,6 +21,7 @@ export class CommandProcessor {
             'save': this.save.bind(this),
             'load': this.load.bind(this),
             'bundle': this.bundle.bind(this),
+            'reload': this.reload.bind(this),
             'export': this.export.bind(this),
             'import': this.import.bind(this),
             'clear': this.clear.bind(this),
@@ -41,6 +43,11 @@ export class CommandProcessor {
             'program': this.showProgram.bind(this),
             'p': this.showProgram.bind(this),
             'macro-scopes': this.showMacroScopes.bind(this),
+            'rules-section': this.showRulesSection.bind(this),
+            'rs': this.showRulesSection.bind(this),
+            'rulerules': this.showRuleRulesSection.bind(this),
+            'rr': this.showRuleRulesSection.bind(this),
+            'match': this.matchPattern.bind(this),
         };
     }
 
@@ -75,6 +82,7 @@ File operations:
   :save <file>              Save universe to file (.syma or .json)
   :load <file>              Load universe from file
   :bundle <file>            Bundle module and dependencies into universe
+  :reload                   Re-run last :bundle or :load command
   :export <module>          Export single module to file
   :import <file>            Import module and dependencies into current universe
 
@@ -82,7 +90,9 @@ Universe management:
   :clear                    Reset universe to empty state
   :universe, :u             Show current universe (pretty printed)
   :undo                     Undo last modification
-  :program                  Show current Program section
+  :program, :p              Show current Program section
+  :rules-section, :rs       Show raw Rules section
+  :rulerules, :rr           Show RuleRules section
 
 Rule management:
   :rules                    List all rules
@@ -99,6 +109,7 @@ Evaluation:
   :why <expr>               Explain why evaluation got stuck
   :apply <action>           Apply action to current universe state
   :norm [show]              Normalize the universe Program section
+  :match <pattern>          Match pattern against universe and show bindings
 
 Settings:
   :set <option> <value>     Set REPL option
@@ -145,10 +156,31 @@ Debugging:
             await this.repl.loadFile(filename);
             this.repl.platform.printWithNewline(`Universe loaded from ${filename}`);
 
+            // Save for :reload
+            this.lastFileOperation = { command: 'load', filename };
+
             // Give effects processor a moment to process any pending effects
             await new Promise(resolve => this.repl.platform.setTimeout(resolve, 50));
         } catch (error) {
             this.repl.platform.printWithNewline(`Failed to load: ${error.message}`);
+        }
+        return true;
+    }
+
+    async reload(args) {
+        if (!this.lastFileOperation) {
+            this.repl.platform.printWithNewline("No previous :bundle or :load command to reload");
+            return true;
+        }
+
+        const { command, filename } = this.lastFileOperation;
+        this.repl.platform.printWithNewline(`Reloading: :${command} ${filename}`);
+
+        // Re-execute the last command
+        if (command === 'load') {
+            return await this.load([filename]);
+        } else if (command === 'bundle') {
+            return await this.bundle([filename]);
         }
         return true;
     }
@@ -217,7 +249,10 @@ Debugging:
             this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
 
             this.repl.platform.printWithNewline(`Module ${moduleName} bundled and loaded successfully\n`);
-            this.repl.platform.printWithNewline(`Found ${allFiles.length} module files\n`);
+            // this.repl.platform.printWithNewline(`Found ${allFiles.length} module files\n`);
+
+            // Save for :reload
+            this.lastFileOperation = { command: 'bundle', filename };
 
             // Don't automatically process effects on bundle - let :norm do that
             // This gives user control over when to run the program
@@ -856,7 +891,7 @@ Debugging:
             }
 
             // Normalize the Program
-            this.repl.platform.printWithNewline("Normalizing universe...\n");
+            this.repl.platform.printWithNewline("Normalizing universe...");
 
             const normalized = engine.normalize(program, rules, this.repl.maxSteps, false, foldPrims);
 
@@ -874,12 +909,12 @@ Debugging:
                 }
             }
 
-            this.repl.platform.printWithNewline("Universe normalized\n");
+            this.repl.platform.printWithNewline("Universe normalized");
 
             // Optionally show the normalized program
             if (args.length > 0 && args[0] === 'show') {
                 const output = this.repl.formatResult(normalized);
-                this.repl.platform.printWithNewline("Normalized Program:\n");
+                this.repl.platform.printWithNewline("Normalized Program:");
                 this.repl.platform.printWithNewline(output);
             }
 
@@ -910,6 +945,9 @@ Debugging:
             const moduleName = entry.a[0].v;
             const ruleRulesFrom = entry.a[1];
 
+            // Special formatting for global scope
+            const displayName = moduleName === "*" ? "* (Global - applies to ALL modules)" : moduleName;
+
             if (!isCall(ruleRulesFrom) || !isSym(ruleRulesFrom.h) ||
                 ruleRulesFrom.h.v !== "RuleRulesFrom") continue;
 
@@ -922,12 +960,12 @@ Debugging:
             }
 
             if (allowedModules.length > 0) {
-                this.repl.platform.printWithNewline(`  ${moduleName}:`);
+                this.repl.platform.printWithNewline(`  ${displayName}:`);
                 for (const allowed of allowedModules) {
                     this.repl.platform.printWithNewline(`    - Can use RuleRules from: ${allowed}`);
                 }
             } else {
-                this.repl.platform.printWithNewline(`  ${moduleName}: No RuleRules in scope`);
+                this.repl.platform.printWithNewline(`  ${displayName}: No RuleRules in scope`);
             }
         }
 
@@ -951,6 +989,174 @@ Debugging:
             }
         }
 
+        return true;
+    }
+
+    async showRulesSection(args) {
+        const rulesSection = engine.findSection(this.repl.universe, "Rules");
+        if (!rulesSection) {
+            this.repl.platform.printWithNewline("No Rules section defined in the universe");
+            return true;
+        }
+
+        this.repl.platform.printWithNewline("Rules Section:");
+        const output = this.repl.formatResult(rulesSection);
+        this.repl.platform.printWithNewline(output);
+        return true;
+    }
+
+    async showRuleRulesSection(args) {
+        const ruleRulesSection = engine.findSection(this.repl.universe, "RuleRules");
+        if (!ruleRulesSection) {
+            this.repl.platform.printWithNewline("No RuleRules section defined in the universe");
+            return true;
+        }
+
+        this.repl.platform.printWithNewline("RuleRules Section:");
+        const output = this.repl.formatResult(ruleRulesSection);
+        this.repl.platform.printWithNewline(output);
+        return true;
+    }
+
+    async matchPattern(args, rawArgs) {
+        if (args.length === 0) {
+            this.repl.platform.printWithNewline("Usage: :match <pattern>");
+            this.repl.platform.printWithNewline("\nExamples:");
+            this.repl.platform.printWithNewline("  :match {Program p_}                - Match Program and bind to p_");
+            this.repl.platform.printWithNewline("  :match {Program {App a_} ...}      - Match nested App");
+            this.repl.platform.printWithNewline("  :match _ {Rules r...}               - Use _ as wildcard, r... for rest");
+            this.repl.platform.printWithNewline("  :match {Program p_} rest...        - Match Program and remaining sections");
+            this.repl.platform.printWithNewline("\nPattern syntax:");
+            this.repl.platform.printWithNewline("  x_    - Variable (matches any single expression)");
+            this.repl.platform.printWithNewline("  x...  - Rest variable (matches zero or more expressions)");
+            this.repl.platform.printWithNewline("  _     - Wildcard (matches anything without binding)");
+            this.repl.platform.printWithNewline("\nNote: Automatically wraps in Universe[...] and adds trailing ... if needed");
+            return true;
+        }
+
+        try {
+            // Parse the pattern fragments
+            const patternText = rawArgs.trim();
+
+            // Parse as multiple expressions (space-separated patterns inside Universe)
+            // This allows patterns like: :match {Program p_} {Rules r_} rest...
+            const fragments = [];
+            let depth = 0;
+            let start = 0;
+
+            // Simple parser to split on spaces at depth 0
+            for (let i = 0; i < patternText.length; i++) {
+                const char = patternText[i];
+                if (char === '{' || char === '(') depth++;
+                else if (char === '}' || char === ')') depth--;
+                else if (char === ' ' && depth === 0) {
+                    const fragment = patternText.substring(start, i).trim();
+                    if (fragment) fragments.push(fragment);
+                    start = i + 1;
+                }
+            }
+            // Add the last fragment
+            const lastFragment = patternText.substring(start).trim();
+            if (lastFragment) fragments.push(lastFragment);
+
+            // Check if the last fragment is already a rest pattern (ends with ...)
+            const hasRestPattern = fragments.length > 0 &&
+                                   fragments[fragments.length - 1].endsWith('...');
+
+            // Check if the first fragment is NOT Program and doesn't start with underscore/variable
+            // If so, prepend ... to skip preceding sections
+            let needsPrefixRest = false;
+            if (fragments.length > 0) {
+                const firstFragment = fragments[0];
+                // Check if it's a Call pattern that doesn't start with Program
+                if (firstFragment.startsWith('{') && !firstFragment.startsWith('{Program')) {
+                    needsPrefixRest = true;
+                }
+            }
+
+            // Build the full Universe pattern
+            const innerPattern = needsPrefixRest ?
+                `... ${fragments.join(' ')}` :
+                fragments.join(' ');
+
+            // If user didn't specify a rest pattern at the end, add ... to match remaining sections
+            const fullPatternText = hasRestPattern ?
+                `{Universe ${innerPattern}}` :
+                `{Universe ${innerPattern} ...}`;
+            const pattern = this.repl.parser.parseString(fullPatternText);
+
+            // Match against the universe
+            const env = engine.match(pattern, this.repl.universe);
+
+            if (env) {
+                this.repl.platform.printWithNewline("Pattern matched successfully!\n");
+
+                // Show all bindings
+                const bindings = Object.keys(env).sort();
+                if (bindings.length === 0) {
+                    this.repl.platform.printWithNewline("No variable bindings (pattern matched exactly)");
+                } else {
+                    this.repl.platform.printWithNewline("Matched bindings:");
+                    for (const varName of bindings) {
+                        const value = env[varName];
+
+                        // Handle VarRest bindings (arrays)
+                        if (Array.isArray(value)) {
+                            this.repl.platform.printWithNewline(`\n${varName}... = [`);
+                            for (const item of value) {
+                                const itemStr = this.repl.formatResult(item);
+                                // Indent array items
+                                const indented = itemStr.split('\n').map(line => '  ' + line).join('\n');
+                                this.repl.platform.printWithNewline(indented);
+                            }
+                            this.repl.platform.printWithNewline(`]`);
+                        } else {
+                            // Regular variable binding
+                            const valueStr = this.repl.formatResult(value);
+
+                            // If the value is multiline, show it on the next line
+                            if (valueStr.includes('\n')) {
+                                this.repl.platform.printWithNewline(`\n${varName}_ =`);
+                                // Indent the value
+                                const indented = valueStr.split('\n').map(line => '  ' + line).join('\n');
+                                this.repl.platform.printWithNewline(indented);
+                            } else {
+                                this.repl.platform.printWithNewline(`\n${varName}_ = ${valueStr}`);
+                            }
+                        }
+                    }
+                }
+            } else {
+                this.repl.platform.printWithNewline("Pattern did not match");
+
+                // Try to give a helpful hint about why it didn't match
+                // Since we wrap in Universe, check the inner patterns
+                if (isCall(pattern) && pattern.a.length > 0) {
+                    // Show what sections are actually in the universe
+                    const universeSections = [];
+                    for (const section of this.repl.universe.a) {
+                        if (isCall(section) && isSym(section.h)) {
+                            universeSections.push(section.h.v);
+                        }
+                    }
+
+                    if (universeSections.length > 0) {
+                        this.repl.platform.printWithNewline(`\nAvailable sections in universe: ${universeSections.join(', ')}`);
+                    }
+
+                    // Check if the user is trying to match a non-existent section
+                    const firstPattern = pattern.a[0];
+                    if (isCall(firstPattern) && isSym(firstPattern.h)) {
+                        const sectionName = firstPattern.h.v;
+                        if (!universeSections.includes(sectionName)) {
+                            this.repl.platform.printWithNewline(`\nHint: Section "${sectionName}" not found in universe`);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error: ${error.message}`);
+        }
         return true;
     }
 }

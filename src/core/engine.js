@@ -144,6 +144,14 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
         // Get the RuleRules this module can use
         const allowedRuleRuleModules = macroScopes.get(ruleModule) || new Set();
 
+        // Also check for global RuleRules (from "*" scope)
+        const globalRuleRules = macroScopes.get("*");
+        if (globalRuleRules) {
+            for (const globalModule of globalRuleRules) {
+                allowedRuleRuleModules.add(globalModule);
+            }
+        }
+
         // Build the set of applicable RuleRules for this rule
         const applicableMetaRules = [];
 
@@ -172,7 +180,7 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
         }
 
         // Apply only the applicable meta-rules to this rule
-        let transformed = actualRule;
+        let rulesToAdd = [actualRule];
         if (applicableMetaRules.length > 0) {
             // Create a restricted fold function for meta-rule evaluation
             const metaFoldPrimsFn = foldPrimsFn ? createMetaFoldPrimsFn(foldPrimsFn) : null;
@@ -190,17 +198,44 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
                 true
             );
 
-            // Extract the transformed rule from the Rules wrapper
+            // Extract the transformed rules from the Rules wrapper
             if (isCall(transformedNode) && transformedNode.a.length > 0) {
-                transformed = transformedNode.a[0];
+                // Check if the result is a Splat node that needs expansion
+                const result = transformedNode.a[0];
+                if (isCall(result) && isSym(result.h) && result.h.v === "Splat") {
+                    // Expand Splat into multiple rules
+                    rulesToAdd = result.a;
+                } else {
+                    rulesToAdd = [result];
+                }
             }
+
+            // Now normalize each rule's metadata (like rule names) while preserving patterns
+            rulesToAdd = rulesToAdd.map(rule => {
+                if (isR(rule) && rule.a.length >= 3) {
+                    // For R nodes, evaluate the rule name expression
+                    const [nameExpr, lhs, rhs, ...rest] = rule.a;
+
+                    // Evaluate the name expression (e.g., Concat, ToString, Add operations)
+                    // Use the meta fold function to evaluate these expressions
+                    const evaluatedName = metaFoldPrimsFn ?
+                        normalize(nameExpr, [], 1000, false, metaFoldPrimsFn, false) :
+                        nameExpr;
+
+                    // Reconstruct the R node with evaluated name
+                    return Call(Sym("R"), evaluatedName, lhs, rhs, ...rest);
+                }
+                return rule;
+            });
         }
 
-        // Keep the module tag on the transformed rule
-        if (ruleModule) {
-            transformedRules.push(Call(Sym("TaggedRule"), Str(ruleModule), transformed));
-        } else {
-            transformedRules.push(transformed);
+        // Keep the module tag on the transformed rules and add them to the final result
+        for (const rule of rulesToAdd) {
+            if (ruleModule) {
+                transformedRules.push(Call(Sym("TaggedRule"), Str(ruleModule), rule));
+            } else {
+                transformedRules.push(rule);
+            }
         }
     }
 
@@ -262,6 +297,7 @@ function extractRuleFromRNode(rNode) {
 /**
  * Extract macro scopes from MacroScopes section
  * Returns Map<moduleName, Set<allowedRuleRuleModules>>
+ * Special case: "*" scope means those RuleRules apply globally
  */
 function extractMacroScopes(macroScopesNode) {
     const scopes = new Map();
@@ -314,7 +350,9 @@ function createMetaFoldPrimsFn(originalFoldPrimsFn) {
         'Length',      // String/array length
         'Slice',       // String/array slicing
         'Join',        // Array joining
-        'Split'        // String splitting
+        'Split',       // String splitting
+        'Splat',       // Splat
+        '...!'         // Splat
         // Note: Explicitly exclude:
         // - FreshId (side effects)
         // - Comparison ops (Gt, Lt, Eq, etc.) - needed at runtime for guards

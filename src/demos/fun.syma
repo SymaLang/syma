@@ -4,7 +4,7 @@
   */
 {Module
   Demo/Fun
-  {Import Core/Fun/WithSugar as CFS open}
+  {Import Core/Fun/WithSugar as CFS open macro}
   {Program}
   {Rules
     {Fn Fib(n_) {FibAcc(n_, 0, 1)}}

@@ -327,8 +327,19 @@ class ModuleLinker {
     return sorted;
   }
 
+
   link(entryModuleName, libraryMode = false) {
     const sorted = this.topoSort();
+
+    // Check if Core/Syntax/Global is in our modules
+    const hasGlobalSyntax = sorted.some(mod => mod.name === 'Core/Syntax/Global');
+
+    // If we have Core/Syntax/Global but it's not in sorted (not imported), add it
+    if (!hasGlobalSyntax && this.moduleMap.has('Core/Syntax/Global')) {
+      const globalSyntaxMod = this.moduleMap.get('Core/Syntax/Global');
+      sorted.unshift(globalSyntaxMod); // Add at the beginning
+    }
+
     const allRules = [];
     const allRuleRules = [];
 
@@ -337,6 +348,11 @@ class ModuleLinker {
 
     for (const mod of sorted) {
       const scope = new Set();
+
+      // Special case: Core/Syntax/Global applies to everyone
+      if (this.moduleMap.has('Core/Syntax/Global')) {
+        scope.add('Core/Syntax/Global');
+      }
 
       // Module's own RuleRules always apply to its own rules
       if (mod.ruleRules.length > 0) {
@@ -351,6 +367,11 @@ class ModuleLinker {
       }
 
       macroScopes.set(mod.name, scope);
+    }
+
+    // Add special "*" scope for Core/Syntax/Global if it exists
+    if (hasGlobalSyntax || this.moduleMap.has('Core/Syntax/Global')) {
+      macroScopes.set('*', new Set(['Core/Syntax/Global']));
     }
 
     // Process each module in dependency order
@@ -626,7 +647,34 @@ async function compile(options) {
     const modules = Array.from(loadedModules.values());
     console.error(`Bundling ${modules.length} modules (including dependencies)`);
 
-    const linker = new ModuleLinker(modules);
+    // Try to load Core/Syntax/Global if it exists and not already loaded
+    const globalSyntaxName = 'Core/Syntax/Global';
+    const hasGlobalSyntax = Array.from(loadedModules.values()).some(m => m.name === globalSyntaxName);
+
+    if (!hasGlobalSyntax) {
+      try {
+        const possiblePaths = stdlibPath ? [stdlibPath] : [
+          path.join(__dirname, '../src/stdlib'),
+          path.join(process.cwd(), 'src/stdlib'),
+          path.join(process.cwd(), 'stdlib')
+        ];
+
+        for (const stdPath of possiblePaths) {
+          const modulePath = path.join(stdPath, 'core-syntax-global.syma');
+          if (fs.existsSync(modulePath)) {
+            await loadModuleRecursive(modulePath, loadedModules, stdlibPath, parser);
+            console.error(`Loaded global syntax module from ${modulePath}`);
+            break;
+          }
+        }
+      } catch (error) {
+        // Silently ignore if Core/Syntax/Global doesn't exist
+      }
+    }
+
+    // Now create the linker with all modules including Core/Syntax/Global if loaded
+    const allModules = Array.from(loadedModules.values());
+    const linker = new ModuleLinker(allModules);
     const universe = linker.link(entryModuleName, library);
 
     const json = JSON.stringify(universe, null, pretty ? 2 : 0);
