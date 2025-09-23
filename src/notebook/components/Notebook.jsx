@@ -110,17 +110,23 @@ export function Notebook() {
 
                 const engine = engineRef.current;
 
-                // Check if all non-empty, non-comment lines start with ':'
+                // Check if this is a command cell (starts with ':' command)
                 const lines = cell.content.split('\n');
-                const nonEmptyLines = lines.filter(line => {
+
+                // Find the first non-empty, non-comment line
+                let firstContentLine = '';
+                for (const line of lines) {
                     const trimmed = line.trim();
-                    return trimmed && !trimmed.startsWith(';'); // Ignore empty lines and comments
-                });
+                    if (trimmed && !trimmed.startsWith(';')) {
+                        firstContentLine = trimmed;
+                        break;
+                    }
+                }
 
-                const isAllCommands = nonEmptyLines.length > 0 &&
-                                      nonEmptyLines.every(line => line.trim().startsWith(':'));
+                // If the first content line is a command, treat the entire cell as commands
+                const isCommandCell = firstContentLine.startsWith(':');
 
-                if (isAllCommands) {
+                if (isCommandCell) {
                     const { outputs, hasError } = await engine.executeCommand(cell.id, cell.content.trim());
                     if (hasError) {
                         useNotebookStore.getState().setCellError(cell.id, outputs[0]?.content || 'Unknown error');
@@ -153,17 +159,23 @@ export function Notebook() {
 
                 const engine = engineRef.current;
 
-                // Check if all non-empty, non-comment lines start with ':'
+                // Check if this is a command cell (starts with ':' command)
                 const lines = cell.content.split('\n');
-                const nonEmptyLines = lines.filter(line => {
+
+                // Find the first non-empty, non-comment line
+                let firstContentLine = '';
+                for (const line of lines) {
                     const trimmed = line.trim();
-                    return trimmed && !trimmed.startsWith(';'); // Ignore empty lines and comments
-                });
+                    if (trimmed && !trimmed.startsWith(';')) {
+                        firstContentLine = trimmed;
+                        break;
+                    }
+                }
 
-                const isAllCommands = nonEmptyLines.length > 0 &&
-                                      nonEmptyLines.every(line => line.trim().startsWith(':'));
+                // If the first content line is a command, treat the entire cell as commands
+                const isCommandCell = firstContentLine.startsWith(':');
 
-                if (isAllCommands) {
+                if (isCommandCell) {
                     const { outputs, hasError } = await engine.executeCommand(cell.id, cell.content.trim());
                     if (hasError) {
                         useNotebookStore.getState().setCellError(cell.id, outputs[0]?.content || 'Unknown error');

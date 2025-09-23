@@ -26,8 +26,9 @@ const createCell = (type, content = '') => ({
 
 // Default initial cells
 const getInitialCells = () => [
-    createCell(CellType.MARKDOWN, '# Syma Notebook\n\nWelcome to the Syma interactive notebook. You can write and execute Syma code, and document your work with markdown, similar to Jupyter Notebook.'),
-    createCell(CellType.CODE, '; Example: Simple arithmetic\n{Add 1 2}')
+    createCell(CellType.MARKDOWN, '# Syma Notebook\n\nWelcome to the Syma interactive notebook. You can write and execute Syma code, and document your work with markdown, similar to Jupyter Notebook.\n\n## Tips\n- Use `:import` to load stdlib modules (e.g., `:import Core/List`)\n- Use `:render` to create interactive UI components\n- Multiple commands can be in one cell (each on its own line)\n- For complex multiline rules, use `:rule multiline` ... `:end` syntax'),
+    createCell(CellType.CODE, '; Example: Simple arithmetic\n{Add 1 2}'),
+    createCell(CellType.CODE, '; Example: Multiline rule definition\n:rule multiline\nSetInitialUI \n  {InitialUI} \n  -> \n  {UI \n    {Div  \n      :class "card" \n      {H1 "Counter"} \n      {P "Value: " {Show Count}} \n      {Button \n        :onClick Inc \n        :class "btn" \n        "Increment" \n      } \n    } \n  }\n:end')
 ];
 
 export const useNotebookStore = create(

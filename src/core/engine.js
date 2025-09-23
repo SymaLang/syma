@@ -25,11 +25,30 @@ export function extractRulesFromNode(rulesNode) {
         throw new Error("extractRulesFromNode: expected Rules[...] or RuleRules[...] node");
     const rs = [];
     for (const r of rulesNode.a) {
-        if (!isR(r)) throw new Error(`Rules must contain R[...] entries; found ${show(r)}`);
-        if (r.a.length < 3) throw new Error("R[name, lhs, rhs, ...] requires at least 3 arguments");
+        // Handle both plain R rules and TaggedRule wrapped rules
+        let actualRule = r;
+        if (isCall(r) && isSym(r.h) && r.h.v === "TaggedRule") {
+            // Unwrap TaggedRule to get the actual R rule
+            if (r.a.length >= 2) {
+                actualRule = r.a[1]; // The second argument is the actual rule
+            }
+        }
 
-        const [nm, lhs, rhs, ...rest] = r.a;
-        if (!isStr(nm)) throw new Error("R[name] must be Str");
+        if (!isR(actualRule)) throw new Error(`Rules must contain R[...] entries; found ${show(actualRule)}`);
+        if (actualRule.a.length < 3) throw new Error("R[name, lhs, rhs, ...] requires at least 3 arguments");
+
+        const [nm, lhs, rhs, ...rest] = actualRule.a;
+
+        // Handle both string and symbol rule names
+        let ruleName;
+        if (isStr(nm)) {
+            ruleName = nm.v;
+        } else if (isSym(nm)) {
+            // Some modules use symbols for rule names, convert to string
+            ruleName = nm.v;
+        } else {
+            throw new Error("R[name] must be Str or Sym");
+        }
 
         let prio = 0;
         let guard = null;
@@ -258,7 +277,17 @@ function extractRuleFromRNode(rNode) {
     if (rNode.a.length < 3) return null;
 
     const [nm, lhs, rhs, ...rest] = rNode.a;
-    if (!isStr(nm)) return null;
+
+    // Handle both string and symbol rule names
+    let ruleName;
+    if (isStr(nm)) {
+        ruleName = nm.v;
+    } else if (isSym(nm)) {
+        // Some modules use symbols for rule names, convert to string
+        ruleName = nm.v;
+    } else {
+        return null;  // Name must be either string or symbol
+    }
 
     let prio = 0;
     let guard = null;
@@ -291,7 +320,7 @@ function extractRuleFromRNode(rNode) {
         }
     }
 
-    return { name: nm.v, lhs, rhs, guard, prio };
+    return { name: ruleName, lhs, rhs, guard, prio };
 }
 
 /**

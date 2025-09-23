@@ -31,7 +31,8 @@ const moduleNameMap = {
     'core-set.syma': 'Core/Set',
     'core-effect.syma': 'Core/Effect',
     'core-syntax-global.syma': 'Core/Syntax/Global',
-    'algebra-simplify.syma': 'Algebra/Simplify'
+    'algebra-simplify.syma': 'Algebra/Simplify',
+    'notebook-ui.syma': 'Notebook/UI',
 };
 
 console.log('Building stdlib modules for browser...');

@@ -168,40 +168,110 @@ export class NotebookEngine {
         this.platform.setCurrentCell(cellId);
 
         try {
-            // Split by lines and process each command that starts with ':'
+            // Split by lines and process commands
             const lines = command.split('\n');
+            let i = 0;
 
-            for (const line of lines) {
-                const trimmedLine = line.trim();
-                if (!trimmedLine) continue; // Skip empty lines
+            while (i < lines.length) {
+                const trimmedLine = lines[i].trim();
+                if (!trimmedLine) {
+                    i++;
+                    continue; // Skip empty lines
+                }
+
+                if (trimmedLine.startsWith(';')) {
+                    // It's a comment, skip it
+                    i++;
+                    continue;
+                }
 
                 if (trimmedLine.startsWith(':')) {
-                    // It's a command
-                    try {
-                        const result = await this.repl.commandProcessor.processCommand(trimmedLine);
-                        if (result === false) {
-                            outputs.push({ type: 'text', content: 'Command would exit REPL (not allowed in notebook mode)' });
+                    // Check if this is a multiline command
+                    if (trimmedLine === ':rule multiline' || trimmedLine === ':add multiline') {
+                        console.log('Detected multiline command');
+                        const commandType = trimmedLine.split(' ')[0]; // :rule or :add
+                        // Collect everything until :end
+                        let ruleLines = [];
+                        let j = i + 1;
+                        let foundEnd = false;
+
+                        while (j < lines.length) {
+                            const nextLine = lines[j].trim();
+
+                            if (nextLine === ':end') {
+                                foundEnd = true;
+                                j++;
+                                break;
+                            }
+
+                            // Add the line (preserving indentation for readability)
+                            ruleLines.push(lines[j]);
+                            j++;
                         }
-                    } catch (error) {
-                        hasError = true;
-                        outputs.push({
-                            type: 'error',
-                            content: `Error in command "${trimmedLine}": ${error.message}`,
-                            traceback: error.stack
-                        });
-                        // Continue executing other commands even if one fails
+
+                        if (!foundEnd) {
+                            outputs.push({
+                                type: 'error',
+                                content: 'Error: Multiline command missing :end marker'
+                            });
+                            hasError = true;
+                            i = j;
+                        } else {
+                            // Join the lines with spaces (not newlines) for the parser
+                            const ruleContent = ruleLines.join(' ').trim();
+
+                            if (!ruleContent) {
+                                outputs.push({
+                                    type: 'error',
+                                    content: 'Error: Empty multiline command'
+                                });
+                                hasError = true;
+                            } else {
+                                // Process as a regular command
+                                const fullCommand = commandType + ' ' + ruleContent;
+
+                                try {
+                                    const result = await this.repl.commandProcessor.processCommand(fullCommand);
+                                    if (result === false) {
+                                        outputs.push({ type: 'text', content: 'Command would exit REPL (not allowed in notebook mode)' });
+                                    }
+                                } catch (error) {
+                                    hasError = true;
+                                    outputs.push({
+                                        type: 'error',
+                                        content: `Error in multiline command: ${error.message}`,
+                                        traceback: error.stack
+                                    });
+                                }
+                            }
+                            i = j;
+                        }
+                    } else {
+                        // Regular single-line command
+                        try {
+                            const result = await this.repl.commandProcessor.processCommand(trimmedLine);
+                            if (result === false) {
+                                outputs.push({ type: 'text', content: 'Command would exit REPL (not allowed in notebook mode)' });
+                            }
+                        } catch (error) {
+                            hasError = true;
+                            outputs.push({
+                                type: 'error',
+                                content: `Error in command "${trimmedLine}": ${error.message}`,
+                                traceback: error.stack
+                            });
+                        }
+                        i++;
                     }
-                } else if (trimmedLine.startsWith(';')) {
-                    // It's a comment, skip it
-                    continue;
                 } else {
-                    // It's not a command but part of a multi-line input
-                    // This shouldn't happen if we're called from executeCommand
+                    // Line doesn't start with : or ;
+                    // In a command context, non-command lines are an error
                     outputs.push({
                         type: 'error',
-                        content: `Invalid command line (must start with ':'): ${trimmedLine}`
+                        content: `Invalid line in command cell (commands must start with ':'): ${trimmedLine}`
                     });
                     hasError = true;
+                    i++;
                 }
             }
         } catch (error) {
@@ -222,13 +292,6 @@ export class NotebookEngine {
         return this.repl.getRules();
     }
 
-    getUniverse() {
-        return this.repl.universe;
-    }
-
-    setUniverse(universe) {
-        this.repl.universe = universe;
-    }
 
     async loadFile(path) {
         await this.repl.loadFile(path);

@@ -15,6 +15,7 @@ export class NotebookCommands {
         this.repl = repl;
         this.moduleIndex = null; // Will be loaded lazily
         this.originalProcessCommand = null; // Will be set by notebook-engine
+        this.globalSyntaxImported = false; // Track if Core/Syntax/Global has been auto-imported
     }
 
     async loadModuleIndex() {
@@ -104,6 +105,14 @@ export class NotebookCommands {
         try {
             // Load module index
             const index = await this.loadModuleIndex();
+
+            // First, ensure Core/Syntax/Global is imported (if it exists and not already imported)
+            const globalSyntaxName = 'Core/Syntax/Global';
+            if (!this.globalSyntaxImported && index[globalSyntaxName] && moduleName !== globalSyntaxName) {
+                this.repl.platform.printWithNewline(`Auto-importing ${globalSyntaxName}...`);
+                await this.importModule(globalSyntaxName, index[globalSyntaxName], { open: false, macro: true });
+                this.globalSyntaxImported = true;
+            }
 
             // Check if module exists
             const modulePath = index[moduleName];
@@ -228,9 +237,15 @@ export class NotebookCommands {
 
         // Extract rules from imported universe
         const importedRules = engine.findSection(importedUniverse, "Rules");
+        const hasRules = importedRules && isCall(importedRules) && importedRules.a.length > 0;
 
-        if (!importedRules || !isCall(importedRules) || importedRules.a.length === 0) {
-            this.repl.platform.printWithNewline(`Warning: No rules found in module ${moduleName}`);
+        // Check for RuleRules as well
+        const importedRuleRules = engine.findSection(importedUniverse, "RuleRules");
+        const hasRuleRules = importedRuleRules && isCall(importedRuleRules) && importedRuleRules.a.length > 0;
+
+        // If module has neither Rules nor RuleRules, warn and return
+        if (!hasRules && !hasRuleRules) {
+            this.repl.platform.printWithNewline(`Warning: No rules or meta-rules found in module ${moduleName}`);
             return;
         }
 
@@ -246,83 +261,83 @@ export class NotebookCommands {
             this.repl.universe.a.push(currentRules);
         }
 
-        // Build a set of existing rule names for conflict detection
-        const existingRuleNames = new Set();
-        for (const rule of currentRules.a) {
-            if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length > 0) {
-                const nameArg = rule.a[0];
-                if (isStr(nameArg)) {
-                    existingRuleNames.add(nameArg.v);
-                }
-            } else if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' && rule.a.length > 1) {
-                // Handle tagged rules
-                const innerRule = rule.a[1];
-                if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R' && innerRule.a.length > 0) {
-                    const nameArg = innerRule.a[0];
+        // Process Rules if they exist
+        if (hasRules) {
+            // Build a set of existing rule names for conflict detection
+            const existingRuleNames = new Set();
+            for (const rule of currentRules.a) {
+                if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length > 0) {
+                    const nameArg = rule.a[0];
                     if (isStr(nameArg)) {
                         existingRuleNames.add(nameArg.v);
                     }
-                }
-            }
-        }
-
-        // Merge imported rules, checking for conflicts
-        let addedCount = 0;
-        let skippedCount = 0;
-
-        for (const importedRule of importedRules.a) {
-            let ruleName = null;
-
-            // Extract rule name for conflict detection
-            if (isCall(importedRule) && isSym(importedRule.h)) {
-                if (importedRule.h.v === 'R' && importedRule.a.length > 0 && isStr(importedRule.a[0])) {
-                    ruleName = importedRule.a[0].v;
-                } else if (importedRule.h.v === 'TaggedRule' && importedRule.a.length > 1) {
-                    const innerRule = importedRule.a[1];
-                    if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R' &&
-                        innerRule.a.length > 0 && isStr(innerRule.a[0])) {
-                        ruleName = innerRule.a[0].v;
+                } else if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' && rule.a.length > 1) {
+                    // Handle tagged rules
+                    const innerRule = rule.a[1];
+                    if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R' && innerRule.a.length > 0) {
+                        const nameArg = innerRule.a[0];
+                        if (isStr(nameArg)) {
+                            existingRuleNames.add(nameArg.v);
+                        }
                     }
                 }
             }
 
-            // Skip if rule already exists
-            if (ruleName && existingRuleNames.has(ruleName)) {
-                skippedCount++;
-                continue;
+            // Merge imported rules, checking for conflicts
+            let addedCount = 0;
+            let skippedCount = 0;
+
+            for (const importedRule of importedRules.a) {
+                let ruleName = null;
+
+                // Extract rule name for conflict detection
+                if (isCall(importedRule) && isSym(importedRule.h)) {
+                    if (importedRule.h.v === 'R' && importedRule.a.length > 0 && isStr(importedRule.a[0])) {
+                        ruleName = importedRule.a[0].v;
+                    } else if (importedRule.h.v === 'TaggedRule' && importedRule.a.length > 1) {
+                        const innerRule = importedRule.a[1];
+                        if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R' &&
+                            innerRule.a.length > 0 && isStr(innerRule.a[0])) {
+                            ruleName = innerRule.a[0].v;
+                        }
+                    }
+                }
+
+                // Skip if rule already exists
+                if (ruleName && existingRuleNames.has(ruleName)) {
+                    skippedCount++;
+                    continue;
+                }
+
+                // Add the rule
+                currentRules.a.push(importedRule);
+                if (ruleName) {
+                    existingRuleNames.add(ruleName);
+                }
+                addedCount++;
             }
 
-            // Add the rule
-            currentRules.a.push(importedRule);
-            if (ruleName) {
-                existingRuleNames.add(ruleName);
+            if (skippedCount > 0) {
+                this.repl.platform.printWithNewline(`(Skipped ${skippedCount} rules that already exist)`);
             }
-            addedCount++;
-        }
-
-        if (skippedCount > 0) {
-            this.repl.platform.printWithNewline(`(Skipped ${skippedCount} rules that already exist)`);
         }
 
         // Also merge RuleRules section if present (and macro modifier is set)
-        if (modifiers.macro) {
-            const importedRuleRules = engine.findSection(importedUniverse, "RuleRules");
-            if (importedRuleRules && isCall(importedRuleRules) && importedRuleRules.a.length > 0) {
-                let currentRuleRules = engine.findSection(this.repl.universe, "RuleRules");
+        if (modifiers.macro && hasRuleRules) {
+            let currentRuleRules = engine.findSection(this.repl.universe, "RuleRules");
 
-                if (!currentRuleRules) {
-                    // Create RuleRules section if it doesn't exist
-                    currentRuleRules = Call(Sym("RuleRules"));
-                    this.repl.universe.a.push(currentRuleRules);
-                }
-
-                // Add imported RuleRules
-                for (const rr of importedRuleRules.a) {
-                    currentRuleRules.a.push(rr);
-                }
-
-                this.repl.platform.printWithNewline(`Added ${importedRuleRules.a.length} meta-rules`);
+            if (!currentRuleRules) {
+                // Create RuleRules section if it doesn't exist
+                currentRuleRules = Call(Sym("RuleRules"));
+                this.repl.universe.a.push(currentRuleRules);
             }
+
+            // Add imported RuleRules
+            for (const rr of importedRuleRules.a) {
+                currentRuleRules.a.push(rr);
+            }
+
+            this.repl.platform.printWithNewline(`Added ${importedRuleRules.a.length} meta-rules`);
         }
 
         // Also merge MacroScopes if present
@@ -336,9 +351,51 @@ export class NotebookCommands {
                 this.repl.universe.a.push(currentMacroScopes);
             }
 
-            // Add imported MacroScopes
+            // Build a map of existing module scopes to avoid duplicates
+            const existingScopes = new Map();
+            for (const entry of currentMacroScopes.a) {
+                if (isCall(entry) && isSym(entry.h) && entry.h.v === "Module" &&
+                    entry.a.length >= 2 && isStr(entry.a[0])) {
+                    const modName = entry.a[0].v;
+                    existingScopes.set(modName, entry);
+                }
+            }
+
+            // Merge imported MacroScopes, avoiding duplicates
             for (const ms of importedMacroScopes.a) {
-                currentMacroScopes.a.push(ms);
+                if (isCall(ms) && isSym(ms.h) && ms.h.v === "Module" &&
+                    ms.a.length >= 2 && isStr(ms.a[0])) {
+                    const modName = ms.a[0].v;
+
+                    if (!existingScopes.has(modName)) {
+                        // Module not present yet, add it
+                        currentMacroScopes.a.push(ms);
+                        existingScopes.set(modName, ms);
+                    } else if (ms.a.length >= 2 && isCall(ms.a[1])) {
+                        // Module exists, merge the RuleRulesFrom if needed
+                        const existingEntry = existingScopes.get(modName);
+                        const importedRuleRules = ms.a[1];
+                        const existingRuleRules = existingEntry.a[1];
+
+                        if (isCall(importedRuleRules) && isSym(importedRuleRules.h) &&
+                            importedRuleRules.h.v === "RuleRulesFrom" &&
+                            isCall(existingRuleRules) && isSym(existingRuleRules.h) &&
+                            existingRuleRules.h.v === "RuleRulesFrom") {
+
+                            // Merge the RuleRulesFrom lists, avoiding duplicates
+                            const existingModules = new Set(
+                                existingRuleRules.a.filter(isStr).map(s => s.v)
+                            );
+
+                            for (const rrMod of importedRuleRules.a) {
+                                if (isStr(rrMod) && !existingModules.has(rrMod.v)) {
+                                    existingRuleRules.a.push(rrMod);
+                                    existingModules.add(rrMod.v);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -352,6 +409,8 @@ Available notebook commands:
   :render <ui-node>       Render an interactive UI (modifies global state!)
   :universe               Show current universe structure
   :rules                  List all rules
+  :rule multiline         Start a multiline rule definition (end with :end)
+  :add multiline          Start a multiline expression (end with :end)
   :help                   Show this help
 
 Examples:
@@ -360,6 +419,14 @@ Examples:
 
   ; Define a counter in the universe
   {R "Inc" {Apply Inc {State {Count n_}}} {State {Count {Add n_ 1}}}}
+
+  ; Multiline rule example
+  :rule multiline
+  MyRule
+    {Pattern x_}
+    ->
+    {Result x_}
+  :end
 
   ; Render interactive UI that modifies the global state
   :render {Div {Show {Count}} {Button "+" :onClick Inc}}

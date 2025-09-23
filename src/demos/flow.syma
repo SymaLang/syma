@@ -2,7 +2,7 @@
   Demo/Playground
 
   {Import Core/Main as C open}
-  {Import Core/Plumb as CP open}
+  {Import Core/Plumb as CP open macro}
   {Import Core/Effect as CE open}
   {Import Core/KV as KV}
 
