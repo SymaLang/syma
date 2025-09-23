@@ -665,10 +665,10 @@ export class NotebookCommands {
                     }
 
                     // Process any initial effects
-                    const rules = engine.extractRules(this.repl.universe);
+                    const rules_ = engine.extractRules(this.repl.universe);
                     const program = engine.getProgram(this.repl.universe);
                     if (program) {
-                        const normalized = engine.normalize(program, rules, this.repl.maxSteps || 10000, false, foldPrims);
+                        const normalized = engine.normalize(program, rules_, this.repl.maxSteps || 10000, false, foldPrims);
                         this.repl.universe = engine.setProgram(this.repl.universe, normalized);
                     }
 
