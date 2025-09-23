@@ -62,6 +62,15 @@ class NotebookPlatform {
 
     cleanup() {
         this.outputHandlers.clear();
+        this.currentCellId = null;
+    }
+
+    cleanupCell(cellId) {
+        // Remove output handler for specific cell
+        this.outputHandlers.delete(cellId);
+        if (this.currentCellId === cellId) {
+            this.currentCellId = null;
+        }
     }
 }
 
@@ -187,8 +196,18 @@ export class NotebookEngine {
 
                 if (trimmedLine.startsWith(':')) {
                     // Check if this is a multiline command
-                    if (trimmedLine === ':rule multiline' || trimmedLine === ':add multiline' || trimmedLine === ':render multiline') {
-                        const commandType = trimmedLine.split(' ')[0]; // :rule, :add, or :render
+                    const isMultiline = trimmedLine === ':rule multiline' ||
+                                       trimmedLine === ':render multiline' ||
+                                       trimmedLine === ':render watch multiline' ||
+                                       trimmedLine === ':render multiline watch';
+
+                    if (isMultiline) {
+                        // Parse the command type and modifiers
+                        const parts = trimmedLine.split(' ');
+                        const commandType = parts[0]; // :rule or :render
+                        const hasWatch = parts.includes('watch');
+                        const hasMultiline = parts.includes('multiline');
+
                         // Collect everything until :end
                         let ruleLines = [];
                         let j = i + 1;
@@ -226,8 +245,12 @@ export class NotebookEngine {
                                 });
                                 hasError = true;
                             } else {
-                                // Process as a regular command
-                                const fullCommand = commandType + ' ' + ruleContent;
+                                // Build the full command with modifiers
+                                let fullCommand = commandType;
+                                if (commandType === ':render' && hasWatch) {
+                                    fullCommand += ' watch';
+                                }
+                                fullCommand += ' ' + ruleContent;
 
                                 try {
                                     const result = await this.repl.commandProcessor.processCommand(fullCommand);
@@ -339,7 +362,24 @@ export class NotebookEngine {
         this.repl.clearUniverse();
     }
 
+    cleanupCell(cellId) {
+        // Clean up platform handlers
+        this.platform.cleanupCell(cellId);
+
+        // Clean up watch projectors for this cell
+        if (this.notebookCommands) {
+            this.notebookCommands.cleanupWatchProjector(cellId);
+        }
+    }
+
     dispose() {
+        // Clean up all watch projectors
+        if (this.notebookCommands && this.notebookCommands.watchProjectors) {
+            for (const [cellId, info] of this.notebookCommands.watchProjectors.entries()) {
+                this.notebookCommands.cleanupWatchProjector(cellId);
+            }
+        }
+
         this.platform.cleanup();
         if (this.repl.effectsProcessor) {
             this.repl.effectsProcessor.cleanup();

@@ -16,6 +16,7 @@ export class NotebookCommands {
         this.moduleIndex = null; // Will be loaded lazily
         this.originalProcessCommand = null; // Will be set by notebook-engine
         this.globalSyntaxImported = false; // Track if Core/Syntax/Global has been auto-imported
+        this.watchProjectors = new Map(); // Map of cellId -> {projector, mountDiv, nodeCode?}
     }
 
     async loadModuleIndex() {
@@ -46,9 +47,15 @@ export class NotebookCommands {
             case 'h':
                 return this.help();
             case 'render-universe':
-                return this.renderUniverse();
+                // Check for watch modifier
+                const universeWatch = args.includes('watch');
+                return this.renderUniverse(universeWatch);
             case 'render':
-                return this.renderNode(command.slice(7).trim()); // Remove ':render '
+                // Parse modifiers (watch, multiline)
+                const renderArgs = command.slice(7).trim(); // Remove ':render '
+                const hasWatch = renderArgs.startsWith('watch ') || renderArgs.includes(' watch');
+                const nodeCode = renderArgs.replace(/\bwatch\b/g, '').trim();
+                return this.renderNode(nodeCode, hasWatch);
             case 'universe':
             case 'u':
             case 'rules':
@@ -229,6 +236,47 @@ export class NotebookCommands {
         return processed;
     }
 
+    updateAllWatchProjectors(excludeCellId = null) {
+        // Update all watch projectors except the one that triggered the update
+        for (const [cellId, info] of this.watchProjectors.entries()) {
+            if (cellId === excludeCellId) continue;
+
+            try {
+                if (info.nodeCode) {
+                    // Custom render node - rebuild temp universe with current state
+                    const app = engine.getProgramApp(this.repl.universe);
+                    if (app && app.a.length > 0) {
+                        const node = this.repl.parser.parseString(info.nodeCode);
+                        let tempUniverse = JSON.parse(JSON.stringify(this.repl.universe));
+                        tempUniverse = engine.setProgramApp(tempUniverse,
+                            Call(Sym("App"), app.a[0], Call(Sym("UI"), node))
+                        );
+                        info.projector.universe = tempUniverse;
+                        info.projector.render(tempUniverse);
+                    }
+                } else {
+                    // Universe render - just update with current universe
+                    info.projector.universe = this.repl.universe;
+                    info.projector.render(this.repl.universe);
+                }
+            } catch (error) {
+                console.error(`Failed to update watch projector ${cellId}:`, error);
+            }
+        }
+    }
+
+    cleanupWatchProjector(cellId) {
+        // Remove a watch projector when cell is re-executed or cleared
+        if (this.watchProjectors.has(cellId)) {
+            const info = this.watchProjectors.get(cellId);
+            // Clean up DOM if needed
+            if (info.mountDiv && info.mountDiv.parentNode) {
+                info.mountDiv.remove();
+            }
+            this.watchProjectors.delete(cellId);
+        }
+    }
+
     mergeUniverses(importedUniverse, moduleName, modifiers = {}) {
         // Save undo state if available
         if (this.repl.pushUndo) {
@@ -404,15 +452,22 @@ export class NotebookCommands {
         this.repl.platform.printWithNewline(`
 Available notebook commands:
 
-  :import <module>        Import a stdlib module (e.g., :import Core/String)
-  :render-universe        Render the current universe's UI
-  :render <ui-node>       Render an interactive UI (modifies global state!)
-  :universe               Show current universe structure
-  :rules                  List all rules
-  :rule multiline         Start a multiline rule definition (end with :end)
-  :add multiline          Start a multiline expression (end with :end)
-  :render multiline       Start a multiline UI node (end with :end)
-  :help                   Show this help
+  :import <module>          Import a stdlib module (e.g., :import Core/String)
+  :render-universe          Render the current universe's UI
+  :render-universe watch    Render with live updates from other cells
+  :render <ui-node>         Render an interactive UI (modifies global state!)
+  :render watch <ui-node>   Render with live updates from other cells
+  :universe                 Show current universe structure
+  :rules                    List all rules
+  :rule multiline           Start a multiline rule definition (end with :end)
+  :render multiline         Start a multiline UI node (end with :end)
+  :render watch multiline   Start a multiline watch UI node (end with :end)
+  :help                     Show this help
+
+Watch Mode:
+  When 'watch' is used, the rendered UI will automatically update when
+  ANY other watch cell makes changes to the global state. This allows
+  multiple UI cells to stay in sync.
 
 Examples:
   :import Core/List
@@ -421,16 +476,14 @@ Examples:
   ; Define a counter in the universe
   {R "Inc" {Apply Inc {State {Count n_}}} {State {Count {Add n_ 1}}}}
 
-  ; Multiline rule example
-  :rule multiline
-  MyRule
-    {Pattern x_}
-    ->
-    {Result x_}
-  :end
+  ; Render with watch - will update when other cells change state
+  :render watch {Div "Count: " {Show Count}}
 
-  ; Multiline render example
-  :render multiline
+  ; Another watch cell - both cells update together
+  :render watch {Button "+" :onClick Inc}
+
+  ; Multiline watch example
+  :render watch multiline
   {Div
     :class "card"
     {H1 "Counter"}
@@ -443,8 +496,8 @@ Examples:
   }
   :end
 
-  ; Render interactive UI that modifies the global state
-  :render {Div {Show {Count}} {Button "+" :onClick Inc}}
+  ; Render universe with watch
+  :render-universe watch
 `);
         return true;
     }
@@ -455,8 +508,16 @@ Examples:
         return true;
     }
 
-    renderUniverse() {
+    renderUniverse(watch = false) {
         try {
+            // Get current cell ID for watch tracking
+            const cellId = this.repl.platform.currentCellId;
+
+            // Clean up any existing watch projector for this cell
+            if (cellId) {
+                this.cleanupWatchProjector(cellId);
+            }
+
             // Validate universe structure
             let program = engine.findSection(this.repl.universe, "Program");
             if (!program) {
@@ -487,8 +548,22 @@ Examples:
                     // Use the core dispatch function - it handles everything
                     this.repl.universe = engine.dispatch(this.repl.universe, rules, action, foldPrims);
 
-                    // Re-render with updated universe
+                    // Re-extract rules in case they changed
+                    const updatedRules = engine.extractRules(this.repl.universe);
+
+                    // Normalize the Program again to trigger any inbox processing or effect rules
+                    const program = engine.getProgram(this.repl.universe);
+                    const normalized = engine.normalize(program, updatedRules, 10000, false, foldPrims);
+                    this.repl.universe = engine.setProgram(this.repl.universe, normalized);
+
+                    // Update projector's universe and re-render
+                    projector.universe = this.repl.universe;
                     projector.render(this.repl.universe);
+
+                    // If this is a watch projector, update all other watch projectors
+                    if (watch && cellId) {
+                        this.updateAllWatchProjectors(cellId);
+                    }
                 },
                 options: {
                     normalize: (expr, r) => engine.normalize(expr, r, 10000, false, foldPrims),
@@ -500,8 +575,18 @@ Examples:
             // Render the universe
             projector.render(this.repl.universe);
 
+            // Store watch projector if watch mode is enabled
+            if (watch && cellId) {
+                this.watchProjectors.set(cellId, {
+                    projector,
+                    mountDiv,
+                    nodeCode: null // null indicates this is a universe render
+                });
+            }
+
             // Return special DOM output
-            this.repl.platform.printWithNewline("Rendering universe UI...");
+            const watchLabel = watch ? " (watching)" : "";
+            this.repl.platform.printWithNewline(`Rendering universe UI${watchLabel}...`);
 
             // Special output type for DOM elements
             if (this.repl.platform.outputHandlers && this.repl.platform.currentCellId) {
@@ -517,8 +602,16 @@ Examples:
         return true;
     }
 
-    renderNode(nodeCode) {
+    renderNode(nodeCode, watch = false) {
         try {
+            // Get current cell ID for watch tracking
+            const cellId = this.repl.platform.currentCellId;
+
+            // Clean up any existing watch projector for this cell
+            if (cellId) {
+                this.cleanupWatchProjector(cellId);
+            }
+
             // Parse the node code
             const node = this.repl.parser.parseString(nodeCode);
 
@@ -589,6 +682,14 @@ Examples:
                     // Use the core dispatch function - it handles everything
                     this.repl.universe = engine.dispatch(this.repl.universe, rules, action, foldPrims);
 
+                    // Re-extract rules in case they changed
+                    const updatedRules = engine.extractRules(this.repl.universe);
+
+                    // Normalize the Program again to trigger any inbox processing or effect rules
+                    const program = engine.getProgram(this.repl.universe);
+                    const normalized = engine.normalize(program, updatedRules, 10000, false, foldPrims);
+                    this.repl.universe = engine.setProgram(this.repl.universe, normalized);
+
                     // Get the updated state
                     const updatedApp = engine.getProgramApp(this.repl.universe);
                     if (updatedApp && updatedApp.a.length > 0) {
@@ -601,8 +702,14 @@ Examples:
                         Call(Sym("App"), updatedApp.a[0], Call(Sym("UI"), node))
                     );
 
-                    // Re-render with updated state
+                    // Update projector's universe and re-render
+                    projector.universe = tempUniverse2;
                     projector.render(tempUniverse2);
+
+                    // If this is a watch projector, update all other watch projectors
+                    if (watch && cellId) {
+                        this.updateAllWatchProjectors(cellId);
+                    }
                 },
                 options: {
                     normalize: (expr, r) => engine.normalize(expr, r, 10000, false, foldPrims),
@@ -614,7 +721,17 @@ Examples:
             // Render the universe
             projector.render(tempUniverse);
 
-            this.repl.platform.printWithNewline(`Rendering UI node: ${nodeCode}`);
+            // Store watch projector if watch mode is enabled
+            if (watch && cellId) {
+                this.watchProjectors.set(cellId, {
+                    projector,
+                    mountDiv,
+                    nodeCode: nodeCode // Store the original node code for re-rendering
+                });
+            }
+
+            const watchLabel = watch ? " (watching)" : "";
+            this.repl.platform.printWithNewline(`Rendering UI node${watchLabel}: ${nodeCode}`);
 
             // Special output type for DOM elements
             if (this.repl.platform.outputHandlers && this.repl.platform.currentCellId) {
