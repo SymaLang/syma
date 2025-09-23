@@ -34,11 +34,12 @@ export function Notebook() {
     // Handle keyboard shortcuts at notebook level
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // Only handle if not in an editor
+            // Only handle if not in an editor or input field
             const target = e.target;
             const isInEditor = target.closest('.monaco-editor') !== null;
+            const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
-            if (!isInEditor) {
+            if (!isInEditor && !isInInput) {
                 // A: Add cell above
                 if (e.key === 'a' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
                     e.preventDefault();

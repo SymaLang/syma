@@ -35,23 +35,35 @@ export function MarkdownCell({ cell, isSelected, onSelect, onAddBelow }) {
         editorRef.current = editor;
         editor.focus();
 
-        // Exit edit mode on Shift+Enter or Ctrl/Cmd+Enter
-        const disposable = editor.addAction({
+        // Exit edit mode on Shift+Enter
+        const action1 = editor.addAction({
             id: 'save-markdown',
             label: 'Save Markdown',
             keybindings: [
-                monaco.KeyMod.Shift | monaco.KeyCode.Enter,
+                monaco.KeyMod.Shift | monaco.KeyCode.Enter
+            ],
+            run: () => {
+                setIsEditing(false);
+            }
+        });
+
+        // Exit edit mode and add cell below on Ctrl/Cmd+Enter
+        const action2 = editor.addAction({
+            id: 'save-markdown-and-add',
+            label: 'Save Markdown and Add Below',
+            keybindings: [
                 monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter
             ],
             run: () => {
                 setIsEditing(false);
-                if ((monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter)) {
-                    onAddBelow();
-                }
+                onAddBelow();
             }
         });
 
-        return () => disposable?.dispose();
+        return () => {
+            action1?.dispose();
+            action2?.dispose();
+        };
     };
 
     const toggleEdit = () => {
@@ -238,7 +250,7 @@ export function MarkdownCell({ cell, isSelected, onSelect, onAddBelow }) {
                 {isEditing && !isMovingCells ? (
                     <div className="min-h-[120px]">
                         <Editor
-                            height={Math.max(120, (cell.content.split('\n').length + 1) * 20)}
+                            height={Math.max(120, (cell.content.split('\n').length) * 21 + 32)}
                             language="markdown"
                             theme="markdown-modern"
                             value={cell.content}
@@ -290,6 +302,7 @@ export function MarkdownCell({ cell, isSelected, onSelect, onAddBelow }) {
                                     horizontal: 'hidden',
                                     useShadows: false,
                                     verticalSliderSize: 6,
+                                    alwaysConsumeMouseWheel: false
                                 },
                                 cursorBlinking: 'smooth',
                                 smoothScrolling: true,

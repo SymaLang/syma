@@ -245,7 +245,7 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
                     {!isMovingCells ? (
                         <Editor
                             key={cell.id}
-                            height={Math.max(80, (cell.content.split('\n').length + 1) * 20)}
+                            height={Math.max(100, (cell.content.split('\n').length) * 21 + 32)}
                             language="syma"
                             theme="syma-modern"
                             value={cell.content}
@@ -293,6 +293,9 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
                             lineNumbersMinChars: 4,
                             renderLineHighlight: 'none',
                             scrollBeyondLastLine: false,
+                            wordWrap: 'on',
+                            wordWrapColumn: 100,
+                            wrappingStrategy: 'advanced',
                             fontSize: 14,
                             fontFamily: '"JetBrains Mono", "Fira Code", Monaco, monospace',
                             fontLigatures: true,
@@ -306,13 +309,14 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
                                 horizontal: 'hidden',
                                 useShadows: false,
                                 verticalSliderSize: 6,
+                                alwaysConsumeMouseWheel: false
                             },
                             renderWhitespace: 'selection',
                             smoothScrolling: true,
                         }}
                         />
                     ) : (
-                        <div className="flex items-center justify-center" style={{ height: Math.max(80, (cell.content.split('\n').length + 1) * 20) }}>
+                        <div className="flex items-center justify-center" style={{ height: Math.max(100, (cell.content.split('\n').length) * 21 + 32) }}>
                         </div>
                     )}
                 </div>

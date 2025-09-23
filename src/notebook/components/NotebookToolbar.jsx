@@ -20,7 +20,10 @@ import { Tooltip, KeyboardShortcut } from './Tooltip';
 
 export function NotebookToolbar({ onRunAll }) {
     const fileInputRef = useRef(null);
+    const nameInputRef = useRef(null);
     const [theme, setTheme] = useState('dark');
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [tempName, setTempName] = useState('');
     const {
         metadata,
         cells,
@@ -28,7 +31,8 @@ export function NotebookToolbar({ onRunAll }) {
         clearAllOutputs,
         newNotebook,
         getNotebook,
-        setNotebook
+        setNotebook,
+        updateMetadata
     } = useNotebookStore();
 
     const handleSave = () => {
@@ -72,6 +76,34 @@ export function NotebookToolbar({ onRunAll }) {
         engine.reset();
     };
 
+    const handleStartEditName = () => {
+        setTempName(metadata.name || 'Untitled');
+        setIsEditingName(true);
+        setTimeout(() => {
+            nameInputRef.current?.select();
+        }, 0);
+    };
+
+    const handleSaveName = () => {
+        const newName = tempName.trim() || 'Untitled';
+        updateMetadata({ name: newName });
+        setIsEditingName(false);
+    };
+
+    const handleCancelEditName = () => {
+        setIsEditingName(false);
+        setTempName('');
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSaveName();
+        } else if (e.key === 'Escape') {
+            handleCancelEditName();
+        }
+    };
+
     const ToolbarButton = ({ onClick, icon: Icon, tooltip, primary = false, danger = false, disabled = false }) => {
         const buttonClasses = `
             relative p-2.5 rounded-xl transition-all duration-200
@@ -112,9 +144,27 @@ export function NotebookToolbar({ onRunAll }) {
                         </div>
 
                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700">
-                            <span className="text-sm text-gray-400">
-                                {metadata.name || 'Untitled'}
-                            </span>
+                            {isEditingName ? (
+                                <input
+                                    ref={nameInputRef}
+                                    type="text"
+                                    value={tempName}
+                                    onChange={(e) => setTempName(e.target.value)}
+                                    onBlur={handleSaveName}
+                                    onKeyDown={handleKeyDown}
+                                    className="text-sm bg-transparent border-b border-blue-500 outline-none text-white px-1 min-w-[100px]"
+                                    placeholder="Notebook name"
+                                    autoFocus
+                                />
+                            ) : (
+                                <button
+                                    onClick={handleStartEditName}
+                                    className="text-sm text-gray-400 hover:text-white transition-colors cursor-text px-1"
+                                    title="Click to edit name"
+                                >
+                                    {metadata.name || 'Untitled'}
+                                </button>
+                            )}
                             {cells.length > 0 && (
                                 <span className="text-xs px-2 py-0.5 rounded-md bg-zinc-700 text-gray-400 border border-zinc-600">
                                     {cells.length} cells

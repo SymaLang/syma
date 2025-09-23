@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 
 export const CellType = {
@@ -23,11 +24,16 @@ const createCell = (type, content = '') => ({
     metadata: {}
 });
 
-export const useNotebookStore = create((set, get) => ({
-    cells: [
-        createCell(CellType.MARKDOWN, '# Syma Notebook\n\nWelcome to the Syma interactive notebook. You can write and execute Syma code, and document your work with markdown.'),
-        createCell(CellType.CODE, '; Example: Simple arithmetic\n{Add 1 2}')
-    ],
+// Default initial cells
+const getInitialCells = () => [
+    createCell(CellType.MARKDOWN, '# Syma Notebook\n\nWelcome to the Syma interactive notebook. You can write and execute Syma code, and document your work with markdown, similar to Jupyter Notebook.'),
+    createCell(CellType.CODE, '; Example: Simple arithmetic\n{Add 1 2}')
+];
+
+export const useNotebookStore = create(
+    persist(
+        (set, get) => ({
+    cells: getInitialCells(),
     selectedCellId: null,
     executionCount: 0,
     isMovingCells: false,
@@ -153,6 +159,10 @@ export const useNotebookStore = create((set, get) => ({
     })),
 
     // Notebook operations
+    updateMetadata: (updates) => set(state => ({
+        metadata: { ...state.metadata, ...updates, modified: new Date().toISOString() }
+    })),
+
     setNotebook: (notebook) => set({
         cells: notebook.cells || [],
         metadata: { ...notebook.metadata, modified: new Date().toISOString() },
@@ -191,4 +201,20 @@ export const useNotebookStore = create((set, get) => ({
             }
         }
     })
-}));
+        }),
+        {
+            name: 'syma-notebook-storage',
+            // Only persist cells and metadata, not temporary state
+            partialize: (state) => ({
+                cells: state.cells,
+                metadata: state.metadata
+            }),
+            // Merge persisted state with fresh defaults
+            merge: (persisted, current) => ({
+                ...current,
+                cells: persisted?.cells || getInitialCells(),
+                metadata: persisted?.metadata || current.metadata
+            })
+        }
+    )
+);
