@@ -37,7 +37,7 @@ This is a symbolic programming language runtime and frontend application built w
    - `{k:"Str", v:string}` for strings
    - `{k:"Call", h:Expr, a:Expr[]}` for function calls
 
-4. **Entry Point (`src/main.js`)**: Bootstraps the runtime with `boot(universe, '#app')`
+4. **Entry Point (`src/main-syma.js`)**: Bootstraps the runtime with `boot(universe, '#app')`
 
 ### Program Structure
 

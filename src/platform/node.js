@@ -46,17 +46,24 @@ export class NodePlatform extends Platform {
     }
 
     // Set REPL mode
-    setReplMode(enabled) {
+    setReplMode(enabled, completer = null) {
         this.replMode = enabled;
         if (enabled) {
             // Create readline interface immediately for REPL mode
             if (!this.rl) {
-                this.rl = readline.createInterface({
+                const options = {
                     input: process.stdin,
                     output: process.stdout,
                     terminal: true,
                     historySize: 1000
-                });
+                };
+
+                // Add completer if provided
+                if (completer) {
+                    options.completer = completer;
+                }
+
+                this.rl = readline.createInterface(options);
             }
         } else if (this.rl) {
             this.rl.close();

@@ -7,6 +7,7 @@
 import * as engine from '../core/engine.js';
 import { foldPrims } from '../primitives.js';
 import { CommandProcessor } from './commands.js';
+import { Autocompleter } from './autocomplete.js';
 import { createParserSync, createParser } from '../core/parser-factory.js';
 import { getPlatform } from '../platform/index.js';
 import { createEffectsProcessor, freshId } from '../effects/processor.js';
@@ -18,6 +19,7 @@ export class SymaREPL {
         this.universe = engine.enrichProgramWithEffects(engine.createEmptyUniverse());
         this.history = [];
         this.commandProcessor = new CommandProcessor(this);
+        this.autocompleter = new Autocompleter(this.commandProcessor);
         this.parser = null; // Will be initialized asynchronously
         this.parserReady = this.initializeParser();
         this.effectsProcessor = null;
@@ -58,7 +60,9 @@ export class SymaREPL {
 
         // Enable REPL mode on the platform (this creates the readline interface)
         if (this.platform.setReplMode) {
-            this.platform.setReplMode(true);
+            // Pass the completer function to the platform
+            const completer = this.autocompleter.createCompleter();
+            this.platform.setReplMode(true, completer);
         }
 
         // Initialize effects processor

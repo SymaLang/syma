@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import symaPlugin from './vite-plugin-syma.js';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
     plugins: [
         tailwindcss(),
+        react(),
         symaPlugin({
             entryModule: 'App/Main',
             modulesDir: 'src/modules',

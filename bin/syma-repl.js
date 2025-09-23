@@ -17,7 +17,6 @@ import { createRequire } from 'module';
 import * as path from 'path';
 import * as fs from 'fs';
 import { spawn } from 'child_process';
-import { promisify } from 'util';
 import { createParser } from '../src/core/parser-factory.js';
 import * as engine from '../src/core/engine.js';
 import { foldPrims } from '../src/primitives.js';
@@ -143,12 +142,6 @@ Options:
 REPL Commands:
   :help                Show available commands
   :quit                Exit the REPL
-  :save <file>         Save universe to file
-  :load <file>         Load universe from file
-  :rules               List all rules
-  :rule <name>         Show or define a rule
-  :trace <expr>        Evaluate with trace
-  :undo                Undo last modification
 
 Examples:
   syma                             # Start interactive REPL
