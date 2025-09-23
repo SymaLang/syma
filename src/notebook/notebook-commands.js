@@ -8,11 +8,13 @@
 import { Sym, Str, Num, Call, isSym, isCall, isStr } from '../ast-helpers.js';
 import * as engine from '../core/engine.js';
 import { foldPrims } from '../primitives.js';
+import { DOMProjector } from '../projectors/dom.js';
 
 export class NotebookCommands {
     constructor(repl) {
         this.repl = repl;
         this.moduleIndex = null; // Will be loaded lazily
+        this.originalProcessCommand = null; // Will be set by notebook-engine
     }
 
     async loadModuleIndex() {
@@ -42,9 +44,27 @@ export class NotebookCommands {
             case 'help':
             case 'h':
                 return this.help();
+            case 'render-universe':
+                return this.renderUniverse();
+            case 'render':
+                return this.renderNode(command.slice(7).trim()); // Remove ':render '
+            case 'universe':
+            case 'u':
+            case 'rules':
+            case 'clear':
+                // These commands should be handled by the original processor
+                if (this.originalProcessCommand) {
+                    return this.originalProcessCommand(command);
+                }
+                break;
             default:
                 // Delegate to original REPL command processor for other commands
-                return this.repl.commandProcessor.processCommand(command);
+                if (this.originalProcessCommand) {
+                    return this.originalProcessCommand(command);
+                } else {
+                    this.repl.platform.printWithNewline(`Unknown command: ${cmd}`);
+                    return true;
+                }
         }
     }
 
@@ -327,14 +347,22 @@ export class NotebookCommands {
         this.repl.platform.printWithNewline(`
 Available notebook commands:
 
-  :import <module>   Import a stdlib module (e.g., :import Core/String)
-  :universe          Show current universe structure
-  :rules             List all rules
-  :help              Show this help
+  :import <module>        Import a stdlib module (e.g., :import Core/String)
+  :render-universe        Render the current universe's UI
+  :render <ui-node>       Render an interactive UI (modifies global state!)
+  :universe               Show current universe structure
+  :rules                  List all rules
+  :help                   Show this help
 
-Example:
+Examples:
   :import Core/List
   :import Core/String
+
+  ; Define a counter in the universe
+  {R "Inc" {Apply Inc {State {Count n_}}} {State {Count {Add n_ 1}}}}
+
+  ; Render interactive UI that modifies the global state
+  :render {Div {Show {Count}} {Button "+" :onClick Inc}}
 `);
         return true;
     }
@@ -342,6 +370,181 @@ Example:
     clear() {
         // In notebook context, this would clear cell outputs
         // this.repl.platform.printWithNewline("Clear command is handled by the notebook UI");
+        return true;
+    }
+
+    renderUniverse() {
+        try {
+            // Validate universe structure
+            let program = engine.findSection(this.repl.universe, "Program");
+            if (!program) {
+                this.repl.platform.printWithNewline("Error: No Program section found in universe");
+                return true;
+            }
+
+            // Check if Program has an App
+            let app = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "App");
+            if (!app) {
+                this.repl.platform.printWithNewline("Error: No App[...] found in Program. Use :render <ui-node> instead.");
+                return true;
+            }
+
+            // Create a mount point
+            const mountDiv = document.createElement('div');
+            mountDiv.className = 'syma-render-output';
+            mountDiv.style.cssText = 'border: 1px solid #444; border-radius: 8px; padding: 16px; margin-top: 8px; background: #1a1a1a;';
+
+            // Extract rules once
+            const rules = engine.extractRules(this.repl.universe);
+
+            // Create projector
+            const projector = new DOMProjector();
+            projector.init({
+                mount: mountDiv,
+                onDispatch: (action) => {
+                    // Use the core dispatch function - it handles everything
+                    this.repl.universe = engine.dispatch(this.repl.universe, rules, action, foldPrims);
+
+                    // Re-render with updated universe
+                    projector.render(this.repl.universe);
+                },
+                options: {
+                    normalize: (expr, r) => engine.normalize(expr, r, 10000, false, foldPrims),
+                    extractRules: engine.extractRules,
+                    universe: this.repl.universe
+                }
+            });
+
+            // Render the universe
+            projector.render(this.repl.universe);
+
+            // Return special DOM output
+            this.repl.platform.printWithNewline("Rendering universe UI...");
+
+            // Special output type for DOM elements
+            if (this.repl.platform.outputHandlers && this.repl.platform.currentCellId) {
+                const handler = this.repl.platform.outputHandlers.get(this.repl.platform.currentCellId);
+                if (handler) {
+                    handler({ type: 'dom', element: mountDiv, volatile: true });
+                }
+            }
+
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error rendering universe: ${error.message}`);
+        }
+        return true;
+    }
+
+    renderNode(nodeCode) {
+        try {
+            // Parse the node code
+            const node = this.repl.parser.parseString(nodeCode);
+
+            // Ensure we have a universe with an App
+            let program = engine.findSection(this.repl.universe, "Program");
+            let app = null;
+
+            if (program) {
+                // Look for App in the Program
+                app = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "App");
+            }
+
+            // If no App exists, add it to the existing Program
+            if (!app) {
+                if (!program) {
+                    // No Program at all, create a minimal universe with all necessary sections
+                    this.repl.universe = Call(Sym("Universe"),
+                        Call(Sym("Program"),
+                            Call(Sym("App"),
+                                Call(Sym("State")),  // Empty state
+                                Call(Sym("UI"), Sym("_"))  // Placeholder UI
+                            ),
+                            Call(Sym("Effects"), Call(Sym("Pending")), Call(Sym("Inbox")))
+                        ),
+                        Call(Sym("Rules")),
+                        Call(Sym("RuleRules"))
+                    );
+                } else {
+                    // Program exists but no App - add App to it
+                    const newApp = Call(Sym("App"),
+                        Call(Sym("State")),  // Empty state
+                        Call(Sym("UI"))  // Placeholder UI
+                    );
+
+                    // Add App as the first element (before Effects if present)
+                    const newProgram = Call(Sym("Program"), newApp, ...program.a);
+                    this.repl.universe = engine.setProgram(this.repl.universe, newProgram);
+                }
+                this.repl.platform.printWithNewline("Added App to universe");
+            }
+
+            // Create a temporary universe with the custom UI for rendering
+            // We keep the real state but replace the UI
+            let tempUniverse = JSON.parse(JSON.stringify(this.repl.universe)); // Deep clone
+            const tempApp = engine.getProgramApp(tempUniverse);
+            if (tempApp) {
+                // Replace just the UI part (keep the state)
+                tempUniverse = engine.setProgramApp(tempUniverse,
+                    Call(Sym("App"), tempApp.a[0], Call(Sym("UI"), node))
+                );
+            }
+
+            // Create a mount point
+            const mountDiv = document.createElement('div');
+            mountDiv.className = 'syma-render-output';
+            mountDiv.style.cssText = 'border: 1px solid #444; border-radius: 8px; padding: 16px; margin-top: 8px; background: #1a1a1a;';
+
+            // Extract rules once
+            const rules = engine.extractRules(this.repl.universe);
+
+            // Create projector
+            const projector = new DOMProjector();
+            projector.init({
+                mount: mountDiv,
+                onDispatch: (action) => {
+                    this.repl.platform.printWithNewline(`Action: ${this.repl.parser.prettyPrint(action)}`);
+
+                    // Use the core dispatch function - it handles everything
+                    this.repl.universe = engine.dispatch(this.repl.universe, rules, action, foldPrims);
+
+                    // Get the updated state
+                    const updatedApp = engine.getProgramApp(this.repl.universe);
+                    if (updatedApp && updatedApp.a.length > 0) {
+                        this.repl.platform.printWithNewline(`State updated: ${this.repl.parser.prettyPrint(updatedApp.a[0])}`);
+                    }
+
+                    // Update temp universe with new state for re-rendering
+                    let tempUniverse2 = JSON.parse(JSON.stringify(this.repl.universe));
+                    tempUniverse2 = engine.setProgramApp(tempUniverse2,
+                        Call(Sym("App"), updatedApp.a[0], Call(Sym("UI"), node))
+                    );
+
+                    // Re-render with updated state
+                    projector.render(tempUniverse2);
+                },
+                options: {
+                    normalize: (expr, r) => engine.normalize(expr, r, 10000, false, foldPrims),
+                    extractRules: engine.extractRules,
+                    universe: tempUniverse
+                }
+            });
+
+            // Render the universe
+            projector.render(tempUniverse);
+
+            this.repl.platform.printWithNewline(`Rendering UI node: ${nodeCode}`);
+
+            // Special output type for DOM elements
+            if (this.repl.platform.outputHandlers && this.repl.platform.currentCellId) {
+                const handler = this.repl.platform.outputHandlers.get(this.repl.platform.currentCellId);
+                if (handler) {
+                    handler({ type: 'dom', element: mountDiv, volatile: true });
+                }
+            }
+
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error rendering node: ${error.message}`);
+        }
         return true;
     }
 }

@@ -18,6 +18,31 @@ import { registerSymaLanguage, registerCompletionProvider } from '../syma-langua
 import { Tooltip, KeyboardShortcut } from './Tooltip';
 // Design tokens removed - using Tailwind classes directly
 
+// Component to render DOM elements in output
+const DOMOutput = ({ element }) => {
+    const containerRef = React.useRef(null);
+
+    React.useEffect(() => {
+        if (containerRef.current && element) {
+            // Clear any existing content
+            containerRef.current.innerHTML = '';
+
+            // Check if element is a valid DOM node
+            if (element instanceof Node) {
+                containerRef.current.appendChild(element);
+            } else {
+                // If not a valid node (e.g., after deserialization), show a message
+                const placeholder = document.createElement('div');
+                placeholder.style.cssText = 'padding: 8px; color: #888; font-style: italic; font-size: 14px;';
+                placeholder.textContent = 'UI render output (re-run cell to display)';
+                containerRef.current.appendChild(placeholder);
+            }
+        }
+    }, [element]);
+
+    return <div ref={containerRef} />;
+};
+
 export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove }) {
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
@@ -51,7 +76,17 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
         setCellStatus(cell.id, CellStatus.RUNNING);
 
         try {
-            if (cell.content.trim().startsWith(':')) {
+            // Check if all non-empty, non-comment lines start with ':'
+            const lines = cell.content.split('\n');
+            const nonEmptyLines = lines.filter(line => {
+                const trimmed = line.trim();
+                return trimmed && !trimmed.startsWith(';'); // Ignore empty lines and comments
+            });
+
+            const isAllCommands = nonEmptyLines.length > 0 &&
+                                  nonEmptyLines.every(line => line.trim().startsWith(':'));
+
+            if (isAllCommands) {
                 const { outputs, hasError } = await engine.executeCommand(cell.id, cell.content.trim());
                 if (hasError) {
                     setCellError(cell.id, outputs[0]?.content || 'Unknown error');
@@ -384,6 +419,10 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
                                         <code className="text-sm leading-relaxed font-medium text-green-400">
                                             {output.content}
                                         </code>
+                                    </div>
+                                ) : output.type === 'dom' ? (
+                                    <div className="syma-dom-output">
+                                        <DOMOutput element={output.element} />
                                     </div>
                                 ) : (
                                     <div className="pl-8 whitespace-pre-wrap text-sm leading-relaxed text-gray-300">

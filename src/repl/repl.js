@@ -11,7 +11,7 @@ import { Autocompleter } from './autocomplete.js';
 import { createParserSync, createParser } from '../core/parser-factory.js';
 import { getPlatform } from '../platform/index.js';
 import { createEffectsProcessor, freshId } from '../effects/processor.js';
-import { isCall, isSym } from '../ast-helpers.js';
+import {isCall, isStr, isSym} from '../ast-helpers.js';
 
 export class SymaREPL {
     constructor(platform, options = {}) {
@@ -432,8 +432,8 @@ export class SymaREPL {
         if (rulesNode) {
             rulesNode.a = rulesNode.a.filter(r => {
                 // Check if this is a rule with matching name
-                if (!engine.isCall(r) || !engine.isSym(r.h) || r.h.v !== "R") return true;
-                if (r.a.length < 1 || !engine.isStr(r.a[0])) return true;
+                if (!isCall(r) || !isSym(r.h) || r.h.v !== "R") return true;
+                if (r.a.length < 1 || !isStr(r.a[0])) return true;
                 return r.a[0].v !== name;
             });
         }

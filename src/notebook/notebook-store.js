@@ -211,7 +211,11 @@ export const useNotebookStore = create(
             name: 'syma-notebook-storage',
             // Only persist cells and metadata, not temporary state
             partialize: (state) => ({
-                cells: state.cells,
+                cells: state.cells.map(cell => ({
+                    ...cell,
+                    // Filter out DOM outputs that can't be serialized
+                    outputs: cell.outputs.filter(output => output.type !== 'dom')
+                })),
                 metadata: state.metadata
             }),
             // Merge persisted state with fresh defaults

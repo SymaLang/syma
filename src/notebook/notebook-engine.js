@@ -21,11 +21,15 @@ class NotebookPlatform {
         this.currentCellId = cellId;
     }
 
-    print(text) {
+    print(output) {
         if (this.currentCellId && this.outputHandlers.has(this.currentCellId)) {
-            this.outputHandlers.get(this.currentCellId)(text);
+            this.outputHandlers.get(this.currentCellId)(output);
         }
-        console.log(text);
+        if (typeof output === 'string') {
+            console.log(output);
+        } else {
+            console.log('DOM output:', output);
+        }
     }
 
     readLine(prompt) {
@@ -78,6 +82,9 @@ export class NotebookEngine {
 
         // Replace command processor with browser-compatible version
         this.notebookCommands = new NotebookCommands(this.repl);
+        // Store the original processCommand method before replacing it
+        this.originalProcessCommand = this.repl.commandProcessor.processCommand.bind(this.repl.commandProcessor);
+        this.notebookCommands.originalProcessCommand = this.originalProcessCommand;
         // Override the specific processCommand method
         this.repl.commandProcessor.processCommand = this.notebookCommands.processCommand.bind(this.notebookCommands);
 
@@ -147,16 +154,55 @@ export class NotebookEngine {
         const outputs = [];
         let hasError = false;
 
-        // Set up output handler
-        this.platform.setOutputHandler(cellId, (text) => {
-            outputs.push({ type: 'text', content: text });
+        // Set up output handler that can handle both text and DOM outputs
+        this.platform.setOutputHandler(cellId, (output) => {
+            if (typeof output === 'string') {
+                outputs.push({ type: 'text', content: output });
+            } else if (output && typeof output === 'object') {
+                // Handle structured outputs (like DOM elements)
+                outputs.push(output);
+            } else {
+                outputs.push({ type: 'text', content: String(output) });
+            }
         });
         this.platform.setCurrentCell(cellId);
 
         try {
-            const result = await this.repl.commandProcessor.processCommand(command);
-            if (result === false) {
-                outputs.push({ type: 'text', content: 'Command would exit REPL (not allowed in notebook mode)' });
+            // Split by lines and process each command that starts with ':'
+            const lines = command.split('\n');
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine) continue; // Skip empty lines
+
+                if (trimmedLine.startsWith(':')) {
+                    // It's a command
+                    try {
+                        const result = await this.repl.commandProcessor.processCommand(trimmedLine);
+                        if (result === false) {
+                            outputs.push({ type: 'text', content: 'Command would exit REPL (not allowed in notebook mode)' });
+                        }
+                    } catch (error) {
+                        hasError = true;
+                        outputs.push({
+                            type: 'error',
+                            content: `Error in command "${trimmedLine}": ${error.message}`,
+                            traceback: error.stack
+                        });
+                        // Continue executing other commands even if one fails
+                    }
+                } else if (trimmedLine.startsWith(';')) {
+                    // It's a comment, skip it
+                    continue;
+                } else {
+                    // It's not a command but part of a multi-line input
+                    // This shouldn't happen if we're called from executeCommand
+                    outputs.push({
+                        type: 'error',
+                        content: `Invalid command line (must start with ':'): ${trimmedLine}`
+                    });
+                    hasError = true;
+                }
             }
         } catch (error) {
             hasError = true;

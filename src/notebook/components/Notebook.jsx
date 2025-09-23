@@ -109,7 +109,18 @@ export function Notebook() {
                 useNotebookStore.getState().setCellStatus(cell.id, 'running');
 
                 const engine = engineRef.current;
-                if (cell.content.trim().startsWith(':')) {
+
+                // Check if all non-empty, non-comment lines start with ':'
+                const lines = cell.content.split('\n');
+                const nonEmptyLines = lines.filter(line => {
+                    const trimmed = line.trim();
+                    return trimmed && !trimmed.startsWith(';'); // Ignore empty lines and comments
+                });
+
+                const isAllCommands = nonEmptyLines.length > 0 &&
+                                      nonEmptyLines.every(line => line.trim().startsWith(':'));
+
+                if (isAllCommands) {
                     const { outputs, hasError } = await engine.executeCommand(cell.id, cell.content.trim());
                     if (hasError) {
                         useNotebookStore.getState().setCellError(cell.id, outputs[0]?.content || 'Unknown error');
@@ -141,7 +152,18 @@ export function Notebook() {
                 useNotebookStore.getState().setCellStatus(cell.id, 'running');
 
                 const engine = engineRef.current;
-                if (cell.content.trim().startsWith(':')) {
+
+                // Check if all non-empty, non-comment lines start with ':'
+                const lines = cell.content.split('\n');
+                const nonEmptyLines = lines.filter(line => {
+                    const trimmed = line.trim();
+                    return trimmed && !trimmed.startsWith(';'); // Ignore empty lines and comments
+                });
+
+                const isAllCommands = nonEmptyLines.length > 0 &&
+                                      nonEmptyLines.every(line => line.trim().startsWith(':'));
+
+                if (isAllCommands) {
                     const { outputs, hasError } = await engine.executeCommand(cell.id, cell.content.trim());
                     if (hasError) {
                         useNotebookStore.getState().setCellError(cell.id, outputs[0]?.content || 'Unknown error');
