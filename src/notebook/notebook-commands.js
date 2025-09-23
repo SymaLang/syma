@@ -9,6 +9,8 @@ import { Sym, Str, Num, Call, isSym, isCall, isStr } from '../ast-helpers.js';
 import * as engine from '../core/engine.js';
 import { foldPrims } from '../primitives.js';
 import { DOMProjector } from '../projectors/dom.js';
+import { NotebookModulePlatform } from './notebook-module-platform.js';
+import { ModuleCompiler } from '../core/module-compiler.js';
 
 export class NotebookCommands {
     constructor(repl) {
@@ -17,6 +19,11 @@ export class NotebookCommands {
         this.originalProcessCommand = null; // Will be set by notebook-engine
         this.globalSyntaxImported = false; // Track if Core/Syntax/Global has been auto-imported
         this.watchProjectors = new Map(); // Map of cellId -> {projector, mountDiv, nodeCode?}
+
+        // Module system
+        this.modulePlatform = new NotebookModulePlatform();
+        this.modulePlatform.setParser(repl.parser);
+        this.moduleCompiler = new ModuleCompiler(this.modulePlatform);
     }
 
     async loadModuleIndex() {
@@ -41,6 +48,19 @@ export class NotebookCommands {
         const args = parts.slice(1);
 
         switch (cmd) {
+            case 'module':
+                // Handle :module <name> or :module multiline
+                if (args.length === 1 && args[0] !== 'multiline') {
+                    // Single line module definition (just the name)
+                    return this.defineModule(args[0], null);
+                } else if (args[0] === 'multiline') {
+                    // Multiline module will be handled by notebook-engine.js
+                    // It will parse the content and call defineModule with the AST
+                    return false; // Signal that this needs multiline handling
+                } else {
+                    this.repl.platform.printWithNewline('Usage: :module <name> or :module multiline');
+                    return true;
+                }
             case 'import':
                 return await this.import(args);
             case 'help':
@@ -76,6 +96,49 @@ export class NotebookCommands {
         }
     }
 
+    defineModule(moduleCode) {
+        try {
+            // Parse the module code
+            const moduleAst = this.repl.parser.parseString(moduleCode);
+
+            // Validate it's a module
+            if (!isCall(moduleAst) || !isSym(moduleAst.h) || moduleAst.h.v !== 'Module') {
+                throw new Error('Invalid module format - must start with {Module ModuleName ...}');
+            }
+
+            const nameNode = moduleAst.a[0];
+            if (!isSym(nameNode)) {
+                throw new Error('Module name must be a symbol');
+            }
+            const moduleName = nameNode.v;
+
+            // Add to notebook modules
+            this.modulePlatform.addNotebookModule(moduleName, moduleAst);
+
+            // Store just the AST - compilation happens on import
+            // This ensures notebook modules are compiled in the same context as when they're imported,
+            // including proper Core/Syntax/Global treatment if it's available at that time
+            this.repl.platform.printWithNewline(`Module ${moduleName} defined successfully`);
+            this.repl.platform.printWithNewline(`You can now import it with: :import ${moduleName}`);
+
+            return true;
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error defining module: ${error.message}`);
+            return true;
+        }
+    }
+
+    mergeCompiledModule(compiledUniverse, moduleName) {
+        // Extract rules and RuleRules from compiled universe
+        const compiledRules = engine.findSection(compiledUniverse, "Rules");
+        const compiledRuleRules = engine.findSection(compiledUniverse, "RuleRules");
+        const compiledMacroScopes = engine.findSection(compiledUniverse, "MacroScopes");
+
+        // Module is compiled as library, so we just store its rules for import
+        // We don't merge immediately - wait for explicit import
+        this.repl.platform.printWithNewline(`Module ${moduleName} is ready for import`);
+    }
+
     async import(args) {
         const moduleName = args[0];
 
@@ -100,8 +163,18 @@ export class NotebookCommands {
             this.repl.platform.printWithNewline("  :import Core/String open     # Open import (unqualified symbols)");
             this.repl.platform.printWithNewline("  :import Core/Fun macro       # Import with macro rules");
             this.repl.platform.printWithNewline("  :import Core/Plumb open macro # Both modifiers");
-            this.repl.platform.printWithNewline("\nAvailable modules:");
 
+            // Show notebook modules
+            const notebookModules = this.modulePlatform.getNotebookModuleNames();
+            if (notebookModules.length > 0) {
+                this.repl.platform.printWithNewline("\nNotebook modules:");
+                for (const name of notebookModules.sort()) {
+                    this.repl.platform.printWithNewline(`  ${name}`);
+                }
+            }
+
+            // Show stdlib modules
+            this.repl.platform.printWithNewline("\nStandard library modules:");
             const index = await this.loadModuleIndex();
             for (const name of Object.keys(index).sort()) {
                 this.repl.platform.printWithNewline(`  ${name}`);
@@ -110,10 +183,16 @@ export class NotebookCommands {
         }
 
         try {
-            // Load module index
+            // Check notebook modules first
+            if (this.modulePlatform.notebookModules.has(moduleName)) {
+                return await this.importNotebookModule(moduleName, modifiers);
+            }
+
+            // Load stdlib module index
             const index = await this.loadModuleIndex();
 
             // First, ensure Core/Syntax/Global is imported (if it exists and not already imported)
+            // This is imported into the MAIN UNIVERSE, not per-module
             const globalSyntaxName = 'Core/Syntax/Global';
             if (!this.globalSyntaxImported && index[globalSyntaxName] && moduleName !== globalSyntaxName) {
                 this.repl.platform.printWithNewline(`Auto-importing ${globalSyntaxName}...`);
@@ -121,7 +200,7 @@ export class NotebookCommands {
                 this.globalSyntaxImported = true;
             }
 
-            // Check if module exists
+            // Check if module exists in stdlib
             const modulePath = index[moduleName];
             if (!modulePath) {
                 // Try case variations
@@ -133,7 +212,17 @@ export class NotebookCommands {
                 }
 
                 this.repl.platform.printWithNewline(`Module '${moduleName}' not found.`);
-                this.repl.platform.printWithNewline("\nAvailable modules:");
+
+                // Show available modules
+                const notebookModules = this.modulePlatform.getNotebookModuleNames();
+                if (notebookModules.length > 0) {
+                    this.repl.platform.printWithNewline("\nNotebook modules:");
+                    for (const name of notebookModules.sort()) {
+                        this.repl.platform.printWithNewline(`  ${name}`);
+                    }
+                }
+
+                this.repl.platform.printWithNewline("\nStandard library modules:");
                 for (const name of Object.keys(index).sort()) {
                     this.repl.platform.printWithNewline(`  ${name}`);
                 }
@@ -144,6 +233,44 @@ export class NotebookCommands {
 
         } catch (error) {
             this.repl.platform.printWithNewline(`Failed to import ${moduleName}: ${error.message}`);
+        }
+        return true;
+    }
+
+    async importNotebookModule(moduleName, modifiers = {}) {
+        const importDesc = modifiers.open ?
+            (modifiers.macro ? `${moduleName} (open, with macros)` : `${moduleName} (open)`) :
+            (modifiers.macro ? `${moduleName} (with macros)` : moduleName);
+        this.repl.platform.printWithNewline(`Importing notebook module ${importDesc}...`);
+
+        try {
+            // Get the module AST
+            const moduleAst = this.modulePlatform.notebookModules.get(moduleName);
+
+            // Compile the module directly without trying to load Core/Syntax/Global
+            // (since Core/Syntax/Global is already in the main universe if needed)
+            const compiledUniverse = this.moduleCompiler.compileModuleAST(moduleAst, { libraryMode: true });
+
+            // Process for open imports if needed
+            let processedUniverse = compiledUniverse;
+            if (modifiers.open) {
+                processedUniverse = this.processOpenImport(compiledUniverse, moduleName);
+            }
+
+            // Merge into current universe
+            this.mergeUniverses(processedUniverse, moduleName, modifiers);
+
+            // Apply RuleRules to transform the Universe permanently after merge
+            this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
+
+            this.repl.platform.printWithNewline(`Notebook module ${moduleName} imported successfully`);
+
+            // Show what was imported
+            const importedRules = engine.extractRules(processedUniverse);
+            this.repl.platform.printWithNewline(`Added ${importedRules.length} rules from ${moduleName}`);
+
+        } catch (error) {
+            throw new Error(`Failed to import notebook module: ${error.message}`);
         }
         return true;
     }
@@ -459,7 +586,8 @@ export class NotebookCommands {
         this.repl.platform.printWithNewline(`
 Available notebook commands:
 
-  :import <module>          Import a stdlib module (e.g., :import Core/String)
+  :module multiline         Define a module in the notebook (end with :end)
+  :import <module>          Import a stdlib or notebook module
   :render-universe          Render the current universe's UI
   :render-universe watch    Render with live updates from other cells
   :render <ui-node>         Render an interactive UI (modifies global state!)
@@ -470,6 +598,10 @@ Available notebook commands:
   :render multiline         Start a multiline UI node (end with :end)
   :render watch multiline   Start a multiline watch UI node (end with :end)
   :help                     Show this help
+
+Module System:
+  Define modules directly in the notebook and import them like stdlib modules.
+  Notebook modules can export symbols, import other modules, define rules, etc.
 
 Watch Mode:
   When 'watch' is used, the rendered UI will automatically update when
@@ -505,6 +637,25 @@ Examples:
 
   ; Render universe with watch
   :render-universe watch
+
+  ; Define a module in the notebook
+  :module multiline
+  {Module MyUtils
+    {Export Double Triple}
+    {Defs
+      {Double {Mul 2}}
+      {Triple {Mul 3}}
+    }
+    {Rules
+      {R "Double/Apply" {Double x_} {Mul x_ 2} 500}
+      {R "Triple/Apply" {Triple x_} {Mul x_ 3} 500}
+    }
+  }
+  :end
+
+  ; Import the notebook module
+  :import MyUtils
+  :import MyUtils open  ; Import with unqualified symbols
 `);
         return true;
     }

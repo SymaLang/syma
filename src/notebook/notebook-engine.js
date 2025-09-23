@@ -97,6 +97,19 @@ export class NotebookEngine {
         // Override the specific processCommand method
         this.repl.commandProcessor.processCommand = this.notebookCommands.processCommand.bind(this.notebookCommands);
 
+        // Pre-import Core/Syntax/Global if available (for better notebook experience)
+        try {
+            const index = await this.notebookCommands.loadModuleIndex();
+            const globalSyntaxName = 'Core/Syntax/Global';
+            if (index[globalSyntaxName] && !this.notebookCommands.globalSyntaxImported) {
+                console.log(`Pre-importing ${globalSyntaxName} for notebook...`);
+                await this.notebookCommands.importModule(globalSyntaxName, index[globalSyntaxName], { open: false, macro: true });
+                this.notebookCommands.globalSyntaxImported = true;
+            }
+        } catch (error) {
+            console.warn('Could not pre-import Core/Syntax/Global:', error);
+        }
+
         this.initialized = true;
     }
 
@@ -205,17 +218,18 @@ export class NotebookEngine {
                     const isMultiline = trimmedLine === ':rule multiline' ||
                                        trimmedLine === ':render multiline' ||
                                        trimmedLine === ':render watch multiline' ||
-                                       trimmedLine === ':render multiline watch';
+                                       trimmedLine === ':render multiline watch' ||
+                                       trimmedLine === ':module multiline';
 
                     if (isMultiline) {
                         // Parse the command type and modifiers
                         const parts = trimmedLine.split(' ');
-                        const commandType = parts[0]; // :rule or :render
+                        const commandType = parts[0]; // :rule, :render, or :module
                         const hasWatch = parts.includes('watch');
                         const hasMultiline = parts.includes('multiline');
 
                         // Collect everything until :end
-                        let ruleLines = [];
+                        let contentLines = [];
                         let j = i + 1;
                         let foundEnd = false;
 
@@ -229,7 +243,7 @@ export class NotebookEngine {
                             }
 
                             // Add the line (preserving indentation for readability)
-                            ruleLines.push(lines[j]);
+                            contentLines.push(lines[j]);
                             j++;
                         }
 
@@ -241,35 +255,64 @@ export class NotebookEngine {
                             hasError = true;
                             i = j;
                         } else {
-                            // Join the lines with spaces (not newlines) for the parser
-                            const ruleContent = ruleLines.join(' ').trim();
+                            // Handle different command types
+                            if (commandType === ':module') {
+                                // For module, join with newlines to preserve structure
+                                const moduleContent = contentLines.join('\n').trim();
 
-                            if (!ruleContent) {
-                                outputs.push({
-                                    type: 'error',
-                                    content: 'Error: Empty multiline command'
-                                });
-                                hasError = true;
-                            } else {
-                                // Build the full command with modifiers
-                                let fullCommand = commandType;
-                                if (commandType === ':render' && hasWatch) {
-                                    fullCommand += ' watch';
-                                }
-                                fullCommand += ' ' + ruleContent;
-
-                                try {
-                                    const result = await this.repl.commandProcessor.processCommand(fullCommand);
-                                    if (result === false) {
-                                        outputs.push({ type: 'text', content: 'Command would exit REPL (not allowed in notebook mode)' });
-                                    }
-                                } catch (error) {
-                                    hasError = true;
+                                if (!moduleContent) {
                                     outputs.push({
                                         type: 'error',
-                                        content: `Error in multiline command: ${error.message}`,
-                                        traceback: error.stack
+                                        content: 'Error: Empty module definition'
                                     });
+                                    hasError = true;
+                                } else {
+                                    try {
+                                        // Call defineModule directly
+                                        const result = this.notebookCommands.defineModule(moduleContent);
+                                        if (result === false) {
+                                            outputs.push({ type: 'text', content: 'Module definition would exit REPL (not allowed in notebook mode)' });
+                                        }
+                                    } catch (error) {
+                                        hasError = true;
+                                        outputs.push({
+                                            type: 'error',
+                                            content: `Error in module definition: ${error.message}`,
+                                            traceback: error.stack
+                                        });
+                                    }
+                                }
+                            } else {
+                                // For other commands, join with spaces for the parser
+                                const content = contentLines.join(' ').trim();
+
+                                if (!content) {
+                                    outputs.push({
+                                        type: 'error',
+                                        content: 'Error: Empty multiline command'
+                                    });
+                                    hasError = true;
+                                } else {
+                                    // Build the full command with modifiers
+                                    let fullCommand = commandType;
+                                    if (commandType === ':render' && hasWatch) {
+                                        fullCommand += ' watch';
+                                    }
+                                    fullCommand += ' ' + content;
+
+                                    try {
+                                        const result = await this.repl.commandProcessor.processCommand(fullCommand);
+                                        if (result === false) {
+                                            outputs.push({ type: 'text', content: 'Command would exit REPL (not allowed in notebook mode)' });
+                                        }
+                                    } catch (error) {
+                                        hasError = true;
+                                        outputs.push({
+                                            type: 'error',
+                                            content: `Error in multiline command: ${error.message}`,
+                                            traceback: error.stack
+                                        });
+                                    }
                                 }
                             }
                             i = j;
