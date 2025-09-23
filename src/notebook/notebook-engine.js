@@ -1,6 +1,7 @@
 import { SymaREPL } from '../repl/repl.js';
 import * as engine from '../core/engine.js';
 import { foldPrims } from '../primitives.js';
+import { NotebookCommands } from './notebook-commands.js';
 
 class NotebookPlatform {
     constructor() {
@@ -74,6 +75,12 @@ export class NotebookEngine {
     async initialize() {
         if (this.initialized) return;
         await this.repl.initializeParser();
+
+        // Replace command processor with browser-compatible version
+        this.notebookCommands = new NotebookCommands(this.repl);
+        // Override the specific processCommand method
+        this.repl.commandProcessor.processCommand = this.notebookCommands.processCommand.bind(this.notebookCommands);
+
         this.initialized = true;
     }
 
