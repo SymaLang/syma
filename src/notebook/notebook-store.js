@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
+import { getNotebookEngine } from './notebook-engine';
 
 export const CellType = {
     CODE: 'code',
@@ -76,11 +77,17 @@ export const useNotebookStore = create(
         };
     }),
 
-    deleteCell: (id) => set(state => ({
-        cells: state.cells.filter(c => c.id !== id),
-        selectedCellId: state.selectedCellId === id ? null : state.selectedCellId,
-        metadata: { ...state.metadata, modified: new Date().toISOString() }
-    })),
+    deleteCell: (id) => {
+        // Clean up engine resources for this cell
+        const engine = getNotebookEngine();
+        engine.cleanupCell(id);
+
+        return set(state => ({
+            cells: state.cells.filter(c => c.id !== id),
+            selectedCellId: state.selectedCellId === id ? null : state.selectedCellId,
+            metadata: { ...state.metadata, modified: new Date().toISOString() }
+        }));
+    },
 
     updateCell: (id, updates) => set(state => ({
         cells: state.cells.map(c =>

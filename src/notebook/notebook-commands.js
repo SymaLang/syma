@@ -269,10 +269,17 @@ export class NotebookCommands {
         // Remove a watch projector when cell is re-executed or cleared
         if (this.watchProjectors.has(cellId)) {
             const info = this.watchProjectors.get(cellId);
-            // Clean up DOM if needed
+
+            // Clean up the projector (removes event handlers, clears DOM, etc.)
+            if (info.projector && typeof info.projector.cleanup === 'function') {
+                info.projector.cleanup();
+            }
+
+            // Clean up DOM if needed (in case projector didn't do it)
             if (info.mountDiv && info.mountDiv.parentNode) {
                 info.mountDiv.remove();
             }
+
             this.watchProjectors.delete(cellId);
         }
     }

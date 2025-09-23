@@ -103,6 +103,9 @@ export class NotebookEngine {
     async executeCode(cellId, code, onOutput = null) {
         await this.initialize();
 
+        // Clean up any existing resources for this cell (e.g. from previous execution)
+        this.cleanupCell(cellId);
+
         const outputs = [];
         let hasError = false;
 
@@ -159,6 +162,9 @@ export class NotebookEngine {
 
     async executeCommand(cellId, command) {
         await this.initialize();
+
+        // Clean up any existing resources for this cell (e.g. from previous execution)
+        this.cleanupCell(cellId);
 
         const outputs = [];
         let hasError = false;
