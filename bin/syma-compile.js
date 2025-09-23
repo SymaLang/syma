@@ -81,7 +81,6 @@ async function compile(options) {
         if (isSym(nameNode)) {
           entryModuleName = nameNode.v;
           entryFile = files[0];
-          console.log(`# Using ${entryModuleName} as entry module`);
         }
       }
 

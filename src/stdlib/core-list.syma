@@ -2,7 +2,7 @@
   Core/List
   {Export IsEmpty Alt Head Tail Len Append Map Filter Foldl Flatten Take Drop}
   {Rules
-    {R "List/ToList"    ToList(_, xs...) {List xs...}}
+    {R "List/ToList"    {ToList {_ xs...}} {List xs...}}
     {R "List/Head"      Head({List x_ rest...}) x_}
     {R "List/Tail"      Tail({List _ rest...})  {List rest...}}
     {R "List/Len/Empty" Len({List}) 0}

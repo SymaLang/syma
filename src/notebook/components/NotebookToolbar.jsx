@@ -106,7 +106,7 @@ export function NotebookToolbar({ onRunAll }) {
 
     const ToolbarButton = ({ onClick, icon: Icon, tooltip, primary = false, danger = false, disabled = false }) => {
         const buttonClasses = `
-            relative p-2.5 rounded-xl transition-all duration-200
+            relative p-2.5 rounded transition-all duration-200
             ${primary ? 'bg-gradient-to-br from-blue-500 to-blue-600 border-blue-500 text-white'
                 : danger ? 'bg-zinc-800/80 border-zinc-700 text-gray-400 hover:bg-red-950 hover:border-red-500 hover:text-white'
                 : 'bg-zinc-800/80 border-zinc-700 text-gray-400 hover:bg-zinc-700 hover:border-zinc-600 hover:text-white'}
@@ -129,7 +129,7 @@ export function NotebookToolbar({ onRunAll }) {
     };
 
     return (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-zinc-900/85 backdrop-blur-xl border-b border-zinc-800">
+        <div className="fixed top-0 left-0 right-0 z-200 bg-zinc-900/85 backdrop-blur-xl border-b border-zinc-800">
             <div className="max-w-7xl mx-auto px-6">
                 <div className="flex items-center justify-between h-16">
                     {/* Logo and Title */}
@@ -143,7 +143,7 @@ export function NotebookToolbar({ onRunAll }) {
                             </h1>
                         </div>
 
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded">
                             {isEditingName ? (
                                 <input
                                     ref={nameInputRef}
@@ -152,23 +152,18 @@ export function NotebookToolbar({ onRunAll }) {
                                     onChange={(e) => setTempName(e.target.value)}
                                     onBlur={handleSaveName}
                                     onKeyDown={handleKeyDown}
-                                    className="text-sm bg-transparent border-b border-blue-500 outline-none text-white px-1 min-w-[100px]"
+                                    className="text-lg bg-transparent border-b border-blue-500 outline-none text-white px-1 min-w-[100px]"
                                     placeholder="Notebook name"
                                     autoFocus
                                 />
                             ) : (
                                 <button
                                     onClick={handleStartEditName}
-                                    className="text-sm text-gray-400 hover:text-white transition-colors cursor-text px-1"
+                                    className="text-lg text-gray-400 hover:text-white transition-colors cursor-text px-1"
                                     title="Click to edit name"
                                 >
                                     {metadata.name || 'Untitled'}
                                 </button>
-                            )}
-                            {cells.length > 0 && (
-                                <span className="text-xs px-2 py-0.5 rounded-md bg-zinc-700 text-gray-400 border border-zinc-600">
-                                    {cells.length} cells
-                                </span>
                             )}
                         </div>
                     </div>
@@ -176,7 +171,7 @@ export function NotebookToolbar({ onRunAll }) {
                     {/* Toolbar Actions */}
                     <div className="flex items-center gap-3">
                         {/* File operations */}
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-zinc-800/40 border border-zinc-800">
+                        <div className="flex items-center gap-1.5 px-2 py-1">
                             <ToolbarButton
                                 onClick={handleNew}
                                 icon={DocumentPlusIcon}
@@ -211,8 +206,11 @@ export function NotebookToolbar({ onRunAll }) {
                             />
                         </div>
 
+                        {/* Vertical separator */}
+                        <div className="w-px h-6 bg-zinc-700" />
+
                         {/* Cell operations */}
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-zinc-800/40 border border-zinc-800">
+                        <div className="flex items-center gap-1.5 px-2 py-1">
                             <ToolbarButton
                                 onClick={() => addCell(CellType.CODE, cells[cells.length - 1]?.id)}
                                 icon={CodeBracketIcon}
@@ -225,8 +223,10 @@ export function NotebookToolbar({ onRunAll }) {
                             />
                         </div>
 
+                        <div className="w-px h-6 bg-zinc-700" />
+
                         {/* Run controls */}
-                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-zinc-800/40 border border-zinc-800">
+                        <div className="flex items-center gap-1.5 px-2 py-1">
                             <ToolbarButton
                                 onClick={onRunAll}
                                 icon={PlayIcon}

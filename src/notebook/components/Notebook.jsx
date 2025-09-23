@@ -4,18 +4,18 @@ import { CodeCell } from './CodeCell';
 import { MarkdownCell } from './MarkdownCell';
 import { CellDivider } from './CellDivider';
 import { NotebookToolbar } from './NotebookToolbar';
+import { NotificationContainer } from './NotificationToast';
 import { getNotebookEngine } from '../notebook-engine';
 // Design tokens removed - using Tailwind classes directly
 import { PlusIcon, CodeBracketIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 export function Notebook() {
-    const {
-        cells,
-        selectedCellId,
-        selectCell,
-        addCell,
-        clearAllOutputs
-    } = useNotebookStore();
+    // Use selectors to only subscribe to specific store slices
+    const cells = useNotebookStore(state => state.cells);
+    const selectedCellId = useNotebookStore(state => state.selectedCellId);
+    const selectCell = useNotebookStore(state => state.selectCell);
+    const addCell = useNotebookStore(state => state.addCell);
+    const clearAllOutputs = useNotebookStore(state => state.clearAllOutputs);
 
     const notebookRef = useRef(null);
     const engineRef = useRef(null);
@@ -202,6 +202,7 @@ export function Notebook() {
 
     return (
         <div className="min-h-screen bg-black">
+            <NotificationContainer />
             <NotebookToolbar onRunAll={runAllCells} />
 
             <div className="max-w-7xl mx-auto pb-20" ref={notebookRef}>

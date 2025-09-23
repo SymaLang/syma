@@ -232,9 +232,9 @@ export class SymaTreeSitterParser {
         return this.parseString(content, filename);
     }
 
-    // REPL-specific parsing (copied from original parser)
+    // REPL-specific parsing (updated to support :guard)
     parseInlineRule(name, ruleText) {
-        // Parse inline rule syntax: pattern → replacement [priority]
+        // Parse inline rule syntax: pattern → replacement [:guard condition] [priority]
         const arrow = ruleText.includes('→') ? '→' : '->';
         const parts = ruleText.split(arrow);
         if (parts.length !== 2) {
@@ -242,26 +242,57 @@ export class SymaTreeSitterParser {
         }
 
         const pattern = this.parseString(parts[0].trim());
-        const replacementAndPrio = parts[1].trim();
+        let replacementPart = parts[1].trim();
 
-        // Check if there's a priority at the end (number)
-        const lastSpace = replacementAndPrio.lastIndexOf(' ');
-        let replacement, priority = null;
+        // Check for :guard clause
+        let guard = null;
+        let priority = null;
 
-        if (lastSpace !== -1) {
-            const lastPart = replacementAndPrio.slice(lastSpace + 1);
-            if (/^\d+$/.test(lastPart)) {
-                priority = parseInt(lastPart);
-                replacement = this.parseString(replacementAndPrio.slice(0, lastSpace));
+        // Look for :guard in the replacement part
+        const guardIndex = replacementPart.indexOf(':guard');
+        if (guardIndex !== -1) {
+            // Extract the replacement before the guard
+            const beforeGuard = replacementPart.substring(0, guardIndex).trim();
+            const afterGuard = replacementPart.substring(guardIndex + 6).trim(); // 6 = length of ':guard'
+
+            // Check if there's a priority at the very end
+            const tokens = afterGuard.split(/\s+/);
+            const lastToken = tokens[tokens.length - 1];
+
+            if (/^\d+$/.test(lastToken) && tokens.length > 1) {
+                // Last token is a priority
+                priority = parseInt(lastToken);
+                // Everything before the priority is the guard
+                const guardExpr = tokens.slice(0, -1).join(' ');
+                guard = this.parseString(guardExpr);
             } else {
-                replacement = this.parseString(replacementAndPrio);
+                // No priority, everything is the guard
+                guard = this.parseString(afterGuard);
             }
+
+            replacementPart = beforeGuard;
         } else {
-            replacement = this.parseString(replacementAndPrio);
+            // No guard, check for priority at the end
+            const lastSpace = replacementPart.lastIndexOf(' ');
+            if (lastSpace !== -1) {
+                const lastPart = replacementPart.slice(lastSpace + 1);
+                if (/^\d+$/.test(lastPart)) {
+                    priority = parseInt(lastPart);
+                    replacementPart = replacementPart.slice(0, lastSpace);
+                }
+            }
         }
 
-        // Build R[name, pattern, replacement, priority?]
+        const replacement = this.parseString(replacementPart);
+
+        // Build R[name, pattern, replacement, :guard?, guard?, priority?]
         const ruleArgs = [Str(name), pattern, replacement];
+
+        if (guard !== null) {
+            ruleArgs.push(Sym(':guard'));
+            ruleArgs.push(guard);
+        }
+
         if (priority !== null) {
             ruleArgs.push(Num(priority));
         }

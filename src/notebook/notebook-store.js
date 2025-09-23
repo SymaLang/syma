@@ -53,6 +53,10 @@ export const useNotebookStore = create(
         }
     },
 
+    // Notification system
+    notifications: [],
+    deletedCells: [], // Stack of deleted cells for undo
+
     // Cell operations
     addCell: (type, afterId = null, position = 'after') => set(state => {
         const newCell = createCell(type);
@@ -78,16 +82,93 @@ export const useNotebookStore = create(
     }),
 
     deleteCell: (id) => {
+        const state = get();
+        const cellToDelete = state.cells.find(c => c.id === id);
+        const cellIndex = state.cells.findIndex(c => c.id === id);
+
+        if (!cellToDelete) return;
+
         // Clean up engine resources for this cell
         const engine = getNotebookEngine();
         engine.cleanupCell(id);
 
-        return set(state => ({
-            cells: state.cells.filter(c => c.id !== id),
-            selectedCellId: state.selectedCellId === id ? null : state.selectedCellId,
-            metadata: { ...state.metadata, modified: new Date().toISOString() }
-        }));
+        // Store deleted cell with its position for undo
+        const deletedCellData = {
+            cell: cellToDelete,
+            index: cellIndex,
+            timestamp: Date.now()
+        };
+
+        return set(state => {
+            const notificationId = nanoid();
+            const cellType = cellToDelete.type === CellType.MARKDOWN ? 'Markdown' : 'Code';
+
+            return {
+                cells: state.cells.filter(c => c.id !== id),
+                selectedCellId: state.selectedCellId === id ? null : state.selectedCellId,
+                metadata: { ...state.metadata, modified: new Date().toISOString() },
+                // Keep only the last 10 deleted cells to prevent memory issues
+                deletedCells: [...state.deletedCells.slice(-9), deletedCellData],
+                notifications: [...state.notifications, {
+                    id: notificationId,
+                    type: 'info',
+                    message: `${cellType} cell deleted`,
+                    action: {
+                        label: 'Undo',
+                        handler: () => get().undoDeleteCell(deletedCellData)
+                    },
+                    timeout: 8000, // Extended to 8 seconds
+                    createdAt: Date.now()
+                }]
+            };
+        });
     },
+
+    undoDeleteCell: (deletedCellData) => set(state => {
+        const { cell, index } = deletedCellData;
+        const newCells = [...state.cells];
+
+        // Insert the cell back at its original position (or at the end if index is out of bounds)
+        const insertIndex = Math.min(index, newCells.length);
+        newCells.splice(insertIndex, 0, cell);
+
+        return {
+            cells: newCells,
+            selectedCellId: cell.id,
+            deletedCells: state.deletedCells.filter(d => d !== deletedCellData),
+            metadata: { ...state.metadata, modified: new Date().toISOString() }
+        };
+    }),
+
+    addNotification: (notification) => set(state => ({
+        notifications: [...state.notifications, {
+            id: nanoid(),
+            createdAt: Date.now(),
+            timeout: 8000, // Default to 8 seconds
+            ...notification
+        }]
+    })),
+
+    removeNotification: (id) => set(state => ({
+        notifications: state.notifications.filter(n => n.id !== id)
+    })),
+
+    clearOldNotifications: () => set(state => {
+        const now = Date.now();
+        const activeNotifications = state.notifications.filter(n => {
+            // Keep notifications that haven't exceeded their timeout
+            // or have no timeout (manual dismiss only)
+            if (!n.timeout) return true;
+            return (now - n.createdAt) < n.timeout;
+        });
+
+        // Only update state if notifications actually changed
+        if (activeNotifications.length === state.notifications.length) {
+            return state; // No change, don't trigger re-render
+        }
+
+        return { notifications: activeNotifications };
+    }),
 
     updateCell: (id, updates) => set(state => ({
         cells: state.cells.map(c =>
@@ -202,6 +283,8 @@ export const useNotebookStore = create(
         cells: [createCell(CellType.CODE, '')],
         selectedCellId: null,
         executionCount: 0,
+        notifications: [],
+        deletedCells: [],
         metadata: {
             name: 'Untitled',
             created: new Date().toISOString(),

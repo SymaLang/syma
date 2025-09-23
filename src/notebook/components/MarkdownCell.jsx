@@ -6,22 +6,22 @@ import rehypeKatex from 'rehype-katex';
 import Editor from '@monaco-editor/react';
 import {
     PencilIcon,
-    CheckIcon,
-    TrashIcon,
-    ChevronUpIcon,
-    ChevronDownIcon,
-    PlusIcon,
-    DocumentTextIcon
+    CheckIcon
 } from '@heroicons/react/24/outline';
 import { useNotebookStore } from '../notebook-store';
-import { Tooltip, KeyboardShortcut } from './Tooltip';
+import { KeyboardShortcut } from './Tooltip';
+import { ActionButton, CellToolbar, CellControls, useToolbarVisibility } from './CellCommon';
 // Design tokens removed - using Tailwind classes directly
 import 'katex/dist/katex.min.css';
 
 export function MarkdownCell({ cell, isSelected, onSelect, onAddBelow }) {
     const [isEditing, setIsEditing] = useState(false);
     const editorRef = useRef(null);
-    const { updateCell, deleteCell, moveCell, isMovingCells } = useNotebookStore();
+
+    // Use selectors to only subscribe to specific store slices
+    const updateCell = useNotebookStore(state => state.updateCell);
+    const isMovingCells = useNotebookStore(state => state.isMovingCells);
+    const { toolbarVisible, setToolbarVisible, handleMouseEnter, handleMouseLeave } = useToolbarVisibility();
 
     // Enter edit mode on double click or when newly created
     useEffect(() => {
@@ -73,22 +73,6 @@ export function MarkdownCell({ cell, isSelected, onSelect, onAddBelow }) {
         }
     };
 
-    // Action button component matching CodeCell
-    const ActionButton = ({ onClick, icon: Icon, tooltip, danger = false, primary = false }) => (
-        <Tooltip content={tooltip} placement="right" delay={300}>
-            <button
-                onClick={onClick}
-                className={`
-                    relative p-2 rounded-lg
-                    ${primary ? 'bg-blue-500 text-white'
-                        : danger ? 'bg-zinc-800 text-gray-400 hover:bg-red-950 hover:text-white'
-                        : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700 hover:text-white'}
-                `}
-            >
-                <Icon className="w-4 h-4" />
-            </button>
-        </Tooltip>
-    );
 
     // Custom markdown components with modern styling
     const components = {
@@ -167,74 +151,28 @@ export function MarkdownCell({ cell, isSelected, onSelect, onAddBelow }) {
         ),
     };
 
-    const [toolbarVisible, setToolbarVisible] = useState(false);
 
     return (
         <div
             className="group/cell relative"
-            onMouseEnter={() => setToolbarVisible(true)}
-            onMouseLeave={(e) => {
-                // Check if mouse is leaving to the toolbar
-                const rect = e.currentTarget.getBoundingClientRect();
-                const isLeavingToToolbar = e.clientX < rect.left && e.clientX >= rect.left - 96;
-                if (!isLeavingToToolbar) {
-                    setToolbarVisible(false);
-                }
-            }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
         >
-            {/* Toolbar with its own hover detection */}
-            <div
-                className={`absolute -left-24 top-2 z-[100] flex flex-col gap-1.5 p-1.5 rounded-lg bg-zinc-800/85 backdrop-blur border border-zinc-700 transition-opacity duration-200 ${
-                    toolbarVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                }`}
-                onMouseEnter={() => setToolbarVisible(true)}
-                onMouseLeave={() => setToolbarVisible(false)}
-            >
-                    <ActionButton
-                        onClick={toggleEdit}
-                        icon={isEditing ? CheckIcon : PencilIcon}
-                        primary
-                        tooltip={
-                            <div>
-                                {isEditing ? 'Save' : 'Edit'}
-                                <KeyboardShortcut keys={isEditing ? ['shift', 'enter'] : ['double-click']} />
-                            </div>
-                        }
-                    />
+            <CellToolbar visible={toolbarVisible} onVisibilityChange={setToolbarVisible}>
+                <ActionButton
+                    onClick={toggleEdit}
+                    icon={isEditing ? CheckIcon : PencilIcon}
+                    primary
+                    tooltip={
+                        <div>
+                            {isEditing ? 'Save' : 'Edit'}
+                            <KeyboardShortcut keys={isEditing ? ['shift', 'enter'] : ['double-click']} />
+                        </div>
+                    }
+                />
 
-                    <div className="flex flex-col gap-1">
-                        <ActionButton
-                            onClick={() => moveCell(cell.id, 'up')}
-                            icon={ChevronUpIcon}
-                            tooltip="Move up"
-                        />
-                        <ActionButton
-                            onClick={() => moveCell(cell.id, 'down')}
-                            icon={ChevronDownIcon}
-                            tooltip="Move down"
-                        />
-                    </div>
-
-                    <ActionButton
-                        onClick={onAddBelow}
-                        icon={PlusIcon}
-                        tooltip={
-                            <div>
-                                Add cell below
-                                <KeyboardShortcut keys={['cmd', 'enter']} />
-                            </div>
-                        }
-                    />
-
-                    <div className="mt-2">
-                        <ActionButton
-                            onClick={() => deleteCell(cell.id)}
-                            icon={TrashIcon}
-                            danger
-                            tooltip="Delete cell"
-                        />
-                    </div>
-            </div>
+                <CellControls cellId={cell.id} onAddBelow={onAddBelow} />
+            </CellToolbar>
 
             <div
                 className={`

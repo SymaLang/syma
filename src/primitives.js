@@ -92,6 +92,8 @@ function foldPrimitive(op, args, skipFolds) {
         case "IndexOf": return foldIndexOf(args);
         case "Replace": return foldReplace(args);
         case "Split": return foldSplit(args);
+        case "Escape": return foldEscape(args);
+        case "Unescape": return foldUnescape(args);
     }
 
     // Comparison operations
@@ -124,6 +126,9 @@ function foldPrimitive(op, args, skipFolds) {
         case "IsSym": return foldIsSym(args);
         case "IsTrue": return foldIsTrue(args);
         case "IsFalse": return foldIsFalse(args);
+        case "AreNums": return foldAreNums(args);
+        case "AreStrings": return foldAreStrings(args);
+        case "AreSyms": return foldAreSyms(args);
     }
 
     // Utilities
@@ -501,6 +506,44 @@ function foldSplit(args) {
     return null;
 }
 
+/**
+ * Escape string: Escape[Str] -> Str(escaped)
+ * Escapes special characters in a string for safe embedding/serialization
+ * Handles: quotes, backslashes, newlines, carriage returns, tabs, form feeds
+ */
+function foldEscape(args) {
+    if (args.length === 1 && isStr(args[0])) {
+        const escaped = args[0].v
+            .replace(/\\/g, '\\\\')   // Escape backslashes first
+            .replace(/"/g, '\\"')     // Escape quotes
+            .replace(/\n/g, '\\n')    // Escape newlines
+            .replace(/\r/g, '\\r')    // Escape carriage returns
+            .replace(/\t/g, '\\t')    // Escape tabs
+            .replace(/\f/g, '\\f');   // Escape form feeds
+        return Str(escaped);
+    }
+    return null;
+}
+
+/**
+ * Unescape string: Unescape[Str] -> Str(unescaped)
+ * Converts escape sequences back to their actual characters
+ * Handles: \", \\, \n, \r, \t, \f
+ */
+function foldUnescape(args) {
+    if (args.length === 1 && isStr(args[0])) {
+        const unescaped = args[0].v
+            .replace(/\\n/g, '\n')    // Unescape newlines
+            .replace(/\\r/g, '\r')    // Unescape carriage returns
+            .replace(/\\t/g, '\t')    // Unescape tabs
+            .replace(/\\f/g, '\f')    // Unescape form feeds
+            .replace(/\\"/g, '"')     // Unescape quotes
+            .replace(/\\\\/g, '\\');  // Unescape backslashes last
+        return Str(unescaped);
+    }
+    return null;
+}
+
 // ============= Comparison Operations =============
 
 /**
@@ -677,6 +720,108 @@ function foldIsFalse(args) {
         return Sym(isSym(args[0]) && args[0].v === "False" ? "True" : "False");
     }
     return null;
+}
+
+/**
+ * Check if all elements are numbers: AreNums[Array|Splice|...args] -> True|False
+ * Works with:
+ * - VarRest bindings that expand to arrays
+ * - Splice objects from rule substitution
+ * - Multiple arguments passed directly
+ */
+function foldAreNums(args) {
+    if (args.length === 0) {
+        // Empty list is vacuously true
+        return Sym("True");
+    }
+
+    let items;
+    if (args.length === 1) {
+        const arg = args[0];
+        // Handle both plain arrays and Splice objects
+        if (Array.isArray(arg)) {
+            items = arg;
+        } else if (isSplice(arg)) {
+            items = arg.items;
+        } else {
+            // Single non-array/splice argument, check if it's a number
+            return Sym(isNum(arg) ? "True" : "False");
+        }
+    } else {
+        // Multiple arguments, check all of them
+        items = args;
+    }
+
+    const allNums = items.every(item => isNum(item));
+    return Sym(allNums ? "True" : "False");
+}
+
+/**
+ * Check if all elements are strings: AreStrings[Array|Splice|...args] -> True|False
+ * Works with:
+ * - VarRest bindings that expand to arrays
+ * - Splice objects from rule substitution
+ * - Multiple arguments passed directly
+ */
+function foldAreStrings(args) {
+    if (args.length === 0) {
+        // Empty list is vacuously true
+        return Sym("True");
+    }
+
+    let items;
+    if (args.length === 1) {
+        const arg = args[0];
+        // Handle both plain arrays and Splice objects
+        if (Array.isArray(arg)) {
+            items = arg;
+        } else if (isSplice(arg)) {
+            items = arg.items;
+        } else {
+            // Single non-array/splice argument, check if it's a string
+            return Sym(isStr(arg) ? "True" : "False");
+        }
+    } else {
+        // Multiple arguments, check all of them
+        items = args;
+    }
+
+    const allStrings = items.every(item => isStr(item));
+    return Sym(allStrings ? "True" : "False");
+}
+
+/**
+ * Check if all elements are symbols: AreSyms[Array|Splice|...args] -> True|False
+ * Works with:
+ * - VarRest bindings that expand to arrays
+ * - Splice objects from rule substitution
+ * - Multiple arguments passed directly
+ */
+function foldAreSyms(args) {
+    if (args.length === 0) {
+        // Empty list is vacuously true
+        return Sym("True");
+    }
+
+    let items;
+    if (args.length === 1) {
+        const arg = args[0];
+        // Handle both plain arrays and Splice objects
+        if (Array.isArray(arg)) {
+            items = arg;
+        } else if (isSplice(arg)) {
+            items = arg.items;
+        } else {
+            // Single non-array/splice argument, check if it's a symbol
+            return Sym(isSym(arg) ? "True" : "False");
+        }
+    } else {
+        // Multiple arguments, check all of them
+        items = args;
+    }
+
+    const allSyms = items.every(item => isSym(item));
+    return Sym(allSyms ? "True" : "False");
 }
 
 // ============= Utilities =============

@@ -3,10 +3,6 @@ import Editor from '@monaco-editor/react';
 import {
     PlayIcon,
     StopIcon,
-    TrashIcon,
-    ChevronUpIcon,
-    ChevronDownIcon,
-    PlusIcon,
     CommandLineIcon,
     ExclamationCircleIcon,
     CheckCircleIcon,
@@ -15,7 +11,8 @@ import {
 import { useNotebookStore, CellStatus } from '../notebook-store';
 import { getNotebookEngine } from '../notebook-engine';
 import { registerSymaLanguage, registerCompletionProvider } from '../syma-language';
-import { Tooltip, KeyboardShortcut } from './Tooltip';
+import { KeyboardShortcut } from './Tooltip';
+import { ActionButton, CellToolbar, CellControls, useToolbarVisibility } from './CellCommon';
 // Design tokens removed - using Tailwind classes directly
 
 // Component to render DOM elements in output
@@ -47,8 +44,15 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
     const [isExecuting, setIsExecuting] = useState(false);
-    const { updateCell, setCellOutput, setCellError, setCellStatus, deleteCell, moveCell, isMovingCells } = useNotebookStore();
+
+    // Use selectors to only subscribe to specific store slices
+    const updateCell = useNotebookStore(state => state.updateCell);
+    const setCellOutput = useNotebookStore(state => state.setCellOutput);
+    const setCellError = useNotebookStore(state => state.setCellError);
+    const setCellStatus = useNotebookStore(state => state.setCellStatus);
+    const isMovingCells = useNotebookStore(state => state.isMovingCells);
     const engine = getNotebookEngine();
+    const { toolbarVisible, setToolbarVisible, handleMouseEnter, handleMouseLeave } = useToolbarVisibility();
 
     // Initialize Monaco
     const handleEditorDidMount = (editor, monaco) => {
@@ -186,46 +190,15 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
         }
     };
 
-    const ActionButton = ({ onClick, icon: Icon, tooltip, danger = false, primary = false }) => (
-        <Tooltip content={tooltip} placement="right" delay={300}>
-            <button
-                onClick={onClick}
-                className={`
-                    relative p-2 rounded-lg
-                    ${primary ? 'bg-blue-500 text-white'
-                        : danger ? 'bg-zinc-800 text-gray-400 hover:bg-red-950 hover:text-white'
-                        : 'bg-zinc-800 text-gray-400 hover:bg-zinc-700 hover:text-white'}
-                `}
-            >
-                <Icon className="w-4 h-4" />
-            </button>
-        </Tooltip>
-    );
 
-    const [toolbarVisible, setToolbarVisible] = useState(false);
 
     return (
         <div
             className="group/cell relative"
-            onMouseEnter={() => setToolbarVisible(true)}
-            onMouseLeave={(e) => {
-                // Check if mouse is leaving to the toolbar
-                const rect = e.currentTarget.getBoundingClientRect();
-                const isLeavingToToolbar = e.clientX < rect.left && e.clientX >= rect.left - 96; // 96px = 24*4 (toolbar width)
-                if (!isLeavingToToolbar) {
-                    setToolbarVisible(false);
-                }
-            }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
         >
-            {/* Toolbar with its own hover detection */}
-            <div
-                className={`absolute -left-24 top-2 z-[100] flex flex-col gap-1.5 p-1.5 rounded-lg bg-zinc-800/85 backdrop-blur border border-zinc-700 transition-opacity duration-200 ${
-                    toolbarVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                }`}
-                onMouseEnter={() => setToolbarVisible(true)}
-                onMouseLeave={() => setToolbarVisible(false)}
-                style={{ minHeight: 'fit-content' }}
-            >
+            <CellToolbar visible={toolbarVisible} onVisibilityChange={setToolbarVisible}>
                 <ActionButton
                     onClick={handleExecute}
                     icon={isExecuting ? StopIcon : PlayIcon}
@@ -251,39 +224,8 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
                     />
                 )}
 
-                <div className="flex flex-col gap-1">
-                    <ActionButton
-                        onClick={() => moveCell(cell.id, 'up')}
-                        icon={ChevronUpIcon}
-                        tooltip="Move up"
-                    />
-                    <ActionButton
-                        onClick={() => moveCell(cell.id, 'down')}
-                        icon={ChevronDownIcon}
-                        tooltip="Move down"
-                    />
-                </div>
-
-                <ActionButton
-                    onClick={onAddBelow}
-                    icon={PlusIcon}
-                    tooltip={
-                        <div>
-                            Add cell below
-                            <KeyboardShortcut keys={['cmd', 'enter']} />
-                        </div>
-                    }
-                />
-
-                <div className="mt-2">
-                    <ActionButton
-                        onClick={() => deleteCell(cell.id)}
-                        icon={TrashIcon}
-                        danger
-                        tooltip="Delete cell"
-                    />
-                </div>
-            </div>
+                <CellControls cellId={cell.id} onAddBelow={onAddBelow} />
+            </CellToolbar>
 
             <div
                 className={`
