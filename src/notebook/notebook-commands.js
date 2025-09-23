@@ -116,10 +116,10 @@ export class NotebookCommands {
             }
             const moduleName = nameNode.v;
 
-            // Add to notebook modules
+            // Add to notebook modules (no preprocessing needed - we'll fix rule names after compilation)
             this.modulePlatform.addNotebookModule(moduleName, moduleAst);
 
-            // Store just the AST - compilation happens on import
+            // Store the AST - compilation and rule name fixing happens on import
             // This ensures notebook modules are compiled in the same context as when they're imported,
             // including proper Core/Syntax/Global treatment if it's available at that time
             this.repl.platform.printWithNewline(`Module ${moduleName} defined successfully`);
@@ -132,16 +132,6 @@ export class NotebookCommands {
         }
     }
 
-    mergeCompiledModule(compiledUniverse, moduleName) {
-        // Extract rules and RuleRules from compiled universe
-        const compiledRules = engine.findSection(compiledUniverse, "Rules");
-        const compiledRuleRules = engine.findSection(compiledUniverse, "RuleRules");
-        const compiledMacroScopes = engine.findSection(compiledUniverse, "MacroScopes");
-
-        // Module is compiled as library, so we just store its rules for import
-        // We don't merge immediately - wait for explicit import
-        this.repl.platform.printWithNewline(`Module ${moduleName} is ready for import`);
-    }
 
     async import(args) {
         const moduleName = args[0];
@@ -248,12 +238,43 @@ export class NotebookCommands {
         this.repl.platform.printWithNewline(`Importing notebook module ${importDesc}...`);
 
         try {
-            // Get the module AST
+            // Get the module AST (already preprocessed when defined)
             const moduleAst = this.modulePlatform.notebookModules.get(moduleName);
 
-            // Compile the module directly without trying to load Core/Syntax/Global
-            // (since Core/Syntax/Global is already in the main universe if needed)
-            const compiledUniverse = this.moduleCompiler.compileModuleAST(moduleAst, { libraryMode: true });
+            // Use the Module class from module-compiler to parse imports
+            const { Module } = await import('../core/module-compiler.js');
+            const module = new Module(moduleName, moduleAst);
+
+            // Process the module's imports BEFORE compilation
+            for (const imp of module.imports) {
+                const importModifiers = {
+                    open: imp.open || false,
+                    macro: imp.macro || false
+                };
+
+                this.repl.platform.printWithNewline(`  Processing dependency: ${imp.module}`);
+
+                // Check if it's a notebook module or stdlib
+                if (this.modulePlatform.notebookModules.has(imp.module)) {
+                    // Recursive import of notebook module
+                    await this.importNotebookModule(imp.module, importModifiers);
+                } else {
+                    // Import from stdlib
+                    const index = await this.loadModuleIndex();
+                    const modulePath = index[imp.module];
+                    if (modulePath) {
+                        await this.importModule(imp.module, modulePath, importModifiers);
+                    } else {
+                        this.repl.platform.printWithNewline(`  Warning: Dependency ${imp.module} not found`);
+                    }
+                }
+            }
+
+            // Now compile the module with all dependencies available in the universe
+            let compiledUniverse = this.moduleCompiler.compileModuleAST(moduleAst, { libraryMode: true });
+
+            // Post-process to ensure rule names are strings (fix :rule syntax compilation)
+            compiledUniverse = this.ensureRuleNamesAreStrings(compiledUniverse);
 
             // Process for open imports if needed
             let processedUniverse = compiledUniverse;
@@ -269,9 +290,23 @@ export class NotebookCommands {
 
             this.repl.platform.printWithNewline(`Notebook module ${moduleName} imported successfully`);
 
-            // Show what was imported
-            const importedRules = engine.extractRules(processedUniverse);
-            this.repl.platform.printWithNewline(`Added ${importedRules.length} rules from ${moduleName}`);
+            // Show what was imported - count from the actual universe after merging
+            const rulesAfter = engine.extractRules(this.repl.universe);
+            const rulesBefore = engine.extractRules(this.repl.universe); // This is wrong, but keeping structure
+
+            // Count rules that belong to this module
+            const rulesNode = engine.findSection(this.repl.universe, "Rules");
+            let moduleRuleCount = 0;
+            if (rulesNode && isCall(rulesNode)) {
+                for (const rule of rulesNode.a) {
+                    if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' &&
+                        rule.a.length > 0 && isStr(rule.a[0]) && rule.a[0].v === moduleName) {
+                        moduleRuleCount++;
+                    }
+                }
+            }
+
+            this.repl.platform.printWithNewline(`Added ${moduleRuleCount} rules from ${moduleName}`);
 
         } catch (error) {
             throw new Error(`Failed to import notebook module: ${error.message}`);
@@ -320,6 +355,66 @@ export class NotebookCommands {
         }
         return true;
     }
+
+    ensureRuleNamesAreStrings(universe) {
+        // Deep clone to avoid modifying the original
+        const processed = JSON.parse(JSON.stringify(universe));
+
+        // Find Rules section
+        const rules = engine.findSection(processed, "Rules");
+        if (rules && isCall(rules)) {
+            for (let i = 0; i < rules.a.length; i++) {
+                const rule = rules.a[i];
+
+                // Handle TaggedRule
+                if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' && rule.a.length > 1) {
+                    const innerRule = rule.a[1];
+                    if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R') {
+                        // Check if the first argument (rule name) is a symbol
+                        if (innerRule.a.length > 0 && isSym(innerRule.a[0])) {
+                            // Convert symbolic name to string
+                            innerRule.a[0] = Str(innerRule.a[0].v);
+                        }
+                    }
+                }
+                // Handle plain R (shouldn't happen in compiled modules, but just in case)
+                else if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R') {
+                    if (rule.a.length > 0 && isSym(rule.a[0])) {
+                        rule.a[0] = Str(rule.a[0].v);
+                    }
+                }
+            }
+        }
+
+        // Also handle RuleRules section
+        const ruleRules = engine.findSection(processed, "RuleRules");
+        if (ruleRules && isCall(ruleRules)) {
+            for (let i = 0; i < ruleRules.a.length; i++) {
+                const rule = ruleRules.a[i];
+
+                // Handle TaggedRuleRule
+                if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRuleRule' && rule.a.length > 1) {
+                    const innerRule = rule.a[1];
+                    if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R') {
+                        // Check if the first argument (rule name) is a symbol
+                        if (innerRule.a.length > 0 && isSym(innerRule.a[0])) {
+                            // Convert symbolic name to string
+                            innerRule.a[0] = Str(innerRule.a[0].v);
+                        }
+                    }
+                }
+                // Handle plain R
+                else if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R') {
+                    if (rule.a.length > 0 && isSym(rule.a[0])) {
+                        rule.a[0] = Str(rule.a[0].v);
+                    }
+                }
+            }
+        }
+
+        return processed;
+    }
+
 
     processOpenImport(universe, moduleName) {
         // For open imports, create duplicate rules without the module prefix
@@ -447,6 +542,29 @@ export class NotebookCommands {
             this.repl.universe.a.push(currentRules);
         }
 
+        // For notebook modules, remove all existing rules from this module first
+        // This ensures re-importing replaces rather than duplicates rules
+        if (this.modulePlatform.notebookModules.has(moduleName)) {
+            const filteredRules = [];
+            for (const rule of currentRules.a) {
+                // Keep rules that are NOT from this module
+                if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' &&
+                    rule.a.length > 0 && isStr(rule.a[0]) && rule.a[0].v === moduleName) {
+                    // Skip this rule - it's from the module we're re-importing
+                    continue;
+                }
+                filteredRules.push(rule);
+            }
+
+            // Count removed rules for feedback
+            const removedCount = currentRules.a.length - filteredRules.length;
+            if (removedCount > 0) {
+                this.repl.platform.printWithNewline(`Removing ${removedCount} existing rules from ${moduleName}`);
+            }
+
+            currentRules.a = filteredRules;
+        }
+
         // Process Rules if they exist
         if (hasRules) {
             // Build a set of existing rule names for conflict detection
@@ -516,6 +634,27 @@ export class NotebookCommands {
                 // Create RuleRules section if it doesn't exist
                 currentRuleRules = Call(Sym("RuleRules"));
                 this.repl.universe.a.push(currentRuleRules);
+            }
+
+            // For notebook modules, remove existing RuleRules from this module first
+            if (this.modulePlatform.notebookModules.has(moduleName)) {
+                const filteredRuleRules = [];
+                for (const rr of currentRuleRules.a) {
+                    // Keep RuleRules that are NOT from this module
+                    if (isCall(rr) && isSym(rr.h) && rr.h.v === 'TaggedRuleRule' &&
+                        rr.a.length > 0 && isStr(rr.a[0]) && rr.a[0].v === moduleName) {
+                        // Skip this RuleRule - it's from the module we're re-importing
+                        continue;
+                    }
+                    filteredRuleRules.push(rr);
+                }
+
+                const removedCount = currentRuleRules.a.length - filteredRuleRules.length;
+                if (removedCount > 0) {
+                    this.repl.platform.printWithNewline(`Removing ${removedCount} existing meta-rules from ${moduleName}`);
+                }
+
+                currentRuleRules.a = filteredRuleRules;
             }
 
             // Add imported RuleRules
