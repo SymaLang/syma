@@ -63,6 +63,10 @@ export class NotebookCommands {
                 }
             case 'import':
                 return await this.import(args);
+            case 'save':
+                return await this.save(args);
+            case 'load':
+                return await this.load(args);
             case 'help':
             case 'h':
                 return this.help();
@@ -582,10 +586,114 @@ export class NotebookCommands {
         }
     }
 
+    async save(args) {
+        // Default filename with timestamp
+        const defaultFilename = () => {
+            const now = new Date();
+            const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            return `universe-${timestamp}.json`;
+        };
+        const filename = args[0] || defaultFilename();
+
+        try {
+            // Determine format from extension
+            const format = filename.endsWith('.json') ? 'json' : 'syma';
+
+            let content;
+            if (format === 'json') {
+                content = JSON.stringify(this.repl.universe, null, 2);
+            } else {
+                // Pretty-print as S-expression
+                content = this.repl.parser.prettyPrint(this.repl.universe);
+            }
+
+            // Create a blob and trigger download
+            const blob = new Blob([content], {
+                type: format === 'json' ? 'application/json' : 'text/plain'
+            });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            this.repl.platform.printWithNewline(`Universe saved to ${filename}`);
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Failed to save: ${error.message}`);
+        }
+        return true;
+    }
+
+    async load(args) {
+        // Create a file input to load files
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,.syma';
+
+        this.repl.platform.printWithNewline('Opening file picker...');
+
+        return new Promise((resolve) => {
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) {
+                    this.repl.platform.printWithNewline('No file selected');
+                    resolve(true);
+                    return;
+                }
+
+                try {
+                    const content = await file.text();
+
+                    if (file.name.endsWith('.json')) {
+                        // Load JSON AST directly
+                        this.repl.universe = JSON.parse(content);
+                        // Enrich with Effects structure if needed for compatibility
+                        this.repl.universe = engine.enrichProgramWithEffects(this.repl.universe);
+                        // Apply RuleRules to transform the Universe permanently
+                        this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
+                    } else {
+                        // Parse S-expression
+                        this.repl.universe = this.repl.parser.parseString(content, file.name);
+                        // Enrich with Effects structure if needed for compatibility
+                        this.repl.universe = engine.enrichProgramWithEffects(this.repl.universe);
+                        // Apply RuleRules to transform the Universe permanently
+                        this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
+                    }
+
+                    // Process any initial effects
+                    const rules = engine.extractRules(this.repl.universe);
+                    const program = engine.getProgram(this.repl.universe);
+                    if (program) {
+                        const normalized = engine.normalize(program, rules, this.repl.maxSteps || 10000, false, foldPrims);
+                        this.repl.universe = engine.setProgram(this.repl.universe, normalized);
+                    }
+
+                    this.repl.platform.printWithNewline(`Universe loaded from ${file.name}`);
+
+                    // Show summary
+                    const rules = engine.extractRules(this.repl.universe);
+                    this.repl.platform.printWithNewline(`Loaded ${rules.length} rules`);
+                } catch (error) {
+                    this.repl.platform.printWithNewline(`Failed to load: ${error.message}`);
+                }
+                resolve(true);
+            };
+
+            // Trigger the file input
+            input.click();
+        });
+    }
+
     help() {
         this.repl.platform.printWithNewline(`
 Available notebook commands:
 
+  :save [filename]          Download universe (.json or .syma format)
+  :load                     Load universe from file
   :module multiline         Define a module in the notebook (end with :end)
   :import <module>          Import a stdlib or notebook module
   :render-universe          Render the current universe's UI
@@ -656,6 +764,12 @@ Examples:
   ; Import the notebook module
   :import MyUtils
   :import MyUtils open  ; Import with unqualified symbols
+
+  ; Save and load universe
+  :save                    ; Downloads as universe.json
+  :save myapp.json         ; Downloads as JSON
+  :save myapp.syma         ; Downloads as pretty-printed S-expression
+  :load                    ; Opens file picker to load universe
 `);
         return true;
     }
