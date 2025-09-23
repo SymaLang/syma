@@ -1,13 +1,35 @@
+/* Import Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
+/* Modern Design System Variables */
 :root {
-  font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace, system-ui;
-  line-height: 1.5;
+  /* Colors */
+  --bg-primary: #0a0b0e;
+  --bg-secondary: #12141a;
+  --bg-tertiary: #1a1d26;
+  --bg-elevated: #1e212b;
+
+  --accent-primary: #5e72e4;
+  --accent-success: #00d68f;
+  --accent-warning: #ffaa00;
+  --accent-danger: #ff3d71;
+
+  --text-primary: #e6e8ec;
+  --text-secondary: #a8b0c1;
+  --text-muted: #6b7280;
+
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.12);
+
+  /* Typography */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.6;
   font-weight: 400;
 
   color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #000000;
+  color: var(--text-primary);
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #0d0e14 100%);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -15,65 +37,173 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #000000;
+  background: var(--bg-primary);
+  position: relative;
+}
+
+/* Subtle background pattern */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image:
+    radial-gradient(circle at 20% 80%, rgba(94, 114, 228, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(130, 94, 228, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(0, 214, 143, 0.03) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 #app {
   width: 100%;
   height: 100vh;
+  position: relative;
+  z-index: 2;
 }
 
-/* Dark theme optimizations for notebook */
-* {
-  box-sizing: border-box;
-}
-
-/* Custom scrollbar for dark theme */
+/* Modern scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: var(--bg-secondary);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #404040;
-  border-radius: 4px;
+  background: linear-gradient(180deg, var(--accent-primary), #825ee4);
+  border-radius: 10px;
+  border: 2px solid var(--bg-secondary);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: linear-gradient(180deg, #7085ea, #9574ea);
 }
 
-/* Monaco Editor container fixes */
+/* Monaco Editor styling */
 .monaco-editor {
-  font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace !important;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', monospace !important;
+  background: transparent !important;
 }
 
-/* Ensure proper dark theme throughout */
-.bg-black {
-  background-color: #000000;
+.monaco-editor .margin {
+  background: transparent !important;
 }
 
-.bg-neutral-900 {
-  background-color: #0a0a0a;
+/* Modern button base styles */
+button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.bg-neutral-800 {
-  background-color: #1a1a1a;
+button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+button:active::before {
+  width: 300px;
+  height: 300px;
+}
+
+/* Shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Pulse animation for running state */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Glow effect */
+.glow {
+  box-shadow: 0 0 20px rgba(94, 114, 228, 0.3);
+}
+
+/* Glass morphism utility */
+.glass {
+  background: rgba(18, 20, 26, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-default);
+}
+
+/* Modern card styles */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Modern focus styles */
+*:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth transitions */
+* {
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Typography enhancements */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-feature-settings: "liga" on;
+}
+
+/* Selection colors */
+::selection {
+  background: rgba(94, 114, 228, 0.3);
+  color: white;
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

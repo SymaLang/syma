@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     PlayIcon,
     DocumentArrowDownIcon,
@@ -6,15 +6,21 @@ import {
     PlusIcon,
     TrashIcon,
     ArrowPathIcon,
-    Bars3Icon,
     CodeBracketIcon,
-    DocumentTextIcon
+    DocumentTextIcon,
+    DocumentPlusIcon,
+    SparklesIcon,
+    MoonIcon,
+    SunIcon
 } from '@heroicons/react/24/outline';
 import { useNotebookStore, CellType } from '../notebook-store';
 import { saveNotebook, loadNotebook } from '../notebook-io';
+import { Tooltip, KeyboardShortcut } from './Tooltip';
+// Design tokens removed - using Tailwind classes directly
 
 export function NotebookToolbar({ onRunAll }) {
     const fileInputRef = useRef(null);
+    const [theme, setTheme] = useState('dark');
     const {
         metadata,
         cells,
@@ -43,10 +49,9 @@ export function NotebookToolbar({ onRunAll }) {
             setNotebook(notebook);
         } catch (error) {
             console.error('Failed to load notebook:', error);
-            alert('Failed to load notebook. Please check the file format.');
+            // TODO: Show toast notification
         }
 
-        // Reset input
         event.target.value = '';
     };
 
@@ -62,47 +67,91 @@ export function NotebookToolbar({ onRunAll }) {
             return;
         }
         clearAllOutputs();
-        // Reset the engine universe
         const { getNotebookEngine } = require('../notebook-engine');
         const engine = getNotebookEngine();
         engine.reset();
     };
 
+    const ToolbarButton = ({ onClick, icon: Icon, tooltip, primary = false, danger = false, disabled = false }) => {
+        const buttonClasses = `
+            relative p-2.5 rounded-xl transition-all duration-200
+            ${primary ? 'bg-gradient-to-br from-blue-500 to-blue-600 border-blue-500 text-white'
+                : danger ? 'bg-zinc-800/80 border-zinc-700 text-gray-400 hover:bg-red-950 hover:border-red-500 hover:text-white'
+                : 'bg-zinc-800/80 border-zinc-700 text-gray-400 hover:bg-zinc-700 hover:border-zinc-600 hover:text-white'}
+            ${!disabled ? 'transform hover:scale-105 active:scale-95' : ''}
+            ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+            border
+        `.replace(/\s+/g, ' ').trim();
+
+        return (
+            <Tooltip content={tooltip} placement="bottom" delay={500}>
+                <button
+                    onClick={onClick}
+                    disabled={disabled}
+                    className={buttonClasses}
+                >
+                    <Icon className="w-5 h-5" />
+                </button>
+            </Tooltip>
+        );
+    };
+
     return (
-        <div className="fixed top-0 left-0 right-0 bg-neutral-900 border-b border-gray-800 z-10">
-            <div className="max-w-6xl mx-auto px-4">
-                <div className="flex items-center justify-between h-14">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-zinc-900/85 backdrop-blur-xl border-b border-zinc-800">
+            <div className="max-w-7xl mx-auto px-6">
+                <div className="flex items-center justify-between h-16">
+                    {/* Logo and Title */}
                     <div className="flex items-center gap-4">
-                        <h1 className="text-lg font-bold text-white">Syma Notebook</h1>
-                        <div className="text-sm text-gray-500">
-                            {metadata.name || 'Untitled'}
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/20">
+                                <SparklesIcon className="w-5 h-5 text-white" />
+                            </div>
+                            <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                                Syma Notebook
+                            </h1>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700">
+                            <span className="text-sm text-gray-400">
+                                {metadata.name || 'Untitled'}
+                            </span>
+                            {cells.length > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded-md bg-zinc-700 text-gray-400 border border-zinc-600">
+                                    {cells.length} cells
+                                </span>
+                            )}
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    {/* Toolbar Actions */}
+                    <div className="flex items-center gap-3">
                         {/* File operations */}
-                        <div className="flex gap-1 border-r border-gray-700 pr-2 mr-2">
-                            <button
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-zinc-800/40 border border-zinc-800">
+                            <ToolbarButton
                                 onClick={handleNew}
-                                className="p-2 hover:bg-neutral-800 rounded transition"
-                                title="New notebook"
-                            >
-                                <DocumentTextIcon className="w-4 h-4" />
-                            </button>
-                            <button
+                                icon={DocumentPlusIcon}
+                                tooltip={
+                                    <div>
+                                        New notebook
+                                        {/*<KeyboardShortcut keys={['cmd', 'n']} />*/}
+                                    </div>
+                                }
+                            />
+                            <ToolbarButton
                                 onClick={handleLoad}
-                                className="p-2 hover:bg-neutral-800 rounded transition"
-                                title="Open notebook"
-                            >
-                                <DocumentArrowUpIcon className="w-4 h-4" />
-                            </button>
-                            <button
+                                icon={DocumentArrowUpIcon}
+                                tooltip="Open notebook"
+                            />
+                            <ToolbarButton
                                 onClick={handleSave}
-                                className="p-2 hover:bg-neutral-800 rounded transition"
-                                title="Save notebook (Ctrl+S)"
-                            >
-                                <DocumentArrowDownIcon className="w-4 h-4" />
-                            </button>
+                                icon={DocumentArrowDownIcon}
+                                tooltip={
+                                    <div>
+                                        Save notebook
+                                        {/*<KeyboardShortcut keys={['cmd', 's']} />*/}
+                                    </div>
+                                }
+                            />
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -113,53 +162,43 @@ export function NotebookToolbar({ onRunAll }) {
                         </div>
 
                         {/* Cell operations */}
-                        <div className="flex gap-1 border-r border-gray-700 pr-2 mr-2">
-                            <button
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-zinc-800/40 border border-zinc-800">
+                            <ToolbarButton
                                 onClick={() => addCell(CellType.CODE)}
-                                className="p-2 hover:bg-neutral-800 rounded transition"
-                                title="Add code cell"
-                            >
-                                <CodeBracketIcon className="w-4 h-4" />
-                            </button>
-                            <button
+                                icon={CodeBracketIcon}
+                                tooltip="Add code cell"
+                            />
+                            <ToolbarButton
                                 onClick={() => addCell(CellType.MARKDOWN)}
-                                className="p-2 hover:bg-neutral-800 rounded transition"
-                                title="Add markdown cell"
-                            >
-                                <Bars3Icon className="w-4 h-4" />
-                            </button>
+                                icon={DocumentTextIcon}
+                                tooltip="Add markdown cell"
+                            />
                         </div>
 
                         {/* Run controls */}
-                        <div className="flex gap-1 border-r border-gray-700 pr-2 mr-2">
-                            <button
+                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-zinc-800/40 border border-zinc-800">
+                            <ToolbarButton
                                 onClick={onRunAll}
-                                className="p-2 hover:bg-neutral-800 rounded transition flex items-center gap-1"
-                                title="Run all cells"
-                            >
-                                <PlayIcon className="w-4 h-4" />
-                                <span className="text-xs">Run All</span>
-                            </button>
-                            <button
+                                icon={PlayIcon}
+                                primary
+                                tooltip={
+                                    <div>
+                                        Run all cells
+                                        <KeyboardShortcut keys={['cmd', 'shift', 'enter']} />
+                                    </div>
+                                }
+                            />
+                            <ToolbarButton
                                 onClick={clearAllOutputs}
-                                className="p-2 hover:bg-neutral-800 rounded transition"
-                                title="Clear all outputs"
-                            >
-                                <TrashIcon className="w-4 h-4" />
-                            </button>
-                            <button
+                                icon={TrashIcon}
+                                tooltip="Clear all outputs"
+                            />
+                            <ToolbarButton
                                 onClick={handleRestart}
-                                className="p-2 hover:bg-neutral-800 rounded transition"
-                                title="Restart kernel"
-                            >
-                                <ArrowPathIcon className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        {/* Status indicator */}
-                        <div className="flex items-center gap-2 text-xs">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-gray-500">Ready</span>
+                                icon={ArrowPathIcon}
+                                tooltip="Restart kernel"
+                                danger
+                            />
                         </div>
                     </div>
                 </div>

@@ -26,10 +26,11 @@ const createCell = (type, content = '') => ({
 export const useNotebookStore = create((set, get) => ({
     cells: [
         createCell(CellType.MARKDOWN, '# Syma Notebook\n\nWelcome to the Syma interactive notebook. You can write and execute Syma code, and document your work with markdown.'),
-        createCell(CellType.CODE, '; Example: Simple arithmetic\n(+ 1 2 3)')
+        createCell(CellType.CODE, '; Example: Simple arithmetic\n{Add 1 2}')
     ],
     selectedCellId: null,
     executionCount: 0,
+    isMovingCells: false,
     metadata: {
         name: 'Untitled',
         created: new Date().toISOString(),
@@ -75,21 +76,32 @@ export const useNotebookStore = create((set, get) => ({
         metadata: { ...state.metadata, modified: new Date().toISOString() }
     })),
 
-    moveCell: (id, direction) => set(state => {
-        const cells = [...state.cells];
-        const index = cells.findIndex(c => c.id === id);
+    moveCell: (id, direction) => {
+        // Set moving flag
+        set({ isMovingCells: true });
 
-        if (direction === 'up' && index > 0) {
-            [cells[index - 1], cells[index]] = [cells[index], cells[index - 1]];
-        } else if (direction === 'down' && index < cells.length - 1) {
-            [cells[index], cells[index + 1]] = [cells[index + 1], cells[index]];
-        }
+        // Delay the actual move to allow editors to unmount
+        setTimeout(() => {
+            set(state => {
+                const cells = [...state.cells];
+                const index = cells.findIndex(c => c.id === id);
 
-        return {
-            cells,
-            metadata: { ...state.metadata, modified: new Date().toISOString() }
-        };
-    }),
+                if (direction === 'up' && index > 0) {
+                    [cells[index - 1], cells[index]] = [cells[index], cells[index - 1]];
+                } else if (direction === 'down' && index < cells.length - 1) {
+                    [cells[index], cells[index + 1]] = [cells[index + 1], cells[index]];
+                }
+
+                return {
+                    cells,
+                    metadata: { ...state.metadata, modified: new Date().toISOString() }
+                };
+            });
+
+            // Clear moving flag after move completes
+            setTimeout(() => set({ isMovingCells: false }), 0);
+        }, 0);
+    },
 
     selectCell: (id) => set({ selectedCellId: id }),
 

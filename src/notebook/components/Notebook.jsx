@@ -4,6 +4,8 @@ import { CodeCell } from './CodeCell';
 import { MarkdownCell } from './MarkdownCell';
 import { NotebookToolbar } from './NotebookToolbar';
 import { getNotebookEngine } from '../notebook-engine';
+// Design tokens removed - using Tailwind classes directly
+import { PlusIcon, CodeBracketIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
 export function Notebook() {
     const {
@@ -131,61 +133,64 @@ export function Notebook() {
     }, [addCell]);
 
     return (
-        <div className="min-h-screen bg-black text-white">
+        <div className="min-h-screen bg-black">
             <NotebookToolbar onRunAll={runAllCells} />
 
-            <div className="max-w-6xl mx-auto px-4 pb-20" ref={notebookRef}>
-                <div className="pt-20 pl-24 pr-8">
+            <div className="max-w-7xl mx-auto pb-20" ref={notebookRef}>
+                <div className="pt-24 pl-32 pr-8">
                     {cells.length === 0 ? (
-                        <div className="text-center py-20">
-                            <p className="text-gray-500 mb-4">No cells yet. Add one to get started.</p>
+                        <div className="text-center py-32">
+                            <p className="text-lg mb-8 text-gray-500">
+                                Start by adding a cell to your notebook
+                            </p>
                             <div className="flex gap-4 justify-center">
                                 <button
                                     onClick={() => addCell(CellType.CODE)}
-                                    className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded transition"
+                                    className="flex items-center gap-3 px-6 py-3 rounded-xl transition-all bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95"
                                 >
+                                    <CodeBracketIcon className="w-5 h-5" />
                                     Add Code Cell
                                 </button>
                                 <button
                                     onClick={() => addCell(CellType.MARKDOWN)}
-                                    className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded transition"
+                                    className="flex items-center gap-3 px-6 py-3 rounded-xl transition-all bg-zinc-800 border border-zinc-700 text-gray-300 hover:bg-zinc-700 hover:border-zinc-600 hover:scale-105 active:scale-95"
                                 >
+                                    <DocumentTextIcon className="w-5 h-5" />
                                     Add Markdown Cell
                                 </button>
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            {cells.map(cell => {
+                        <div className="space-y-6">
+                            {cells.map((cell, index) => {
                                 const CellComponent = cell.type === CellType.CODE ? CodeCell : MarkdownCell;
                                 return (
-                                    <div key={cell.id} className="relative isolate">
-                                        <CellComponent
-                                            cell={cell}
-                                            isSelected={cell.id === selectedCellId}
-                                            onSelect={() => selectCell(cell.id)}
-                                            onAddBelow={() => handleAddCellBelow(cell.id)}
-                                        />
-                                    </div>
+                                    <CellComponent
+                                        key={cell.id}
+                                        cell={cell}
+                                        isSelected={cell.id === selectedCellId}
+                                        onSelect={() => selectCell(cell.id)}
+                                        onAddBelow={() => handleAddCellBelow(cell.id)}
+                                    />
                                 );
                             })}
 
                             {/* Add cell button at the bottom */}
-                            <div className="flex justify-center py-4">
-                                <div className="flex gap-2">
+                            <div className="flex justify-center py-8">
+                                <div className="flex gap-3">
                                     <button
                                         onClick={() => addCell(CellType.CODE, cells[cells.length - 1]?.id)}
-                                        className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded text-sm transition"
-                                        title="Add code cell (B)"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-zinc-900 border border-zinc-700 text-gray-400 hover:bg-blue-500 hover:border-blue-500 hover:text-white hover:scale-105 active:scale-95"
                                     >
-                                        + Code
+                                        <PlusIcon className="w-4 h-4" />
+                                        Code
                                     </button>
                                     <button
                                         onClick={() => addCell(CellType.MARKDOWN, cells[cells.length - 1]?.id)}
-                                        className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded text-sm transition"
-                                        title="Add markdown cell"
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all bg-zinc-900 border border-zinc-700 text-gray-400 hover:bg-zinc-700 hover:border-zinc-600 hover:text-white hover:scale-105 active:scale-95"
                                     >
-                                        + Markdown
+                                        <PlusIcon className="w-4 h-4" />
+                                        Markdown
                                     </button>
                                 </div>
                             </div>
@@ -194,23 +199,6 @@ export function Notebook() {
                 </div>
             </div>
 
-            {/* Keyboard shortcuts help */}
-            <div className="fixed bottom-4 right-4 text-xs text-gray-600">
-                <details>
-                    <summary className="cursor-pointer hover:text-gray-400">Keyboard Shortcuts</summary>
-                    <div className="bg-neutral-900 border border-gray-800 rounded p-3 mt-2 text-gray-400">
-                        <div className="space-y-1">
-                            <div><kbd>Shift+Enter</kbd> Run cell</div>
-                            <div><kbd>Ctrl+Enter</kbd> Run cell and add below</div>
-                            <div><kbd>A</kbd> Add cell above</div>
-                            <div><kbd>B</kbd> Add cell below</div>
-                            <div><kbd>M</kbd> Convert to markdown</div>
-                            <div><kbd>Y</kbd> Convert to code</div>
-                            <div><kbd>↑/↓</kbd> Navigate cells</div>
-                        </div>
-                    </div>
-                </details>
-            </div>
         </div>
     );
 }
