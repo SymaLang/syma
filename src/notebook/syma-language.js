@@ -142,6 +142,7 @@ export function registerSymaLanguage(monaco) {
 // Completion provider
 export function registerCompletionProvider(monaco, getCompletions) {
     return monaco.languages.registerCompletionItemProvider('syma', {
+        triggerCharacters: [':', '(', '{', '['],
         provideCompletionItems: async (model, position) => {
             const textUntilPosition = model.getValueInRange({
                 startLineNumber: 1,
@@ -156,20 +157,39 @@ export function registerCompletionProvider(monaco, getCompletions) {
             // Get the word being completed
             const word = model.getWordUntilPosition(position);
 
+            // Check if there's a colon before the word (for command completion)
+            const lineContent = model.getLineContent(position.lineNumber);
+            let startColumn = word.startColumn;
+
+            // Special case: if we just typed ":" (empty word after colon)
+            if (position.column > 1 && lineContent.charAt(position.column - 2) === ':' && word.word === '') {
+                startColumn = position.column - 1;
+            }
+            // Check if the character before the word is a colon
+            else if (word.startColumn > 1) {
+                const charBeforeWord = lineContent.charAt(word.startColumn - 2); // -2 because columns are 1-indexed
+                if (charBeforeWord === ':') {
+                    // Include the colon in the replacement range
+                    startColumn = word.startColumn - 1;
+                }
+            }
+
             return {
-                suggestions: (suggestions || []).map(item => ({
-                    label: item,
-                    kind: item.startsWith(':')
-                        ? monaco.languages.CompletionItemKind.Function
-                        : monaco.languages.CompletionItemKind.Keyword,
-                    insertText: item,
-                    range: {
-                        startLineNumber: position.lineNumber,
-                        endLineNumber: position.lineNumber,
-                        startColumn: word.startColumn,
-                        endColumn: position.column
-                    }
-                }))
+                suggestions: (suggestions || []).map(item => {
+                    return {
+                        label: item,
+                        kind: item.startsWith(':')
+                            ? monaco.languages.CompletionItemKind.Function
+                            : monaco.languages.CompletionItemKind.Keyword,
+                        insertText: item,
+                        range: {
+                            startLineNumber: position.lineNumber,
+                            endLineNumber: position.lineNumber,
+                            startColumn: startColumn,
+                            endColumn: position.column
+                        }
+                    };
+                })
             };
         }
     });

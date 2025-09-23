@@ -9,7 +9,8 @@ import {
     PlusIcon,
     CommandLineIcon,
     ExclamationCircleIcon,
-    CheckCircleIcon
+    CheckCircleIcon,
+    ChevronDoubleUpIcon
 } from '@heroicons/react/24/outline';
 import { useNotebookStore, CellStatus } from '../notebook-store';
 import { getNotebookEngine } from '../notebook-engine';
@@ -17,7 +18,7 @@ import { registerSymaLanguage, registerCompletionProvider } from '../syma-langua
 import { Tooltip, KeyboardShortcut } from './Tooltip';
 // Design tokens removed - using Tailwind classes directly
 
-export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
+export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove }) {
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
     const [isExecuting, setIsExecuting] = useState(false);
@@ -100,6 +101,18 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
                 }
             });
             if (action2) actions.push(action2);
+
+            const action3 = editor.addAction({
+                id: `run-all-above-${cell.id}`,
+                label: 'Run All Cells Above',
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
+                run: () => {
+                    if (onRunAllAbove) {
+                        onRunAllAbove();
+                    }
+                }
+            });
+            if (action3) actions.push(action3);
         } catch (error) {
             console.warn('Failed to add editor actions:', error);
         }
@@ -115,7 +128,7 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
                 }
             });
         };
-    }, [isSelected, handleExecute, onAddBelow, cell.id]);
+    }, [isSelected, handleExecute, onAddBelow, onRunAllAbove, cell.id]);
 
     const getStatusClasses = (status) => {
         switch(status) {
@@ -183,6 +196,19 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
                         </div>
                     }
                 />
+
+                {onRunAllAbove && (
+                    <ActionButton
+                        onClick={onRunAllAbove}
+                        icon={ChevronDoubleUpIcon}
+                        tooltip={
+                            <div>
+                                Run all cells above
+                                <KeyboardShortcut keys={['cmd', 'shift', 'enter']} />
+                            </div>
+                        }
+                    />
+                )}
 
                 <div className="flex flex-col gap-1">
                     <ActionButton

@@ -42,13 +42,6 @@ export class NotebookCommands {
             case 'help':
             case 'h':
                 return this.help();
-            case 'universe':
-            case 'u':
-                return this.showUniverse();
-            case 'rules':
-                return this.listRules();
-            case 'clear':
-                return this.clear();
             default:
                 // Delegate to original REPL command processor for other commands
                 return this.repl.commandProcessor.processCommand(command);
@@ -337,7 +330,6 @@ Available notebook commands:
   :import <module>   Import a stdlib module (e.g., :import Core/String)
   :universe          Show current universe structure
   :rules             List all rules
-  :clear             Clear all outputs
   :help              Show this help
 
 Example:
@@ -347,30 +339,9 @@ Example:
         return true;
     }
 
-    showUniverse() {
-        const pretty = this.repl.parser.prettyPrint(this.repl.universe);
-        this.repl.platform.printWithNewline(pretty);
-        return true;
-    }
-
-    listRules() {
-        const rules = engine.extractRules(this.repl.universe);
-        this.repl.platform.printWithNewline(`Total rules: ${rules.length}\n`);
-
-        for (const rule of rules.slice(0, 50)) {
-            const pretty = this.repl.parser.prettyPrint(rule);
-            this.repl.platform.printWithNewline(pretty);
-        }
-
-        if (rules.length > 50) {
-            this.repl.platform.printWithNewline(`\n... and ${rules.length - 50} more rules`);
-        }
-        return true;
-    }
-
     clear() {
         // In notebook context, this would clear cell outputs
-        this.repl.platform.printWithNewline("Clear command is handled by the notebook UI");
+        // this.repl.platform.printWithNewline("Clear command is handled by the notebook UI");
         return true;
     }
 }

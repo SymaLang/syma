@@ -130,6 +130,38 @@ export function Notebook() {
         }
     }, [cells]);
 
+    // Run all cells above a specific cell
+    const runAllCellsAbove = useCallback(async (targetCellId) => {
+        const targetIndex = cells.findIndex(c => c.id === targetCellId);
+        if (targetIndex <= 0) return; // No cells above or cell not found
+
+        for (let i = 0; i < targetIndex; i++) {
+            const cell = cells[i];
+            if (cell.type === CellType.CODE && cell.content.trim()) {
+                useNotebookStore.getState().setCellStatus(cell.id, 'running');
+
+                const engine = engineRef.current;
+                if (cell.content.trim().startsWith(':')) {
+                    const { outputs, hasError } = await engine.executeCommand(cell.id, cell.content.trim());
+                    if (hasError) {
+                        useNotebookStore.getState().setCellError(cell.id, outputs[0]?.content || 'Unknown error');
+                    } else {
+                        useNotebookStore.getState().setCellOutput(cell.id, outputs);
+                    }
+                } else {
+                    const { outputs, hasError } = await engine.executeCode(cell.id, cell.content);
+                    if (hasError) {
+                        useNotebookStore.getState().setCellError(cell.id, outputs[0]?.content || 'Unknown error');
+                    } else {
+                        useNotebookStore.getState().setCellOutput(cell.id, outputs);
+                    }
+                }
+
+                useNotebookStore.getState().setCellStatus(cell.id, 'idle');
+            }
+        }
+    }, [cells]);
+
     const handleAddCellBelow = useCallback((afterId) => {
         addCell(CellType.CODE, afterId);
     }, [addCell]);
@@ -176,6 +208,7 @@ export function Notebook() {
                                             isSelected={cell.id === selectedCellId}
                                             onSelect={() => selectCell(cell.id)}
                                             onAddBelow={() => handleAddCellBelow(cell.id)}
+                                            onRunAllAbove={() => runAllCellsAbove(cell.id)}
                                         />
                                         {/* Insert button after each cell */}
                                         <CellDivider afterCellId={cell.id} />
