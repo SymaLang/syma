@@ -133,7 +133,7 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow }) {
     };
 
     const ActionButton = ({ onClick, icon: Icon, tooltip, danger = false, primary = false }) => (
-        <Tooltip content={tooltip} placement="left" delay={300}>
+        <Tooltip content={tooltip} placement="right" delay={300}>
             <button
                 onClick={onClick}
                 className={`

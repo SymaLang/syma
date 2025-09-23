@@ -75,7 +75,7 @@ export function MarkdownCell({ cell, isSelected, onSelect, onAddBelow }) {
 
     // Action button component matching CodeCell
     const ActionButton = ({ onClick, icon: Icon, tooltip, danger = false, primary = false }) => (
-        <Tooltip content={tooltip} placement="left" delay={300}>
+        <Tooltip content={tooltip} placement="right" delay={300}>
             <button
                 onClick={onClick}
                 className={`

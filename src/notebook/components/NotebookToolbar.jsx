@@ -214,12 +214,12 @@ export function NotebookToolbar({ onRunAll }) {
                         {/* Cell operations */}
                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-zinc-800/40 border border-zinc-800">
                             <ToolbarButton
-                                onClick={() => addCell(CellType.CODE)}
+                                onClick={() => addCell(CellType.CODE, cells[cells.length - 1]?.id)}
                                 icon={CodeBracketIcon}
                                 tooltip="Add code cell"
                             />
                             <ToolbarButton
-                                onClick={() => addCell(CellType.MARKDOWN)}
+                                onClick={() => addCell(CellType.MARKDOWN, cells[cells.length - 1]?.id)}
                                 icon={DocumentTextIcon}
                                 tooltip="Add markdown cell"
                             />

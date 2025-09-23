@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { useNotebookStore, CellType } from '../notebook-store';
 import { CodeCell } from './CodeCell';
 import { MarkdownCell } from './MarkdownCell';
+import { CellDivider } from './CellDivider';
 import { NotebookToolbar } from './NotebookToolbar';
 import { getNotebookEngine } from '../notebook-engine';
 // Design tokens removed - using Tailwind classes directly
@@ -162,17 +163,23 @@ export function Notebook() {
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-6">
+                        <div className="flex flex-col gap-6">
+                            {/* Insert button before first cell */}
+                            <CellDivider afterCellId={null} />
+
                             {cells.map((cell, index) => {
                                 const CellComponent = cell.type === CellType.CODE ? CodeCell : MarkdownCell;
                                 return (
-                                    <CellComponent
-                                        key={cell.id}
-                                        cell={cell}
-                                        isSelected={cell.id === selectedCellId}
-                                        onSelect={() => selectCell(cell.id)}
-                                        onAddBelow={() => handleAddCellBelow(cell.id)}
-                                    />
+                                    <React.Fragment key={cell.id}>
+                                        <CellComponent
+                                            cell={cell}
+                                            isSelected={cell.id === selectedCellId}
+                                            onSelect={() => selectCell(cell.id)}
+                                            onAddBelow={() => handleAddCellBelow(cell.id)}
+                                        />
+                                        {/* Insert button after each cell */}
+                                        <CellDivider afterCellId={cell.id} />
+                                    </React.Fragment>
                                 );
                             })}
 

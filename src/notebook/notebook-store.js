@@ -51,14 +51,19 @@ export const useNotebookStore = create(
     },
 
     // Cell operations
-    addCell: (type, afterId = null) => set(state => {
+    addCell: (type, afterId = null, position = 'after') => set(state => {
         const newCell = createCell(type);
         const cells = [...state.cells];
 
-        if (afterId) {
+        if (afterId === null && position === 'before') {
+            // Insert at the beginning when explicitly requested
+            cells.unshift(newCell);
+        } else if (afterId) {
+            // Insert after the specified cell
             const index = cells.findIndex(c => c.id === afterId);
             cells.splice(index + 1, 0, newCell);
         } else {
+            // Default: append to the end
             cells.push(newCell);
         }
 

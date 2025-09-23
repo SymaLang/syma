@@ -68,7 +68,7 @@ export function Tooltip({
                     }}
                     {...getFloatingProps()}
                 >
-                    <div className="bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700 shadow-xl backdrop-blur max-w-[250px] transition-opacity duration-150">
+                    <div className="bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm font-medium border border-zinc-700 shadow-xl backdrop-blur max-w-[250px] transition-opacity duration-150 whitespace-nowrap">
                         {content}
                         <FloatingArrow
                             ref={arrowRef}
