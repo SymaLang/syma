@@ -106,6 +106,11 @@ Evaluation:
   :apply <name> <expr>      Apply specific rule to expression
   :exec <name> <expr>       Smart execute: auto-wrap input to match rule
   :trace <expr>             Evaluate with step-by-step trace
+  :trace verbose            Toggle verbose trace mode
+  :trace verbose <expr>     Evaluate with verbose trace (shows patterns/rewrites)
+  :trace diff               Toggle diff trace mode
+  :trace diff <expr>        Evaluate with diff trace (shows only changes)
+  :trace stats <expr>       Show only trace statistics (no step details)
   :why <expr>               Explain why evaluation got stuck
   :apply <action>           Apply action to current universe state
   :norm [show]              Normalize the universe Program section
@@ -633,13 +638,75 @@ Debugging:
             // Toggle trace mode
             this.repl.trace = !this.repl.trace;
             this.repl.platform.printWithNewline(`Trace mode: ${this.repl.trace ? 'on' : 'off'}`);
+        } else if (args[0] === 'verbose') {
+            // Handle verbose mode toggle or expression
+            if (args.length === 1) {
+                // Toggle verbose mode
+                this.repl.traceVerbose = !this.repl.traceVerbose;
+                this.repl.traceDiff = false; // Turn off diff mode when enabling verbose
+                this.repl.platform.printWithNewline(`Verbose trace mode: ${this.repl.traceVerbose ? 'on' : 'off'}`);
+            } else {
+                // Evaluate expression with verbose trace
+                const exprText = args.slice(1).join(' ');
+                const oldTrace = this.repl.trace;
+                const oldVerbose = this.repl.traceVerbose;
+                const oldDiff = this.repl.traceDiff;
+                this.repl.trace = true;
+                this.repl.traceVerbose = true;
+                this.repl.traceDiff = false;
+                await this.repl.evaluateExpression(exprText);
+                this.repl.trace = oldTrace;
+                this.repl.traceVerbose = oldVerbose;
+                this.repl.traceDiff = oldDiff;
+            }
+        } else if (args[0] === 'diff') {
+            // Handle diff mode toggle or expression
+            if (args.length === 1) {
+                // Toggle diff mode
+                this.repl.traceDiff = !this.repl.traceDiff;
+                this.repl.traceVerbose = false; // Turn off verbose mode when enabling diff
+                this.repl.platform.printWithNewline(`Diff trace mode: ${this.repl.traceDiff ? 'on' : 'off'}`);
+            } else {
+                // Evaluate expression with diff trace
+                const exprText = args.slice(1).join(' ');
+                const oldTrace = this.repl.trace;
+                const oldVerbose = this.repl.traceVerbose;
+                const oldDiff = this.repl.traceDiff;
+                this.repl.trace = true;
+                this.repl.traceVerbose = false;
+                this.repl.traceDiff = true;
+                await this.repl.evaluateExpression(exprText);
+                this.repl.trace = oldTrace;
+                this.repl.traceVerbose = oldVerbose;
+                this.repl.traceDiff = oldDiff;
+            }
+        } else if (args[0] === 'stats') {
+            // Show only statistics
+            if (args.length === 1) {
+                this.repl.platform.printWithNewline('Usage: :trace stats <expression>');
+            } else {
+                // Evaluate and show only stats
+                const exprText = args.slice(1).join(' ');
+                const oldTrace = this.repl.trace;
+                this.repl.trace = true;
+                this.repl.traceStatsOnly = true; // Special flag for stats-only mode
+                await this.repl.evaluateExpression(exprText);
+                this.repl.trace = oldTrace;
+                this.repl.traceStatsOnly = false;
+            }
         } else {
             // Evaluate expression with trace
             const exprText = args.join(' ');
             const oldTrace = this.repl.trace;
+            const oldVerbose = this.repl.traceVerbose;
+            const oldDiff = this.repl.traceDiff;
             this.repl.trace = true;
+            this.repl.traceVerbose = false; // Default trace is non-verbose
+            this.repl.traceDiff = false;
             await this.repl.evaluateExpression(exprText);
             this.repl.trace = oldTrace;
+            this.repl.traceVerbose = oldVerbose;
+            this.repl.traceDiff = oldDiff;
         }
         return true;
     }
@@ -833,6 +900,8 @@ Debugging:
             this.repl.platform.printWithNewline("Usage: :set <option> <value>");
             this.repl.platform.printWithNewline("Available options:");
             this.repl.platform.printWithNewline("  trace on/off       - Enable/disable trace mode");
+            this.repl.platform.printWithNewline("  traceverbose on/off - Enable/disable verbose trace mode");
+            this.repl.platform.printWithNewline("  tracediff on/off   - Enable/disable diff trace mode");
             this.repl.platform.printWithNewline("  maxsteps <n>       - Maximum normalization steps");
             this.repl.platform.printWithNewline("  prettyprint on/off - Enable/disable pretty printing");
             return true;
@@ -845,6 +914,20 @@ Debugging:
             case 'trace':
                 this.repl.trace = value === 'on' || value === 'true';
                 this.repl.platform.printWithNewline(`Trace mode: ${this.repl.trace ? 'on' : 'off'}`);
+                break;
+
+            case 'traceverbose':
+            case 'trace-verbose':
+                this.repl.traceVerbose = value === 'on' || value === 'true';
+                if (this.repl.traceVerbose) this.repl.traceDiff = false; // Turn off diff mode
+                this.repl.platform.printWithNewline(`Verbose trace mode: ${this.repl.traceVerbose ? 'on' : 'off'}`);
+                break;
+
+            case 'tracediff':
+            case 'trace-diff':
+                this.repl.traceDiff = value === 'on' || value === 'true';
+                if (this.repl.traceDiff) this.repl.traceVerbose = false; // Turn off verbose mode
+                this.repl.platform.printWithNewline(`Diff trace mode: ${this.repl.traceDiff ? 'on' : 'off'}`);
                 break;
 
             case 'maxsteps':

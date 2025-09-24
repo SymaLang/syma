@@ -844,6 +844,12 @@ Available notebook commands:
   :rule multiline           Start a multiline rule definition (end with :end)
   :render multiline         Start a multiline UI node (end with :end)
   :render watch multiline   Start a multiline watch UI node (end with :end)
+  :trace <expr>             Evaluate with step-by-step trace
+  :trace verbose <expr>     Evaluate with verbose trace (shows patterns/rewrites)
+  :trace diff <expr>        Evaluate with diff trace (shows only changes)
+  :set trace on/off         Enable/disable trace for all evaluations
+  :set traceverbose on/off  Enable/disable verbose mode for traces
+  :set tracediff on/off     Enable/disable diff mode for traces
   :help                     Show this help
 
 Module System:

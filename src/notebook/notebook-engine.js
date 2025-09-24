@@ -142,8 +142,137 @@ export class NotebookEngine {
             // Extract current rules
             const rules = engine.extractRules(this.repl.universe);
 
-            // Normalize the expression
-            const result = engine.normalize(expr, rules, this.repl.maxSteps, false, foldPrims);
+            // Normalize the expression with optional trace
+            let result;
+            if (this.repl.trace) {
+                const { result: normalized, trace } = engine.normalizeWithTrace(
+                    expr,
+                    rules,
+                    this.repl.maxSteps,
+                    false,
+                    foldPrims
+                );
+                result = normalized;
+
+                // Show trace if available
+                if (trace.length > 0) {
+                    if (this.repl.traceDiff) {
+                        // Diff trace mode - show only changes
+                        const { getFocusedDiff } = await import('../core/ast-diff.js');
+                        outputs.push({
+                            type: 'text',
+                            content: '\nDiff Trace:\n' + '═'.repeat(61) + '\n',
+                            volatile: true
+                        });
+
+                        for (const step of trace) {
+                            let traceOutput = `\nStep ${step.i + 1}: Rule "${step.rule}"\n`;
+                            traceOutput += '─'.repeat(60) + '\n';
+
+                            if (step.before && step.after) {
+                                const diffOutput = getFocusedDiff(step.before, step.after, this.repl.parser);
+                                traceOutput += diffOutput + '\n';
+                            } else {
+                                traceOutput += '(no diff available)\n';
+                            }
+
+                            if (step.path.length > 0) {
+                                traceOutput += `At path: [${step.path.join(' → ')}]\n`;
+                            }
+
+                            outputs.push({ type: 'text', content: traceOutput, volatile: true });
+                        }
+
+                        outputs.push({ type: 'text', content: '═'.repeat(61) + '\n\n', volatile: true });
+                    } else if (this.repl.traceVerbose) {
+                        // Verbose trace mode
+                        outputs.push({
+                            type: 'text',
+                            content: '\nVerbose Trace:\n' + '═'.repeat(61) + '\n',
+                            volatile: true  // Don't persist trace output to localStorage
+                        });
+
+                        for (const step of trace) {
+                            // Find the rule to get its pattern and replacement
+                            const rule = rules.find(r => r.name === step.rule);
+
+                            let traceOutput = `\nStep ${step.i + 1}: Rule "${step.rule}"\n`;
+                            traceOutput += '─'.repeat(60) + '\n';
+
+                            // Show the rule pattern and replacement if found
+                            if (rule) {
+                                const patternStr = this.repl.parser.prettyPrint ?
+                                    this.repl.parser.prettyPrint(rule.lhs) :
+                                    this.repl.parser.nodeToString(rule.lhs);
+                                const replacementStr = this.repl.parser.prettyPrint ?
+                                    this.repl.parser.prettyPrint(rule.rhs) :
+                                    this.repl.parser.nodeToString(rule.rhs);
+
+                                traceOutput += `Pattern:     ${patternStr}\n`;
+                                traceOutput += `Replacement: ${replacementStr}\n`;
+
+                                if (rule.guard) {
+                                    const guardStr = this.repl.parser.prettyPrint ?
+                                        this.repl.parser.prettyPrint(rule.guard) :
+                                        this.repl.parser.nodeToString(rule.guard);
+                                    traceOutput += `Guard:       ${guardStr}\n`;
+                                }
+                            }
+
+                            // Show the matched expression and result if available
+                            if (step.before && step.after) {
+                                const beforeStr = this.repl.parser.prettyPrint ?
+                                    this.repl.parser.prettyPrint(step.before) :
+                                    this.repl.parser.nodeToString(step.before);
+                                const afterStr = this.repl.parser.prettyPrint ?
+                                    this.repl.parser.prettyPrint(step.after) :
+                                    this.repl.parser.nodeToString(step.after);
+
+                                traceOutput += `\nMatched:     ${beforeStr}\n`;
+                                traceOutput += `Rewrote to:  ${afterStr}\n`;
+                            }
+
+                            traceOutput += `At path:     [${step.path.join(' → ')}]\n`;
+                            outputs.push({ type: 'text', content: traceOutput, volatile: true });
+                        }
+
+                        outputs.push({ type: 'text', content: '═'.repeat(61) + '\n\n', volatile: true });
+                    } else {
+                        // Simple trace mode - with collapsing
+                        const { collapseConsecutiveRules, formatCollapsedTrace } = await import('../core/trace-utils.js');
+                        outputs.push({ type: 'text', content: '\nTrace:\n', volatile: true });
+
+                        const collapsed = collapseConsecutiveRules(trace);
+                        const formatted = formatCollapsedTrace(collapsed);
+                        outputs.push({
+                            type: 'text',
+                            content: formatted + '\n',
+                            volatile: true
+                        });
+
+                        // Show hot spots if there are many steps
+                        if (trace.length > 20) {
+                            const { getTraceStats } = await import('../core/trace-utils.js');
+                            const stats = getTraceStats(trace);
+                            if (stats.hotRules.length > 0) {
+                                let hotSpotOutput = '\nHot spots:\n';
+                                for (const [rule, count] of stats.hotRules.slice(0, 5)) {
+                                    hotSpotOutput += `  ${rule}: ${count}×\n`;
+                                }
+                                outputs.push({
+                                    type: 'text',
+                                    content: hotSpotOutput,
+                                    volatile: true
+                                });
+                            }
+                        }
+
+                        outputs.push({ type: 'text', content: '\n', volatile: true });
+                    }
+                }
+            } else {
+                result = engine.normalize(expr, rules, this.repl.maxSteps, false, foldPrims);
+            }
 
             // Format the result
             const output = this.repl.formatResult(result);

@@ -1,45 +1,45 @@
 {Module
   Core/String
   {Import Core/List as CL open}
-  {Export Chars Strings SplitToChars SplitBy CharsToStrings StringsToChars}
+  {Export CharsToStrings StringsToChars}
   {Rules
     R("Str/Join", {Join with_ Strings(strs...)}, {StringJoin "" with_ strs...})
     R("Str/Join/Start", {StringJoin "" with_ s_ strs...}, {StringJoin s_ with_ strs...})
     R("Str/Join/Step", {StringJoin acc_ with_ s_ strs...}, {StringJoin Concat(acc_, with_, s_) with_ strs...})
     R("Str/Join/Done", {StringJoin acc_ with_}, acc_)
 
-    R(
-      "Str/SplitToChars/Done",
-      SplitToChars("", chars...),
-      Chars(chars...)
-    )
-    R(
-      "Str/SplitToChars/Step",
-      SplitToChars(str_, chars...),
-      SplitToChars(Substring(str_, 1), chars..., Substring(str_, 0, 1))
-    )
-    R(
-      "Str/SplitBy/EmptySep",
-      SplitBy("", str_, parts...),
-      CharsToStrings(SplitToChars(str_))
-    )
-    R(
-      "Str/SplitBy/Done",
-      SplitBy(s_, str_, parts...),
-      Strings(parts..., str_),
-      Eq(IndexOf(str_, s_), -1)
-    )
-    R(
-      "Str/SplitBy/Step",
-      SplitBy(s_, str_, parts...),
-      SplitBy(
-        s_,
-        Substring(str_, Add(IndexOf(str_, s_), StrLen(s_))),
-        parts...,
-        Substring(str_, 0, IndexOf(str_, s_))
-      ),
-      Neq(IndexOf(str_, s_), -1)
-    )
+    // R(
+    //   "Str/SplitToChars/Done",
+    //   SplitToChars("", chars...),
+    //   Chars(chars...)
+    // )
+    // R(
+    //   "Str/SplitToChars/Step",
+    //   SplitToChars(str_, chars...),
+    //   SplitToChars(Substring(str_, 1), chars..., Substring(str_, 0, 1))
+    // )
+    // R(
+    //   "Str/SplitBy/EmptySep",
+    //   SplitBy("", str_, parts...),
+    //   CharsToStrings(SplitToChars(str_))
+    // )
+    // R(
+    //   "Str/SplitBy/Done",
+    //   SplitBy(s_, str_, parts...),
+    //   Strings(parts..., str_),
+    //   Eq(IndexOf(str_, s_), -1)
+    // )
+    // R(
+    //   "Str/SplitBy/Step",
+    //   SplitBy(s_, str_, parts...),
+    //   SplitBy(
+    //     s_,
+    //     Substring(str_, Add(IndexOf(str_, s_), StrLen(s_))),
+    //     parts...,
+    //     Substring(str_, 0, IndexOf(str_, s_))
+    //   ),
+    //   Neq(IndexOf(str_, s_), -1)
+    // )
     
     R("Str/CharsToStrings", CharsToStrings({Chars chars...}), Strings(chars...))
     R("Str/StringsToChars", StringsToChars({Strings strs...}), Chars(strs...))

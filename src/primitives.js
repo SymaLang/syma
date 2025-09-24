@@ -6,7 +6,7 @@
  * to computed values.
  ******************************************************************/
 
-import { K, Sym, Num, Str, isNum, isStr, isSym, isCall, Splice, isSplice } from './ast-helpers.js';
+import { K, Sym, Num, Str, isNum, isStr, isSym, isCall, Splice, isSplice, Call } from './ast-helpers.js';
 import { freshId } from './effects/processor.js';
 
 /**
@@ -92,6 +92,8 @@ function foldPrimitive(op, args, skipFolds) {
         case "IndexOf": return foldIndexOf(args);
         case "Replace": return foldReplace(args);
         case "Split": return foldSplit(args);
+        case "SplitToChars": return foldSplitToChars(args);
+        case "SplitBy": return foldSplitBy(args);
         case "Escape": return foldEscape(args);
         case "Unescape": return foldUnescape(args);
     }
@@ -507,6 +509,44 @@ function foldSplit(args) {
 }
 
 /**
+ * Split string to characters: SplitToChars[Str] -> Chars[Str, Str, ...]
+ * Converts a string into individual character strings wrapped in Chars
+ */
+function foldSplitToChars(args) {
+    if (args.length === 1 && isStr(args[0])) {
+        const str = args[0].v;
+        const chars = str.split('').map(char => Str(char));
+        return Call(Sym('Chars'), ...chars);
+    }
+    return null;
+}
+
+/**
+ * Split string by separator: SplitBy[separator, string] -> Strings[Str, Str, ...]
+ * Splits a string by the given separator
+ * Special case: empty separator "" splits into individual character strings
+ */
+function foldSplitBy(args) {
+    if (args.length === 2 && isStr(args[0]) && isStr(args[1])) {
+        const separator = args[0].v;
+        const str = args[1].v;
+
+        let parts;
+        if (separator === '') {
+            // Special case: empty separator splits into individual characters
+            // but we return Strings (not Chars) per the requirement
+            parts = str.split('').map(char => Str(char));
+        } else {
+            // Normal case: split by separator
+            parts = str.split(separator).map(part => Str(part));
+        }
+
+        return Call(Sym('Strings'), ...parts);
+    }
+    return null;
+}
+
+/**
  * Escape string: Escape[Str] -> Str(escaped)
  * Escapes special characters in a string for safe embedding/serialization
  * Handles: quotes, backslashes, newlines, carriage returns, tabs, form feeds
@@ -637,25 +677,25 @@ function foldGte(args) {
 // ============= Boolean Operations =============
 
 /**
- * Logical AND: And[Bool, Bool] -> True|False
+ * Logical AND: And[Bool, Bool, ...] -> True|False
+ * Returns True only if ALL arguments are True
  */
 function foldAnd(args) {
-    if (args.length === 2 && isSym(args[0]) && isSym(args[1])) {
-        const a = args[0].v === "True";
-        const b = args[1].v === "True";
-        return Sym(a && b ? "True" : "False");
+    if (args.length > 0 && args.every(arg => isSym(arg) && (arg.v === "True" || arg.v === "False"))) {
+        const allTrue = args.every(arg => arg.v === "True");
+        return Sym(allTrue ? "True" : "False");
     }
     return null;
 }
 
 /**
- * Logical OR: Or[Bool, Bool] -> True|False
+ * Logical OR: Or[Bool, Bool, ...] -> True|False
+ * Returns True if ANY argument is True
  */
 function foldOr(args) {
-    if (args.length === 2 && isSym(args[0]) && isSym(args[1])) {
-        const a = args[0].v === "True";
-        const b = args[1].v === "True";
-        return Sym(a || b ? "True" : "False");
+    if (args.length > 0 && args.every(arg => isSym(arg) && (arg.v === "True" || arg.v === "False"))) {
+        const anyTrue = args.some(arg => arg.v === "True");
+        return Sym(anyTrue ? "True" : "False");
     }
     return null;
 }

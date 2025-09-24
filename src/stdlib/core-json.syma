@@ -1,35 +1,8 @@
 {Module Core/JSON
-  {Import Core/Rope as CR open}
-  {Export JSONToString}
+  {Import Core/ToJSON as CR}
+  {Export ToJSON}
   {Rules
-    ; --- make JVal delegate structured values ---
-    {:rule J/val->arr {JVal {JSONArr xs...}} -> {JArr xs...}}
-    {:rule J/val->obj {JVal {JSONObj kvs...}} -> {JObj kvs...}}
-
-    ; atoms
-    {:rule J/true  {JVal True}  -> "true"}
-    {:rule J/false {JVal False} -> "false"}
-    {:rule J/null  {JVal Empty} -> "null"}
-    {:rule J/str   {JVal s_} -> {JQuote s_} :guard IsStr(s_)}
-    {:rule J/num   {JVal n_} -> ToString(n_) :guard IsNum(n_)}
-
-    ; strings (quoting)
-    {:rule J/quote {JQuote s_} -> {RopeCat3 "\"" {Escape s_} "\""}}
-
-    ; arrays
-    {:rule J/arr/empty {JArr} -> {RopeCat "[" "]"}}
-    {:rule J/arr/build {JArr items...} -> {RopeCat3 "[" {JArrJoin items...} "]"}}
-    {:rule J/arr/join1 {JArrJoin x_} -> {JVal x_}}
-    {:rule J/arr/joinN {JArrJoin x_ y_ rest...} -> {RopeCat3 {JVal x_} ", " {JArrJoin y_ rest...}}}
-
-    ; objects
-    {:rule J/obj/empty {JObj} -> {RopeCat "{" "}"}}
-    {:rule J/obj/build {JObj kvs...} -> {RopeCat3 "{" {JObjJoin kvs...} "}"}}
-    {:rule J/kv {JPair {JSONKV k_ v_}} -> {RopeCat3 {JQuote k_} ": " {JVal v_}}}
-    {:rule J/obj/join1 {JObjJoin kv_} -> {JPair kv_}}
-    {:rule J/obj/joinN {JObjJoin kv_ kv2_ rest...} -> {RopeCat3 {JPair kv_} ", " {JObjJoin kv2_ rest...}}}
-
     ; -------- Public entry --------
-    {:rule JSONToString/Any {JSONToString x_} -> {RopeEmit {JVal x_}}}
+    {:rule ToJSON {ToJSON x_} -> {CR/ToJSON x_}}
   }
 }

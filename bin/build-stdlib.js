@@ -33,6 +33,10 @@ const moduleNameMap = {
     'core-syntax-global.syma': 'Core/Syntax/Global',
     'algebra-simplify.syma': 'Algebra/Simplify',
     'notebook-ui.syma': 'Notebook/UI',
+    'core-rope.syma': 'Core/Rope',
+    'core-json.syma': 'Core/Json',
+    'core-tojson.syma': 'Core/ToJson',
+    'core-fromjson-lex.syma': 'Core/FromJson/Lex',
 };
 
 console.log('Building stdlib modules for browser...');

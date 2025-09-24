@@ -1,15 +1,19 @@
 {
   "Algebra/Simplify": "/stdlib/algebra-simplify.json",
   "Core/Effect": "/stdlib/core-effect.json",
+  "Core/FromJson/Lex": "/stdlib/core-fromjson-lex.json",
   "Core/Fun/WithSugar": "/stdlib/core-fun-withsugar.json",
   "Core/Fun": "/stdlib/core-fun.json",
+  "Core/Json": "/stdlib/core-json.json",
   "Core/KV": "/stdlib/core-kv.json",
   "Core/List": "/stdlib/core-list.json",
   "Core/Main": "/stdlib/core-main.json",
   "Core/Plumb": "/stdlib/core-plumb.json",
+  "Core/Rope": "/stdlib/core-rope.json",
   "Core/Set": "/stdlib/core-set.json",
   "Core/String": "/stdlib/core-string.json",
   "Core/Syntax/Global": "/stdlib/core-syntax-global.json",
+  "Core/ToJson": "/stdlib/core-tojson.json",
   "Core/Zipper": "/stdlib/core-zipper.json",
   "Notebook/UI": "/stdlib/notebook-ui.json"
 }

@@ -301,12 +301,71 @@ export const useNotebookStore = create(
         }),
         {
             name: 'syma-notebook-storage',
+            // Custom storage wrapper with error handling
+            storage: {
+                getItem: (name) => {
+                    try {
+                        const str = localStorage.getItem(name);
+                        return str ? JSON.parse(str) : null;
+                    } catch (error) {
+                        console.error('Failed to load notebook state:', error);
+                        return null;
+                    }
+                },
+                setItem: (name, value) => {
+                    try {
+                        localStorage.setItem(name, JSON.stringify(value));
+                    } catch (error) {
+                        if (error.name === 'QuotaExceededError') {
+                            console.warn('localStorage quota exceeded. Clearing old data and retrying...');
+                            // Try clearing old data and retry once
+                            try {
+                                // Clear other storage items but keep the notebook
+                                const keysToKeep = ['syma-notebook-storage'];
+                                for (let i = localStorage.length - 1; i >= 0; i--) {
+                                    const key = localStorage.key(i);
+                                    if (key && !keysToKeep.includes(key)) {
+                                        localStorage.removeItem(key);
+                                    }
+                                }
+                                // Try again with cleaned storage
+                                localStorage.setItem(name, JSON.stringify(value));
+                            } catch (retryError) {
+                                console.error('Failed to save notebook even after cleanup:', retryError);
+                                // Silently fail - notebook will continue working but without persistence
+                            }
+                        } else {
+                            console.error('Failed to save notebook state:', error);
+                        }
+                    }
+                },
+                removeItem: (name) => {
+                    localStorage.removeItem(name);
+                }
+            },
             // Only persist cells and metadata, not temporary state
             partialize: (state) => ({
                 cells: state.cells.map(cell => ({
                     ...cell,
-                    // Filter out DOM outputs that can't be serialized
-                    outputs: cell.outputs.filter(output => output.type !== 'dom')
+                    // Filter out DOM outputs, volatile outputs, and very large outputs
+                    outputs: cell.outputs.filter(output => {
+                        // Skip DOM outputs
+                        if (output.type === 'dom') return false;
+                        // Skip volatile outputs (like trace)
+                        if (output.volatile) return false;
+                        // Skip outputs larger than 100KB to prevent quota issues
+                        if (output.content && output.content.length > 100000) return false;
+                        return true;
+                    }).map(output => {
+                        // Truncate any remaining large outputs just in case
+                        if (output.content && output.content.length > 50000) {
+                            return {
+                                ...output,
+                                content: output.content.substring(0, 50000) + '\n\n[Output truncated for storage...]'
+                            };
+                        }
+                        return output;
+                    })
                 })),
                 metadata: state.metadata
             }),
