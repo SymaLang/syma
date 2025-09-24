@@ -6,14 +6,146 @@ import {
     CommandLineIcon,
     ExclamationCircleIcon,
     CheckCircleIcon,
-    ChevronDoubleUpIcon
+    ChevronDoubleUpIcon,
+    ChevronDownIcon,
+    ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { useNotebookStore, CellStatus } from '../notebook-store';
 import { getNotebookEngine } from '../notebook-engine';
 import { registerSymaLanguage, registerCompletionProvider } from '../syma-language';
 import { KeyboardShortcut } from './Tooltip';
 import { ActionButton, CellToolbar, CellControls, useToolbarVisibility } from './CellCommon';
+import { clearCellAccordionStates } from '../utils/accordion-state';
 // Design tokens removed - using Tailwind classes directly
+
+// Component to render accordion outputs with persistent state
+const AccordionOutput = ({ sections = [], cellId, outputIndex }) => {
+    // Create a unique ID for this accordion group
+    const accordionId = `accordion-${cellId}-${outputIndex}`;
+
+    const [expandedSections, setExpandedSections] = useState(() => {
+        // Try to restore state from localStorage first
+        const storageKey = `syma-accordion-${accordionId}`;
+        const savedState = localStorage.getItem(storageKey);
+
+        if (savedState) {
+            try {
+                return JSON.parse(savedState);
+            } catch (e) {
+                // Invalid saved state, fall through to default
+            }
+        }
+
+        // Otherwise, check if sections have saved expanded state
+        const initial = {};
+        sections.forEach((section, index) => {
+            // Check if section has persistedExpanded property (from saved notebook)
+            initial[index] = section.persistedExpanded !== undefined
+                ? section.persistedExpanded
+                : (section.expanded !== false);
+        });
+        return initial;
+    });
+
+    // Update cell output metadata when expansion state changes
+    const updateCell = useNotebookStore(state => state.updateCell);
+
+    const toggleSection = (index) => {
+        setExpandedSections(prev => {
+            const newState = {
+                ...prev,
+                [index]: !prev[index]
+            };
+
+            // Save to localStorage
+            const storageKey = `syma-accordion-${accordionId}`;
+            localStorage.setItem(storageKey, JSON.stringify(newState));
+
+            // Also update the cell output to include the expanded state
+            // This will be saved with the notebook
+            if (cellId && updateCell) {
+                // Find the current cell and update this specific output
+                const cell = useNotebookStore.getState().cells.find(c => c.id === cellId);
+                if (cell) {
+                    const updatedOutputs = [...cell.outputs];
+                    if (updatedOutputs[outputIndex] && updatedOutputs[outputIndex].type === 'accordion') {
+                        // Store the expanded state in the sections
+                        updatedOutputs[outputIndex] = {
+                            ...updatedOutputs[outputIndex],
+                            sections: updatedOutputs[outputIndex].sections.map((sec, idx) => ({
+                                ...sec,
+                                persistedExpanded: idx === index ? newState[index] : newState[idx]
+                            }))
+                        };
+                        updateCell(cellId, { outputs: updatedOutputs });
+                    }
+                }
+            }
+
+            return newState;
+        });
+    };
+
+    // Clean up localStorage when component unmounts (optional)
+    useEffect(() => {
+        return () => {
+            // Optionally clean up old accordion states older than 30 days
+            const storageKeyPrefix = 'syma-accordion-';
+            const now = Date.now();
+            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith(storageKeyPrefix)) {
+                    const timestamp = localStorage.getItem(`${key}-timestamp`);
+                    if (timestamp && now - parseInt(timestamp) > thirtyDays) {
+                        localStorage.removeItem(key);
+                        localStorage.removeItem(`${key}-timestamp`);
+                    }
+                }
+            });
+        };
+    }, []);
+
+    // Save timestamp when accordion is created
+    useEffect(() => {
+        const storageKey = `syma-accordion-${accordionId}-timestamp`;
+        localStorage.setItem(storageKey, Date.now().toString());
+    }, [accordionId]);
+
+    return (
+        <div className="accordion-output -mx-2">
+            {sections.map((section, index) => (
+                <div
+                    key={index}
+                    className={`
+                        border rounded-md mb-2 overflow-hidden
+                        ${section.className === 'rewrite-result'
+                            ? 'border-blue-500/50 bg-blue-950/20'
+                            : 'border-zinc-700 bg-zinc-800/50'}
+                    `}
+                >
+                    <button
+                        className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-white/5 transition-colors"
+                        onClick={() => toggleSection(index)}
+                        aria-expanded={expandedSections[index]}
+                    >
+                        <span className="text-xs opacity-60">
+                            {expandedSections[index] ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRightIcon className="w-3 h-3" />}
+                        </span>
+                        <span className="text-sm font-medium">{section.title}</span>
+                    </button>
+                    {expandedSections[index] && (
+                        <div className="border-t border-zinc-700 px-3 py-2">
+                            <pre className="text-xs leading-relaxed text-gray-300 overflow-x-auto">
+                                {section.content}
+                            </pre>
+                        </div>
+                    )}
+                </div>
+            ))}
+        </div>
+    );
+};
 
 // Component to render DOM elements in output
 const DOMOutput = ({ element }) => {
@@ -75,6 +207,9 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
     // Execute cell
     const handleExecute = useCallback(async () => {
         if (isExecuting || !cell.content.trim()) return;
+
+        // Clear old accordion states for this cell before re-executing
+        clearCellAccordionStates(cell.id);
 
         setIsExecuting(true);
         setCellStatus(cell.id, CellStatus.RUNNING);
@@ -372,6 +507,12 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
                                     <div className="syma-dom-output">
                                         <DOMOutput element={output.element} />
                                     </div>
+                                ) : output.type === 'accordion' ? (
+                                    <AccordionOutput
+                                        sections={output.sections || []}
+                                        cellId={cell.id}
+                                        outputIndex={i}
+                                    />
                                 ) : (
                                     <div className="pl-8 whitespace-pre-wrap text-sm leading-relaxed text-gray-300">
                                         {output.content}

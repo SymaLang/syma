@@ -7,6 +7,8 @@ class NotebookPlatform {
     constructor() {
         this.outputHandlers = new Map();
         this.currentCellId = null;
+        // Mark this as a notebook platform
+        this.isNotebook = true;
     }
 
     setOutputHandler(cellId, handler) {
@@ -38,6 +40,17 @@ class NotebookPlatform {
 
     printWithNewline(text) {
         this.print(text + '\n');
+    }
+
+    // New method for structured output (like accordions)
+    printStructured(data) {
+        if (this.currentCellId && this.outputHandlers.has(this.currentCellId)) {
+            // Send structured output to the handler
+            this.outputHandlers.get(this.currentCellId)({
+                type: 'structured',
+                ...data
+            });
+        }
     }
 
     async fileExists(path) {
@@ -316,8 +329,17 @@ export class NotebookEngine {
             if (typeof output === 'string') {
                 outputs.push({ type: 'text', content: output });
             } else if (output && typeof output === 'object') {
-                // Handle structured outputs (like DOM elements)
-                outputs.push(output);
+                // Handle structured outputs (like DOM elements and accordions)
+                if (output.type === 'structured') {
+                    // Structured output like accordions
+                    outputs.push({
+                        type: 'accordion',
+                        sections: output.sections || []
+                    });
+                } else {
+                    // Other objects (like DOM elements)
+                    outputs.push(output);
+                }
             } else {
                 outputs.push({ type: 'text', content: String(output) });
             }

@@ -1108,56 +1108,137 @@ Debugging:
     // Helper method to print match results
     printMatchResults(env, rewritePattern, normalizedInfo = null) {
         if (env) {
-            this.repl.platform.printWithNewline("Pattern matched successfully!\n");
+            // Check if we're in notebook mode
+            const isNotebook = this.repl.platform.isNotebook === true;
 
-            // If rewritePattern is provided, show the result FIRST (this is what user cares about)
-            if (rewritePattern) {
-                this.repl.platform.printWithNewline("Rewrite result:");
-                const rewritten = engine.subst(rewritePattern, env);
-                const rewrittenStr = this.repl.formatResult(rewritten);
-                this.repl.platform.printWithNewline(rewrittenStr);
-                this.repl.platform.printWithNewline("");
-            }
+            if (isNotebook && this.repl.platform.printStructured) {
+                // In notebook mode, return structured output with collapsible sections
+                const sections = [];
 
-            // If we normalized the target, show that info (as supporting detail)
-            if (normalizedInfo) {
-                this.repl.platform.printWithNewline("Target was normalized:");
-                this.repl.platform.printWithNewline(`  From: ${this.repl.formatResult(normalizedInfo.original)}`);
-                this.repl.platform.printWithNewline(`  To:   ${this.repl.formatResult(normalizedInfo.normalized)}`);
-                this.repl.platform.printWithNewline("");
-            }
+                // Success message (always shown as plain text)
+                this.repl.platform.printWithNewline("Pattern matched successfully!");
 
-            // Show all bindings (these are the details)
-            const bindings = Object.keys(env).sort();
-            if (bindings.length === 0) {
-                this.repl.platform.printWithNewline("No variable bindings (pattern matched exactly)");
-            } else {
-                this.repl.platform.printWithNewline("Matched bindings:");
-                for (const varName of bindings) {
-                    const value = env[varName];
+                // Rewrite result (expanded by default, shown first)
+                if (rewritePattern) {
+                    const rewritten = engine.subst(rewritePattern, env);
+                    const rewrittenStr = this.repl.formatResult(rewritten);
+                    sections.push({
+                        title: '✨ Rewrite Result',
+                        content: rewrittenStr,
+                        expanded: true,
+                        className: 'rewrite-result'
+                    });
+                }
 
-                    // Handle VarRest bindings (arrays)
-                    if (Array.isArray(value)) {
-                        this.repl.platform.printWithNewline(`\n${varName}... = [`);
-                        for (const item of value) {
-                            const itemStr = this.repl.formatResult(item);
-                            // Indent array items
-                            const indented = itemStr.split('\\n').map(line => '  ' + line).join('\\n');
-                            this.repl.platform.printWithNewline(indented);
-                        }
-                        this.repl.platform.printWithNewline(`]`);
-                    } else {
-                        // Regular variable binding
-                        const valueStr = this.repl.formatResult(value);
+                // Normalization info (collapsed by default)
+                if (normalizedInfo) {
+                    const normContent = `From: ${this.repl.formatResult(normalizedInfo.original)}\nTo:   ${this.repl.formatResult(normalizedInfo.normalized)}`;
+                    sections.push({
+                        title: '🔄 Normalization',
+                        content: normContent,
+                        expanded: false,
+                        className: 'normalization-info'
+                    });
+                }
 
-                        // If the value is multiline, show it on the next line
-                        if (valueStr.includes('\\n')) {
-                            this.repl.platform.printWithNewline(`\n${varName}_ =`);
-                            // Indent the value
-                            const indented = valueStr.split('\\n').map(line => '  ' + line).join('\\n');
-                            this.repl.platform.printWithNewline(indented);
+                // Variable bindings (collapsed by default)
+                const bindings = Object.keys(env).sort();
+                if (bindings.length > 0) {
+                    let bindingsContent = '';
+                    for (const varName of bindings) {
+                        const value = env[varName];
+                        if (Array.isArray(value)) {
+                            bindingsContent += `${varName}... = [\n`;
+                            for (const item of value) {
+                                const itemStr = this.repl.formatResult(item);
+                                const indented = itemStr.split('\n').map(line => '  ' + line).join('\n');
+                                bindingsContent += indented + '\n';
+                            }
+                            bindingsContent += ']\n\n';
                         } else {
-                            this.repl.platform.printWithNewline(`\n${varName}_ = ${valueStr}`);
+                            const valueStr = this.repl.formatResult(value);
+                            if (valueStr.includes('\n')) {
+                                bindingsContent += `${varName}_ =\n`;
+                                const indented = valueStr.split('\n').map(line => '  ' + line).join('\n');
+                                bindingsContent += indented + '\n\n';
+                            } else {
+                                bindingsContent += `${varName}_ = ${valueStr}\n\n`;
+                            }
+                        }
+                    }
+
+                    sections.push({
+                        title: `📎 Variable Bindings (${bindings.length})`,
+                        content: bindingsContent.trim(),
+                        expanded: false,
+                        className: 'variable-bindings'
+                    });
+                }
+
+                // Send ALL sections as a single accordion output
+                if (sections.length > 0) {
+                    this.repl.platform.printStructured({
+                        type: 'accordion',
+                        sections: sections
+                    });
+                } else {
+                    // No special sections to show (shouldn't happen if match succeeded)
+                    this.repl.platform.printWithNewline("(No additional details to show)");
+                }
+
+            } else {
+                // Regular REPL mode - print everything as before
+                this.repl.platform.printWithNewline("Pattern matched successfully!\n");
+
+                // If rewritePattern is provided, show the result FIRST (this is what user cares about)
+                if (rewritePattern) {
+                    this.repl.platform.printWithNewline("Rewrite result:");
+                    const rewritten = engine.subst(rewritePattern, env);
+                    const rewrittenStr = this.repl.formatResult(rewritten);
+                    this.repl.platform.printWithNewline(rewrittenStr);
+                    this.repl.platform.printWithNewline("");
+                }
+
+                // If we normalized the target, show that info (as supporting detail)
+                if (normalizedInfo) {
+                    this.repl.platform.printWithNewline("Target was normalized:");
+                    this.repl.platform.printWithNewline(`  From: ${this.repl.formatResult(normalizedInfo.original)}`);
+                    this.repl.platform.printWithNewline(`  To:   ${this.repl.formatResult(normalizedInfo.normalized)}`);
+                    this.repl.platform.printWithNewline("");
+                }
+
+                // Show all bindings (these are the details)
+                const bindings = Object.keys(env).sort();
+                if (bindings.length === 0) {
+                    this.repl.platform.printWithNewline("No variable bindings (pattern matched exactly)");
+                } else {
+                    this.repl.platform.printWithNewline("Matched bindings:");
+                    for (const varName of bindings) {
+                        const value = env[varName];
+
+                        // Handle VarRest bindings (arrays)
+                        if (Array.isArray(value)) {
+                            this.repl.platform.printWithNewline(`\n${varName}... = [`);
+                            for (const item of value) {
+                                const itemStr = this.repl.formatResult(item);
+                                // Indent array items
+                                const indented = itemStr.split('\\n').map(line => '  ' + line).join('\\n');
+                                this.repl.platform.printWithNewline(indented);
+                            }
+                            this.repl.platform.printWithNewline(`]`);
+                        } else {
+                            // Regular variable binding
+                            const valueStr = this.repl.formatResult(value);
+
+                            // If the value is multiline, show it on the next line
+                            if (valueStr.includes('\\n')) {
+                                this.repl.platform.printWithNewline(`\n${varName}_ =`);
+                                // Indent the value
+                                const indented = valueStr.split('\\n').map(line => '  ' + line).join('\\n');
+                                this.repl.platform.printWithNewline(indented);
+                            } else {
+                                this.repl.platform.printWithNewline(`\n${varName}_ = ${valueStr}`);
+                            }
                         }
                     }
                 }

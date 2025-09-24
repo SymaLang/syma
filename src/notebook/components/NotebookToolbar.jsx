@@ -16,6 +16,7 @@ import {
 import { useNotebookStore, CellType } from '../notebook-store';
 import { saveNotebook, loadNotebook } from '../notebook-io';
 import { Tooltip, KeyboardShortcut } from './Tooltip';
+import { clearNotebookAccordionStates } from '../utils/accordion-state';
 // Design tokens removed - using Tailwind classes directly
 
 export function NotebookToolbar({ onRunAll }) {
@@ -50,6 +51,8 @@ export function NotebookToolbar({ onRunAll }) {
 
         try {
             const notebook = await loadNotebook(file);
+            // Clear accordion states for the current notebook before loading new one
+            clearNotebookAccordionStates(metadata.id);
             setNotebook(notebook);
         } catch (error) {
             console.error('Failed to load notebook:', error);
@@ -63,6 +66,8 @@ export function NotebookToolbar({ onRunAll }) {
         if (cells.length > 0 && !confirm('Create a new notebook? All unsaved changes will be lost.')) {
             return;
         }
+        // Clear accordion states for the current notebook before creating new one
+        clearNotebookAccordionStates(metadata.id);
         newNotebook();
     };
 
