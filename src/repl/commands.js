@@ -48,6 +48,7 @@ export class CommandProcessor {
             'rulerules': this.showRuleRulesSection.bind(this),
             'rr': this.showRuleRulesSection.bind(this),
             'match': this.matchPattern.bind(this),
+            'm': this.matchPattern.bind(this),
         };
     }
 
@@ -114,7 +115,10 @@ Evaluation:
   :why <expr>               Explain why evaluation got stuck
   :apply <action>           Apply action to current universe state
   :norm [show]              Normalize the universe Program section
-  :match <pattern>          Match pattern against universe and show bindings
+  :match, :m <pattern>      Match pattern against universe and show bindings
+  :match <pat> :target <expr>  Match pattern against arbitrary expression
+  :match <pat> :norm <expr>    Normalize expression, then match pattern
+  :match <pat> :rewrite <repl> ...  Apply matched bindings to replacement pattern
 
 Settings:
   :set <option> <value>     Set REPL option
@@ -1101,138 +1105,509 @@ Debugging:
         return true;
     }
 
+    // Helper method to print match results
+    printMatchResults(env, rewritePattern, normalizedInfo = null) {
+        if (env) {
+            this.repl.platform.printWithNewline("Pattern matched successfully!\n");
+
+            // If rewritePattern is provided, show the result FIRST (this is what user cares about)
+            if (rewritePattern) {
+                this.repl.platform.printWithNewline("Rewrite result:");
+                const rewritten = engine.subst(rewritePattern, env);
+                const rewrittenStr = this.repl.formatResult(rewritten);
+                this.repl.platform.printWithNewline(rewrittenStr);
+                this.repl.platform.printWithNewline("");
+            }
+
+            // If we normalized the target, show that info (as supporting detail)
+            if (normalizedInfo) {
+                this.repl.platform.printWithNewline("Target was normalized:");
+                this.repl.platform.printWithNewline(`  From: ${this.repl.formatResult(normalizedInfo.original)}`);
+                this.repl.platform.printWithNewline(`  To:   ${this.repl.formatResult(normalizedInfo.normalized)}`);
+                this.repl.platform.printWithNewline("");
+            }
+
+            // Show all bindings (these are the details)
+            const bindings = Object.keys(env).sort();
+            if (bindings.length === 0) {
+                this.repl.platform.printWithNewline("No variable bindings (pattern matched exactly)");
+            } else {
+                this.repl.platform.printWithNewline("Matched bindings:");
+                for (const varName of bindings) {
+                    const value = env[varName];
+
+                    // Handle VarRest bindings (arrays)
+                    if (Array.isArray(value)) {
+                        this.repl.platform.printWithNewline(`\n${varName}... = [`);
+                        for (const item of value) {
+                            const itemStr = this.repl.formatResult(item);
+                            // Indent array items
+                            const indented = itemStr.split('\\n').map(line => '  ' + line).join('\\n');
+                            this.repl.platform.printWithNewline(indented);
+                        }
+                        this.repl.platform.printWithNewline(`]`);
+                    } else {
+                        // Regular variable binding
+                        const valueStr = this.repl.formatResult(value);
+
+                        // If the value is multiline, show it on the next line
+                        if (valueStr.includes('\\n')) {
+                            this.repl.platform.printWithNewline(`\n${varName}_ =`);
+                            // Indent the value
+                            const indented = valueStr.split('\\n').map(line => '  ' + line).join('\\n');
+                            this.repl.platform.printWithNewline(indented);
+                        } else {
+                            this.repl.platform.printWithNewline(`\n${varName}_ = ${valueStr}`);
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
     async matchPattern(args, rawArgs) {
-        if (args.length === 0) {
-            this.repl.platform.printWithNewline("Usage: :match <pattern>");
-            this.repl.platform.printWithNewline("\nExamples:");
-            this.repl.platform.printWithNewline("  :match {Program p_}                - Match Program and bind to p_");
-            this.repl.platform.printWithNewline("  :match {Program {App a_} ...}      - Match nested App");
-            this.repl.platform.printWithNewline("  :match _ {Rules r...}               - Use _ as wildcard, r... for rest");
-            this.repl.platform.printWithNewline("  :match {Program p_} rest...        - Match Program and remaining sections");
+        // Check if entering multiline mode
+        if (rawArgs.trim() === '') {
+            // Enter multiline match mode
+            this.repl.platform.printWithNewline("Enter multiline match (end with ':end'):");
+            this.repl.platform.printWithNewline("  Pattern expression...");
+            this.repl.platform.printWithNewline("  [:rewrite");
+            this.repl.platform.printWithNewline("    Replacement expression...]");
+            this.repl.platform.printWithNewline("  [:target or :norm");
+            this.repl.platform.printWithNewline("    Target expression...]");
+            this.repl.platform.printWithNewline("  :end");
+
+            this.repl.multilineMode = true;
+            this.repl.multilineBuffer = [];
+
+            // Override multiline completion handler for match mode
+            const originalProcess = this.repl.processCompleteInput;
+            this.repl.processCompleteInput = async (input) => {
+                // Check if this is the :end marker
+                if (input.trim() === ':end') {
+                    // Process the collected multiline match
+                    this.repl.multilineMode = false;
+                    const fullInput = this.repl.multilineBuffer.join('\n');
+                    this.repl.multilineBuffer = [];
+                    this.repl.processCompleteInput = originalProcess;
+
+                    // Process as a match command with the collected input
+                    return await this.matchPattern(['multiline'], fullInput);
+                } else {
+                    // Continue collecting lines
+                    this.repl.multilineBuffer.push(input);
+                    return true;
+                }
+            };
+            return true;
+        }
+
+        if (args.length === 0 && rawArgs.trim() !== '') {
+            // Show help if called with empty args but has rawArgs (shouldn't happen normally)
+            args = ['help'];
+        }
+
+        if (args[0] === 'help') {
+            this.repl.platform.printWithNewline("Usage: :match [<pattern> [:rewrite <replacement>] [:target/:norm <expression>]]");
+            this.repl.platform.printWithNewline("\nMultiline mode:");
+            this.repl.platform.printWithNewline("  :match                          - Enter multiline mode");
+            this.repl.platform.printWithNewline("  {Complex Pattern}");
+            this.repl.platform.printWithNewline("  :rewrite                        - Optional rewrite clause");
+            this.repl.platform.printWithNewline("  {Complex Replacement}");
+            this.repl.platform.printWithNewline("  :target                         - Target expression (or :norm)");
+            this.repl.platform.printWithNewline("  {Complex Target}");
+            this.repl.platform.printWithNewline("  :end                            - End multiline input");
+            this.repl.platform.printWithNewline("\nInline examples:");
+            this.repl.platform.printWithNewline("  :match {Program p_}                    - Match against universe");
+            this.repl.platform.printWithNewline("  :match {F x_ y_} :target {F 1 2}      - Match against expression");
+            this.repl.platform.printWithNewline("  :match result_ :norm {+ 1 2}          - Match normalized expression");
+            this.repl.platform.printWithNewline("  :match {F x_ y_} :rewrite {G y_ x_} :target {F 1 2}  - Rewrite with bindings");
             this.repl.platform.printWithNewline("\nPattern syntax:");
             this.repl.platform.printWithNewline("  x_    - Variable (matches any single expression)");
             this.repl.platform.printWithNewline("  x...  - Rest variable (matches zero or more expressions)");
             this.repl.platform.printWithNewline("  _     - Wildcard (matches anything without binding)");
-            this.repl.platform.printWithNewline("\nNote: Automatically wraps in Universe[...] and adds trailing ... if needed");
+            this.repl.platform.printWithNewline("\nNote: The :rewrite clause can be easily copied to create rules!");
+            this.repl.platform.printWithNewline("      When matching against universe (no :target/:norm), automatically wraps in Universe[...]");
             return true;
         }
 
         try {
-            // Parse the pattern fragments
-            const patternText = rawArgs.trim();
+            // In multiline mode, rawArgs contains the full collected multiline input
+            // We need to split it by section markers that appear at the start of lines
+            if (args[0] === 'multiline') {
+                // Split the multiline input by section markers
+                const lines = rawArgs.split('\n');
+                let currentSection = 'pattern';
+                let sections = { pattern: [], rewrite: null, target: null, norm: null };
 
-            // Parse as multiple expressions (space-separated patterns inside Universe)
-            // This allows patterns like: :match {Program p_} {Rules r_} rest...
-            const fragments = [];
-            let depth = 0;
-            let start = 0;
-
-            // Simple parser to split on spaces at depth 0
-            for (let i = 0; i < patternText.length; i++) {
-                const char = patternText[i];
-                if (char === '{' || char === '(') depth++;
-                else if (char === '}' || char === ')') depth--;
-                else if (char === ' ' && depth === 0) {
-                    const fragment = patternText.substring(start, i).trim();
-                    if (fragment) fragments.push(fragment);
-                    start = i + 1;
-                }
-            }
-            // Add the last fragment
-            const lastFragment = patternText.substring(start).trim();
-            if (lastFragment) fragments.push(lastFragment);
-
-            // Check if the last fragment is already a rest pattern (ends with ...)
-            const hasRestPattern = fragments.length > 0 &&
-                                   fragments[fragments.length - 1].endsWith('...');
-
-            // Check if the first fragment is NOT Program and doesn't start with underscore/variable
-            // If so, prepend ... to skip preceding sections
-            let needsPrefixRest = false;
-            if (fragments.length > 0) {
-                const firstFragment = fragments[0];
-                // Check if it's a Call pattern that doesn't start with Program
-                if (firstFragment.startsWith('{') && !firstFragment.startsWith('{Program')) {
-                    needsPrefixRest = true;
-                }
-            }
-
-            // Build the full Universe pattern
-            const innerPattern = needsPrefixRest ?
-                `... ${fragments.join(' ')}` :
-                fragments.join(' ');
-
-            // If user didn't specify a rest pattern at the end, add ... to match remaining sections
-            const fullPatternText = hasRestPattern ?
-                `{Universe ${innerPattern}}` :
-                `{Universe ${innerPattern} ...}`;
-            const pattern = this.repl.parser.parseString(fullPatternText);
-
-            // Match against the universe
-            const env = engine.match(pattern, this.repl.universe);
-
-            if (env) {
-                this.repl.platform.printWithNewline("Pattern matched successfully!\n");
-
-                // Show all bindings
-                const bindings = Object.keys(env).sort();
-                if (bindings.length === 0) {
-                    this.repl.platform.printWithNewline("No variable bindings (pattern matched exactly)");
-                } else {
-                    this.repl.platform.printWithNewline("Matched bindings:");
-                    for (const varName of bindings) {
-                        const value = env[varName];
-
-                        // Handle VarRest bindings (arrays)
-                        if (Array.isArray(value)) {
-                            this.repl.platform.printWithNewline(`\n${varName}... = [`);
-                            for (const item of value) {
-                                const itemStr = this.repl.formatResult(item);
-                                // Indent array items
-                                const indented = itemStr.split('\n').map(line => '  ' + line).join('\n');
-                                this.repl.platform.printWithNewline(indented);
-                            }
-                            this.repl.platform.printWithNewline(`]`);
-                        } else {
-                            // Regular variable binding
-                            const valueStr = this.repl.formatResult(value);
-
-                            // If the value is multiline, show it on the next line
-                            if (valueStr.includes('\n')) {
-                                this.repl.platform.printWithNewline(`\n${varName}_ =`);
-                                // Indent the value
-                                const indented = valueStr.split('\n').map(line => '  ' + line).join('\n');
-                                this.repl.platform.printWithNewline(indented);
-                            } else {
-                                this.repl.platform.printWithNewline(`\n${varName}_ = ${valueStr}`);
-                            }
-                        }
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed === ':rewrite') {
+                        currentSection = 'rewrite';
+                        sections.rewrite = [];
+                    } else if (trimmed === ':target') {
+                        currentSection = 'target';
+                        sections.target = [];
+                    } else if (trimmed === ':norm') {
+                        currentSection = 'norm';
+                        sections.norm = [];
+                    } else if (currentSection && sections[currentSection] !== null) {
+                        sections[currentSection].push(line);
                     }
                 }
+
+                // Join each section and parse
+                let pattern, target, rewritePattern = null, matchAgainstUniverse = true;
+                let shouldNormalize = false;
+
+                // Parse pattern (required)
+                const patternText = sections.pattern.join('\n').trim();
+                if (!patternText) {
+                    this.repl.platform.printWithNewline("Error: Pattern is required");
+                    return true;
+                }
+                pattern = this.repl.parser.parseString(patternText);
+
+                // Parse rewrite if present
+                if (sections.rewrite) {
+                    const rewriteText = sections.rewrite.join('\n').trim();
+                    if (!rewriteText) {
+                        this.repl.platform.printWithNewline("Error: Rewrite replacement is required after :rewrite");
+                        return true;
+                    }
+                    rewritePattern = this.repl.parser.parseString(rewriteText);
+                }
+
+                // Parse target or norm if present
+                if (sections.target) {
+                    const targetText = sections.target.join('\n').trim();
+                    if (!targetText) {
+                        this.repl.platform.printWithNewline("Error: Target expression is required after :target");
+                        return true;
+                    }
+                    target = this.repl.parser.parseString(targetText);
+                    matchAgainstUniverse = false;
+                } else if (sections.norm) {
+                    const targetText = sections.norm.join('\n').trim();
+                    if (!targetText) {
+                        this.repl.platform.printWithNewline("Error: Expression is required after :norm");
+                        return true;
+                    }
+                    const targetExpr = this.repl.parser.parseString(targetText);
+
+                    // Normalize the expression (but don't print yet - wait until after match)
+                    const rules = this.repl.getRules();
+                    if (this.repl.trace) {
+                        const { result: normalized, trace } = engine.normalizeWithTrace(
+                            targetExpr,
+                            rules,
+                            this.repl.maxSteps,
+                            false,
+                            foldPrims
+                        );
+                        target = normalized;
+                        if (trace.length > 0) {
+                            this.repl.platform.printWithNewline(`Normalizing... applied ${trace.length} steps\n`);
+                        }
+                    } else {
+                        target = engine.normalize(targetExpr, rules, this.repl.maxSteps, false, foldPrims);
+                    }
+
+                    matchAgainstUniverse = false;
+                    shouldNormalize = { original: targetExpr, normalized: target };
+                } else {
+                    // No target/norm specified, match against universe
+                    // Process pattern for universe matching
+                    const fragments = [];
+                    let depth = 0;
+                    let start = 0;
+
+                    for (let i = 0; i < patternText.length; i++) {
+                        const char = patternText[i];
+                        if (char === '{' || char === '(') depth++;
+                        else if (char === '}' || char === ')') depth--;
+                        else if (char === ' ' && depth === 0) {
+                            const fragment = patternText.substring(start, i).trim();
+                            if (fragment) fragments.push(fragment);
+                            start = i + 1;
+                        }
+                    }
+                    const lastFragment = patternText.substring(start).trim();
+                    if (lastFragment) fragments.push(lastFragment);
+
+                    const hasRestPattern = fragments.length > 0 &&
+                                           fragments[fragments.length - 1].endsWith('...');
+
+                    let needsPrefixRest = false;
+                    if (fragments.length > 0) {
+                        const firstFragment = fragments[0];
+                        if (firstFragment.startsWith('{') && !firstFragment.startsWith('{Program')) {
+                            needsPrefixRest = true;
+                        }
+                    }
+
+                    const innerPattern = needsPrefixRest ?
+                        `... ${fragments.join(' ')}` :
+                        fragments.join(' ');
+
+                    const fullPatternText = hasRestPattern ?
+                        `{Universe ${innerPattern}}` :
+                        `{Universe ${innerPattern} ...}`;
+                    pattern = this.repl.parser.parseString(fullPatternText);
+                    target = this.repl.universe;
+                }
+
+                // Now perform the match with the parsed sections
+                const env = engine.match(pattern, target);
+
+                // Use helper method to print results (pass normalization info if applicable)
+                const normalizedInfo = (typeof shouldNormalize === 'object') ? shouldNormalize : null;
+                if (this.printMatchResults(env, rewritePattern, normalizedInfo)) {
+                    // Match succeeded, results printed
+                } else {
+                    this.repl.platform.printWithNewline("Pattern did not match");
+
+                    // If we normalized, show what we tried to match against
+                    if (normalizedInfo) {
+                        this.repl.platform.printWithNewline("\nTarget was normalized:");
+                        this.repl.platform.printWithNewline(`  From: ${this.repl.formatResult(normalizedInfo.original)}`);
+                        this.repl.platform.printWithNewline(`  To:   ${this.repl.formatResult(normalizedInfo.normalized)}`);
+                    }
+
+                    // Provide helpful hints based on the matching context
+                    if (matchAgainstUniverse) {
+                        // ... (existing universe matching hints)
+                        if (isCall(pattern) && pattern.a.length > 0) {
+                            const universeSections = [];
+                            for (const section of this.repl.universe.a) {
+                                if (isCall(section) && isSym(section.h)) {
+                                    universeSections.push(section.h.v);
+                                }
+                            }
+                            if (universeSections.length > 0) {
+                                this.repl.platform.printWithNewline(`\nAvailable sections in universe: ${universeSections.join(', ')}`);
+                            }
+                        }
+                    } else {
+                        this.repl.platform.printWithNewline("\nPattern structure:");
+                        const patternStr = this.repl.formatResult(pattern);
+                        this.repl.platform.printWithNewline(patternStr);
+
+                        this.repl.platform.printWithNewline("\nTarget structure:");
+                        const targetStr = this.repl.formatResult(target);
+                        this.repl.platform.printWithNewline(targetStr);
+                    }
+                }
+
+                return true;
+            }
+
+            // Regular (non-multiline) mode processing
+            // Check for all possible markers and their positions
+            const targetMarker = ':target';
+            const normMarker = ':norm';
+            const rewriteMarker = ':rewrite';
+            const targetIndex = rawArgs.indexOf(targetMarker);
+            const normIndex = rawArgs.indexOf(normMarker);
+            const rewriteIndex = rawArgs.indexOf(rewriteMarker);
+
+            let pattern, target, rewritePattern = null, matchAgainstUniverse = true;
+            let shouldNormalize = false;
+
+            // Parse the pattern first - it's always at the beginning
+            let patternEndPos = rawArgs.length;
+            if (rewriteIndex !== -1) patternEndPos = Math.min(patternEndPos, rewriteIndex);
+            if (targetIndex !== -1) patternEndPos = Math.min(patternEndPos, targetIndex);
+            if (normIndex !== -1) patternEndPos = Math.min(patternEndPos, normIndex);
+
+            const patternText = rawArgs.substring(0, patternEndPos).trim();
+            if (!patternText) {
+                this.repl.platform.printWithNewline("Error: Pattern is required");
+                return true;
+            }
+
+            // Check if we have a :rewrite clause and extract it
+            if (rewriteIndex !== -1) {
+                let rewriteEndPos = rawArgs.length;
+                if (targetIndex > rewriteIndex) rewriteEndPos = targetIndex;
+                if (normIndex > rewriteIndex) rewriteEndPos = Math.min(rewriteEndPos, normIndex);
+
+                const rewriteText = rawArgs.substring(rewriteIndex + rewriteMarker.length, rewriteEndPos).trim();
+                if (!rewriteText) {
+                    this.repl.platform.printWithNewline("Error: Rewrite replacement is required after :rewrite");
+                    return true;
+                }
+                rewritePattern = this.repl.parser.parseString(rewriteText);
+            }
+
+            if (targetIndex !== -1 && (normIndex === -1 || targetIndex < normIndex)) {
+                // :target mode - use expression as-is
+                const targetText = rawArgs.substring(targetIndex + targetMarker.length).trim();
+
+                if (!targetText) {
+                    this.repl.platform.printWithNewline("Error: Target expression is required after :target");
+                    return true;
+                }
+
+                // Parse pattern and target
+                pattern = this.repl.parser.parseString(patternText);
+                target = this.repl.parser.parseString(targetText);
+                matchAgainstUniverse = false;
+            } else if (normIndex !== -1) {
+                // :norm mode - normalize expression before matching
+                const targetText = rawArgs.substring(normIndex + normMarker.length).trim();
+
+                if (!targetText) {
+                    this.repl.platform.printWithNewline("Error: Target expression is required after :norm");
+                    return true;
+                }
+
+                // Parse pattern and target
+                pattern = this.repl.parser.parseString(patternText);
+                const targetExpr = this.repl.parser.parseString(targetText);
+
+                // Normalize the target expression using current rules (but don't display yet)
+                const rules = this.repl.getRules();
+
+                if (this.repl.trace) {
+                    // If trace is on, show minimal normalization info
+                    const { result: normalized, trace } = engine.normalizeWithTrace(
+                        targetExpr,
+                        rules,
+                        this.repl.maxSteps,
+                        false,
+                        foldPrims
+                    );
+                    target = normalized;
+
+                    if (trace.length > 0) {
+                        this.repl.platform.printWithNewline(`Normalizing... applied ${trace.length} steps\n`);
+                    }
+                } else {
+                    target = engine.normalize(targetExpr, rules, this.repl.maxSteps, false, foldPrims);
+                }
+
+                matchAgainstUniverse = false;
+                shouldNormalize = { original: targetExpr, normalized: target };
             } else {
+                // No :target or :norm, match against universe (existing behavior)
+                // patternText was already extracted above
+
+                // Parse as multiple expressions (space-separated patterns inside Universe)
+                // This allows patterns like: :match {Program p_} {Rules r_} rest...
+                const fragments = [];
+                let depth = 0;
+                let start = 0;
+
+                // Simple parser to split on spaces at depth 0
+                for (let i = 0; i < patternText.length; i++) {
+                    const char = patternText[i];
+                    if (char === '{' || char === '(') depth++;
+                    else if (char === '}' || char === ')') depth--;
+                    else if (char === ' ' && depth === 0) {
+                        const fragment = patternText.substring(start, i).trim();
+                        if (fragment) fragments.push(fragment);
+                        start = i + 1;
+                    }
+                }
+                // Add the last fragment
+                const lastFragment = patternText.substring(start).trim();
+                if (lastFragment) fragments.push(lastFragment);
+
+                // Check if the last fragment is already a rest pattern (ends with ...)
+                const hasRestPattern = fragments.length > 0 &&
+                                       fragments[fragments.length - 1].endsWith('...');
+
+                // Check if the first fragment is NOT Program and doesn't start with underscore/variable
+                // If so, prepend ... to skip preceding sections
+                let needsPrefixRest = false;
+                if (fragments.length > 0) {
+                    const firstFragment = fragments[0];
+                    // Check if it's a Call pattern that doesn't start with Program
+                    if (firstFragment.startsWith('{') && !firstFragment.startsWith('{Program')) {
+                        needsPrefixRest = true;
+                    }
+                }
+
+                // Build the full Universe pattern
+                const innerPattern = needsPrefixRest ?
+                    `... ${fragments.join(' ')}` :
+                    fragments.join(' ');
+
+                // If user didn't specify a rest pattern at the end, add ... to match remaining sections
+                const fullPatternText = hasRestPattern ?
+                    `{Universe ${innerPattern}}` :
+                    `{Universe ${innerPattern} ...}`;
+                pattern = this.repl.parser.parseString(fullPatternText);
+                target = this.repl.universe;
+            }
+
+            // Perform the match
+            const env = engine.match(pattern, target);
+
+            // Use helper method to print results (pass normalization info if applicable)
+            const normalizedInfo = (typeof shouldNormalize === 'object') ? shouldNormalize : null;
+            if (!this.printMatchResults(env, rewritePattern, normalizedInfo)) {
                 this.repl.platform.printWithNewline("Pattern did not match");
 
+                // If we normalized, show what we tried to match against
+                if (normalizedInfo) {
+                    this.repl.platform.printWithNewline("\nTarget was normalized:");
+                    this.repl.platform.printWithNewline(`  From: ${this.repl.formatResult(normalizedInfo.original)}`);
+                    this.repl.platform.printWithNewline(`  To:   ${this.repl.formatResult(normalizedInfo.normalized)}`);
+                }
+
                 // Try to give a helpful hint about why it didn't match
-                // Since we wrap in Universe, check the inner patterns
-                if (isCall(pattern) && pattern.a.length > 0) {
-                    // Show what sections are actually in the universe
-                    const universeSections = [];
-                    for (const section of this.repl.universe.a) {
-                        if (isCall(section) && isSym(section.h)) {
-                            universeSections.push(section.h.v);
+                if (matchAgainstUniverse) {
+                    // When matching against universe, check the inner patterns
+                    if (isCall(pattern) && pattern.a.length > 0) {
+                        // Show what sections are actually in the universe
+                        const universeSections = [];
+                        for (const section of this.repl.universe.a) {
+                            if (isCall(section) && isSym(section.h)) {
+                                universeSections.push(section.h.v);
+                            }
+                        }
+
+                        if (universeSections.length > 0) {
+                            this.repl.platform.printWithNewline(`\nAvailable sections in universe: ${universeSections.join(', ')}`);
+                        }
+
+                        // Check if the user is trying to match a non-existent section
+                        const firstPattern = pattern.a[0];
+                        if (isCall(firstPattern) && isSym(firstPattern.h)) {
+                            const sectionName = firstPattern.h.v;
+                            if (!universeSections.includes(sectionName)) {
+                                this.repl.platform.printWithNewline(`\nHint: Section "${sectionName}" not found in universe`);
+                            }
                         }
                     }
+                } else {
+                    // When matching against arbitrary target, show what we're trying to match
+                    this.repl.platform.printWithNewline("\nPattern structure:");
+                    const patternStr = this.repl.formatResult(pattern);
+                    this.repl.platform.printWithNewline(patternStr);
 
-                    if (universeSections.length > 0) {
-                        this.repl.platform.printWithNewline(`\nAvailable sections in universe: ${universeSections.join(', ')}`);
-                    }
+                    this.repl.platform.printWithNewline("\nTarget structure:");
+                    const targetStr = this.repl.formatResult(target);
+                    this.repl.platform.printWithNewline(targetStr);
 
-                    // Check if the user is trying to match a non-existent section
-                    const firstPattern = pattern.a[0];
-                    if (isCall(firstPattern) && isSym(firstPattern.h)) {
-                        const sectionName = firstPattern.h.v;
-                        if (!universeSections.includes(sectionName)) {
-                            this.repl.platform.printWithNewline(`\nHint: Section "${sectionName}" not found in universe`);
+                    // Basic structure comparison
+                    if (isCall(pattern) && !isCall(target)) {
+                        this.repl.platform.printWithNewline("\nHint: Pattern expects a Call expression but target is not");
+                    } else if (isCall(pattern) && isCall(target)) {
+                        if (!deq(pattern.h, target.h)) {
+                            const patternHead = isSym(pattern.h) ? pattern.h.v : this.repl.formatResult(pattern.h);
+                            const targetHead = isSym(target.h) ? target.h.v : this.repl.formatResult(target.h);
+                            this.repl.platform.printWithNewline(`\nHint: Heads don't match - pattern has "${patternHead}", target has "${targetHead}"`);
+                        } else if (pattern.a.length !== target.a.length) {
+                            // Check if pattern uses rest variables
+                            const hasRest = pattern.a.some(arg => isSym(arg) && arg.v.endsWith('...'));
+                            if (!hasRest) {
+                                this.repl.platform.printWithNewline(`\nHint: Argument count mismatch - pattern expects ${pattern.a.length}, target has ${target.a.length}`);
+                            }
                         }
                     }
                 }

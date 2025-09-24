@@ -61,6 +61,20 @@ export class NotebookCommands {
                     this.repl.platform.printWithNewline('Usage: :module <name> or :module multiline');
                     return true;
                 }
+            case 'match':
+            case 'm':
+                // Handle :match command with multiline support
+                const matchArgs = command.slice(cmd.length + 2).trim(); // Get everything after :match
+                if (matchArgs === '') {
+                    // No arguments - enter multiline mode
+                    return false; // Signal that this needs multiline handling
+                } else {
+                    // Has arguments - delegate to original processor for inline match
+                    if (this.originalProcessCommand) {
+                        return this.originalProcessCommand(command);
+                    }
+                    return true;
+                }
             case 'import':
                 return await this.import(args);
             case 'save':
@@ -128,6 +142,23 @@ export class NotebookCommands {
             return true;
         } catch (error) {
             this.repl.platform.printWithNewline(`Error defining module: ${error.message}`);
+            return true;
+        }
+    }
+
+    async processMultilineMatch(content) {
+        // Process multiline match command
+        // The content has been collected by notebook-engine, now delegate to REPL's match command
+        try {
+            // The REPL's matchPattern expects to be called with ['multiline'] as args and the content as rawArgs
+            if (this.repl.commandProcessor && this.repl.commandProcessor.matchPattern) {
+                return await this.repl.commandProcessor.matchPattern(['multiline'], content);
+            } else {
+                this.repl.platform.printWithNewline('Error: Match command not available');
+                return true;
+            }
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error processing match: ${error.message}`);
             return true;
         }
     }

@@ -348,12 +348,14 @@ export class NotebookEngine {
                                        trimmedLine === ':render multiline' ||
                                        trimmedLine === ':render watch multiline' ||
                                        trimmedLine === ':render multiline watch' ||
-                                       trimmedLine === ':module multiline';
+                                       trimmedLine === ':module multiline' ||
+                                       trimmedLine === ':match' ||
+                                       trimmedLine === ':m';
 
                     if (isMultiline) {
                         // Parse the command type and modifiers
                         const parts = trimmedLine.split(' ');
-                        const commandType = parts[0]; // :rule, :render, or :module
+                        const commandType = parts[0]; // :rule, :render, :module, :match, or :m
                         const hasWatch = parts.includes('watch');
                         const hasMultiline = parts.includes('multiline');
 
@@ -407,6 +409,32 @@ export class NotebookEngine {
                                         outputs.push({
                                             type: 'error',
                                             content: `Error in module definition: ${error.message}`,
+                                            traceback: error.stack
+                                        });
+                                    }
+                                }
+                            } else if (commandType === ':match' || commandType === ':m') {
+                                // For match, join with newlines to preserve structure
+                                const matchContent = contentLines.join('\n').trim();
+
+                                if (!matchContent) {
+                                    outputs.push({
+                                        type: 'error',
+                                        content: 'Error: Empty match pattern'
+                                    });
+                                    hasError = true;
+                                } else {
+                                    try {
+                                        // Call processMultilineMatch
+                                        const result = await this.notebookCommands.processMultilineMatch(matchContent);
+                                        if (result === false) {
+                                            outputs.push({ type: 'text', content: 'Match command would exit REPL (not allowed in notebook mode)' });
+                                        }
+                                    } catch (error) {
+                                        hasError = true;
+                                        outputs.push({
+                                            type: 'error',
+                                            content: `Error in match command: ${error.message}`,
                                             traceback: error.stack
                                         });
                                     }
