@@ -1,0 +1,148 @@
+{Module Core/FromJSON
+  {Import Core/FromJSON/Lex as JSONLex open}
+  {Export FromJSON}
+  {Rules
+    {R FromJSON FromJSON(s_) ParseJSONTokens({JSONLex s_})}
+    ;; Just rewrite early if obvious
+    {R FromJSON/Start/Str {ParseJSONTokens {Tokens {TOKSTR s_}}} s_}
+    {R FromJSON/Start/Num {ParseJSONTokens {Tokens {TOKNUM n_}}} {ParseNum n_}}
+    {R FromJSON/Start/True {ParseJSONTokens {Tokens {TOKTRUE}}} True}
+    {R FromJSON/Start/False {ParseJSONTokens {Tokens {TOKFALSE}}} False}
+    {R FromJSON/Start/Null {ParseJSONTokens {Tokens {TOKNULL}}} Empty}
+
+    ;; ------- Real start -----
+    {R FromJSON/Start 
+      {ParseJSONTokens {Tokens f_ t...}} 
+      {Parsing {Annotate {NestId 0 {Stack}} {Depth 0} {AnnotatedTokens} {Curr f_} {Tokens t...}}}
+    }
+    ;; ---------- Annotating braces and brackets -----------
+    {R FromJSON/Parsing/Annotate/Skip
+      {Parsing {Annotate {NestId nid_ stack_} {Depth depth_} {AnnotatedTokens at...} {Curr f_} {Tokens next_ t...}}}
+      {Parsing {Annotate {NestId nid_ stack_} {Depth depth_} {AnnotatedTokens at... f_} {Curr next_} {Tokens t...}}}
+      :guard Not(Or(Eq(f_, {TOKLBRACK}), Eq(f_, {TOKLCURLY}), Eq(f_, {TOKRBRACK}), Eq(f_, {TOKRCURLY})))
+    }
+    {R FromJSON/Parsing/Annotate/Nest
+      {Parsing {Annotate {NestId nid_ {Stack s...}} {Depth depth_} {AnnotatedTokens at...} {Curr {tok_ rest...}} {Tokens next_ t...}}}
+      {Parsing {Annotate {NestId Add(nid_, 1) {Stack s... nid_}} {Depth Add(depth_, 1)} {AnnotatedTokens at... {tok_ nid_ rest...}} {Curr next_} {Tokens t...}}}
+      :guard Or(Eq(tok_, TOKLBRACK), Eq(tok_, TOKLCURLY))
+    }
+    {R FromJSON/Parsing/Annotate/Out
+      {Parsing {Annotate {NestId nid_ {Stack s... last_}} {Depth depth_} {AnnotatedTokens at...} {Curr {tok_ rest...}} {Tokens next_ t...}}}
+      {Parsing {Annotate {NestId nid_ {Stack s...}} {Depth Sub(depth_, 1)} {AnnotatedTokens at... {tok_ last_ rest...}} {Curr next_} {Tokens t...}}}
+      :guard Or(Eq(tok_, TOKRBRACK), Eq(tok_, TOKRCURLY))
+    }
+    {R FromJSON/Parsing/Annotate/Out/Leaf
+      {Parsing {Annotate {NestId nid_ {Stack s... last_}} {Depth depth_} {AnnotatedTokens at...} {Curr {tok_ rest...}} {Tokens}}}
+      {Parsing {CheckNestingDepth {NestId nid_} {Depth Sub(depth_, 1)} {AnnotatedTokens at... {tok_ last_ rest...}}}}
+      :guard Or(Eq(tok_, TOKRBRACK), Eq(tok_, TOKRCURLY))
+    }
+    {R FromJSON/Parsing/Annotate/Out/End
+      {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at...}}}
+      {Parsing {AnnotatedTokens at...}}
+      :guard Eq(depth_, 0)
+    }
+    {R FromJSON/Parsing/Annotate/Out/Err
+      {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at...}}}
+      {Parsing {Error "Not balanced [] or {}"} {AnnotatedTokens at...}}
+      :guard Neq(depth_, 0)
+    }
+    ;; ---------- Parsing -----------
+    {R FromJSON/Parsing/Parse/Start
+      {Parsing {AnnotatedTokens at...}}
+      {Parsing Parse({AnnotatedTokens at...})}
+    }
+
+    {R FromJSON/Parsing/Parse/End/Value
+      {Parsing Parse({AnnotatedTokens {head_ rest...}})}
+      {head_ rest...}
+      :guard Or(Eq(head_, JSONArr), Eq(head_, JSONObj), Eq(head_, JSONStr))
+    }
+
+    ;; -------- Values ----------
+
+    {R FromJSON/Parsing/Parse/Value/Num
+      {ParseValue {Value {tokhead_ n_}}}
+      ParseNum(n_)
+      :guard Eq(tokhead_, TOKNUM)
+    }
+
+    {R FromJSON/Parsing/Parse/Value/String
+      {ParseValue {Value {tokhead_ s_}}}
+      s_
+      :guard Eq(tokhead_, TOKSTR)
+    }
+
+    {R FromJSON/Parsing/Parse/Value/Prim
+      {ParseValue {Value {tokhead_}}}
+      ConvertPrim(tokhead_)
+    }
+
+    {R FromJSON/Parsing/Helpers/ConvertPrim/Null ConvertPrim(TOKNULL) Empty}
+    {R FromJSON/Parsing/Helpers/ConvertPrim/True ConvertPrim(TOKTRUE) True}
+    {R FromJSON/Parsing/Helpers/ConvertPrim/False ConvertPrim(TOKFALSE) False}
+
+    ;; --------- Array parsing ---------
+    {R FromJSON/Parsing/Parse/Array
+      {Parsing Parse({AnnotatedTokens {TOKLBRACK n_} at... {TOKRBRACK n_} rest...})}
+      {Parsing Parse({AnnotatedTokens {ParseArrayItems {ParsedItems} Values(at...)} rest...})}
+    }
+
+    {R FromJSON/Parsing/Parse/Array/EatComma
+       {ParseArrayItems pi_ Values({TOKCOMMA}, rest...)}
+       {ParseArrayItems pi_ Values(rest...)}
+    }
+
+    {R FromJSON/Parsing/Parse/Array/Array
+       {ParseArrayItems {ParsedItems pi...} {Values {TOKLBRACK n_} at... {TOKRBRACK n_} rest...}}
+       {ParseArrayItems {ParsedItems pi... {ParseArrayItems {ParsedItems} Values(at...)}} Values(rest...)}
+    }
+
+    {R FromJSON/Parsing/Parse/Array/Object
+       {ParseArrayItems {ParsedItems pi...} {Values {TOKLCURLY n_} at... {TOKRCURLY n_} rest...}}
+       {ParseArrayItems {ParsedItems pi... {ParseObjectItems {ParsedItems} Values(at...)}} Values(rest...)}
+    }
+
+    {R FromJSON/Parsing/Parse/Array/Item/Prim
+       {ParseArrayItems {ParsedItems pi...} {Values tok_ rest...}}
+       {ParseArrayItems {ParsedItems pi... {ParseValue {Value tok_}} } {Values rest...}}
+    }
+
+    {R FromJSON/Parsing/Parse/Array/Item/End
+       {ParseArrayItems {ParsedItems pi...} {Values}}
+       {JSONArr pi...}
+    }
+
+    ;; --------- Object parsing ---------
+    {R FromJSON/Parsing/Parse/Object
+      {Parsing Parse({AnnotatedTokens {TOKLCURLY n_} at... {TOKRCURLY n_} rest...})}
+      {Parsing Parse({AnnotatedTokens {ParseObjectItems {ParsedItems} Values(at...)} rest...})}
+    }
+
+    {R FromJSON/Parsing/Parse/Object/EatComma
+      {ParseObjectItems pi_ Values({TOKCOMMA}, rest...)}
+      {ParseObjectItems pi_ Values(rest...)}
+    }
+
+    {R FromJSON/Parsing/Parse/Object/KV/Array
+      {ParseObjectItems {ParsedItems pi...} {Values k_ {TOKCOLON} {TOKLBRACK n_} at... {TOKRBRACK n_} rest...}}
+      {ParseObjectItems {ParsedItems pi... {JSONKV {ParseValue {Value k_}} {ParseArrayItems {ParsedItems} Values(at...)}}} Values(rest...)}
+    }
+    {R FromJSON/Parsing/Parse/Object/KV/Object
+      {ParseObjectItems {ParsedItems pi...} {Values k_ {TOKCOLON} {TOKLCURLY n_} at... {TOKRCURLY n_} rest...}}
+      {ParseObjectItems {ParsedItems pi... {JSONKV {ParseValue {Value k_}} {ParseObjectItems {ParsedItems} Values(at...)}}} Values(rest...)}
+    }
+    {R FromJSON/Parsing/Parse/Object/KV
+      {ParseObjectItems {ParsedItems pi...} Values(k_, {TOKCOLON}, v_, rest...)}
+      {ParseObjectItems {ParsedItems pi... {JSONKV {ParseValue {Value k_}} {ParseValue {Value v_}}}} Values(rest...)}
+    }
+    {R FromJSON/Parsing/Parse/Array/Object/End
+       {ParseObjectItems {ParsedItems pi...} {Values}}
+       {JSONObj pi...}
+    }
+    ;; TODO: Think how to propagate this error up — for now looks impossible
+    {R FromJSON/Parsing/Parse/Array/Object/Error
+       {ParseObjectItems {ParsedItems pi...} {Values rest...}}
+       {Error "Malformed JSON object" {ParsedItems pi...} {Values rest...}}
+    }
+  }
+}

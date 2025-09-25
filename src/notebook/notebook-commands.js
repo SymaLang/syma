@@ -75,6 +75,16 @@ export class NotebookCommands {
                     }
                     return true;
                 }
+            case 'trace':
+                // Handle :trace command with multiline support
+                const traceArgs = command.slice(cmd.length + 2).trim(); // Get everything after :trace
+                if (traceArgs === '') {
+                    // No arguments - enter multiline mode for complex expressions
+                    return false; // Signal that this needs multiline handling
+                } else {
+                    // Has arguments - handle inline trace with accordion output
+                    return await this.processInlineTrace(traceArgs);
+                }
             case 'import':
                 return await this.import(args);
             case 'save':
@@ -94,9 +104,10 @@ export class NotebookCommands {
                 const hasWatch = renderArgs.startsWith('watch ') || renderArgs.includes(' watch');
                 const nodeCode = renderArgs.replace(/\bwatch\b/g, '').trim();
                 return this.renderNode(nodeCode, hasWatch);
+            case 'rules':
+                return this.listRules(args);
             case 'universe':
             case 'u':
-            case 'rules':
             case 'clear':
                 // These commands should be handled by the original processor
                 if (this.originalProcessCommand) {
@@ -159,6 +170,139 @@ export class NotebookCommands {
             }
         } catch (error) {
             this.repl.platform.printWithNewline(`Error processing match: ${error.message}`);
+            return true;
+        }
+    }
+
+    async processInlineTrace(exprText) {
+        // Process inline trace command with accordion output
+        try {
+            // Parse and evaluate the expression
+            const expr = this.repl.parser.parseString(exprText);
+            const rules = engine.extractRules(this.repl.universe);
+
+            // Use normalizeWithTrace
+            const { result, trace } = engine.normalizeWithTrace(
+                expr,
+                rules,
+                this.repl.maxSteps || 10000,
+                false,
+                foldPrims
+            );
+
+            // Check if we're in notebook mode
+            const isNotebook = this.repl.platform.isNotebook === true;
+
+            if (isNotebook && this.repl.platform.printStructured && trace && trace.length > 0) {
+                // Format trace output using accordion for notebook
+                const { collapseConsecutiveRules, formatCollapsedTrace, getTraceStats } = await import('../core/trace-utils.js');
+
+                // Output a summary message
+                this.repl.platform.printWithNewline(`Applied ${trace.length} rewrite steps:`);
+
+                // Build accordion sections
+                const sections = [];
+
+                // 1. Trace section (expanded by default)
+                const collapsed = collapseConsecutiveRules(trace);
+                const formatted = formatCollapsedTrace(collapsed);
+                sections.push({
+                    title: `📊 Trace Steps`,
+                    content: formatted,
+                    expanded: true,
+                    persistedExpanded: true
+                });
+
+                // 2. Hot spots section (only if > 20 steps, collapsed by default)
+                if (trace.length > 20) {
+                    const stats = getTraceStats(trace);
+                    if (stats.hotRules.length > 0) {
+                        let hotSpotContent = '';
+                        for (const [rule, count] of stats.hotRules.slice(0, 10)) {
+                            hotSpotContent += `${rule}: ${count}×\n`;
+                        }
+                        sections.push({
+                            title: '🔥 Hot spots',
+                            content: hotSpotContent.trim(),
+                            expanded: false,
+                            persistedExpanded: false
+                        });
+                    }
+                }
+
+                // 3. Result section
+                const resultStr = this.repl.parser.prettyPrint(result);
+                sections.push({
+                    title: '✅ Result',
+                    content: resultStr,
+                    expanded: true,
+                    persistedExpanded: true
+                });
+
+                // Output the accordion
+                this.repl.platform.printStructured({
+                    type: 'accordion',
+                    sections: sections
+                });
+            } else if (trace && trace.length > 0) {
+                // Non-notebook mode or no trace - use regular output
+                const { collapseConsecutiveRules, formatCollapsedTrace } = await import('../core/trace-utils.js');
+                this.repl.platform.printWithNewline(`Applied ${trace.length} rewrite steps:\n`);
+
+                const collapsed = collapseConsecutiveRules(trace);
+                const formatted = formatCollapsedTrace(collapsed);
+                this.repl.platform.printWithNewline(formatted);
+
+                // Show result
+                this.repl.platform.printWithNewline('\nResult:');
+                const resultStr = this.repl.parser.prettyPrint(result);
+                this.repl.platform.printWithNewline(resultStr);
+            } else {
+                // No rewrite steps
+                this.repl.platform.printWithNewline('No rewrite steps applied (expression is already in normal form)\n');
+
+                // Still show the result
+                this.repl.platform.printWithNewline('Result:');
+                const resultStr = this.repl.parser.prettyPrint(result);
+                this.repl.platform.printWithNewline(resultStr);
+            }
+
+            // Store result for reference
+            this.repl.lastResult = result;
+
+            return true;
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error tracing expression: ${error.message}`);
+            return true;
+        }
+    }
+
+    async processMultilineTrace(content) {
+        // Process multiline trace command by evaluating with trace enabled
+        // This mimics how the REPL does it - set trace flags and evaluate
+        try {
+            // Save current trace settings
+            const oldTrace = this.repl.trace;
+            const oldVerbose = this.repl.traceVerbose;
+            const oldDiff = this.repl.traceDiff;
+
+            // Enable trace mode (default is non-verbose, non-diff)
+            this.repl.trace = true;
+            this.repl.traceVerbose = false;
+            this.repl.traceDiff = false;
+
+            // Evaluate the expression with trace enabled
+            // The notebook-engine's executeCode will handle the trace formatting
+            await this.repl.evaluateExpression(content);
+
+            // Restore trace settings
+            this.repl.trace = oldTrace;
+            this.repl.traceVerbose = oldVerbose;
+            this.repl.traceDiff = oldDiff;
+
+            return true;
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error tracing expression: ${error.message}`);
             return true;
         }
     }
@@ -876,6 +1020,7 @@ Available notebook commands:
   :render multiline         Start a multiline UI node (end with :end)
   :render watch multiline   Start a multiline watch UI node (end with :end)
   :trace <expr>             Evaluate with step-by-step trace
+  :trace                    Enter multiline trace mode (end with :end)
   :trace verbose <expr>     Evaluate with verbose trace (shows patterns/rewrites)
   :trace diff <expr>        Evaluate with diff trace (shows only changes)
   :set trace on/off         Enable/disable trace for all evaluations
@@ -935,6 +1080,16 @@ Examples:
       {R "Triple/Apply" {Triple x_} {Mul x_ 3} 500}
     }
   }
+  :end
+
+  ; Trace a complex expression
+  :trace
+  {Let
+    {x 10
+     y 20}
+    {Add
+      {Mul x 2}
+      {Div y 5}}}
   :end
 
   ; Import the notebook module
@@ -1046,6 +1201,85 @@ Examples:
 
         } catch (error) {
             this.repl.platform.printWithNewline(`Error rendering universe: ${error.message}`);
+        }
+        return true;
+    }
+
+    listRules(args) {
+        try {
+            const rules = engine.extractRules(this.repl.universe);
+
+            if (rules.length === 0) {
+                this.repl.platform.printWithNewline("No rules defined");
+                return true;
+            }
+
+            // Check if we're in notebook mode
+            const isNotebook = this.repl.platform.isNotebook === true;
+
+            if (isNotebook && this.repl.platform.printStructured) {
+                // Create structured output for notebook
+                this.repl.platform.printWithNewline(`Found ${rules.length} rules (searchable):`);
+
+                // Create sections for each rule
+                const ruleSections = rules.map((rule, index) => {
+                    // Format rule details
+                    let content = '';
+
+                    // Pattern
+                    const patternStr = this.repl.parser.prettyPrint(rule.lhs, 1);
+                    content += `Pattern:\n  ${patternStr}\n\n`;
+
+                    // Replacement
+                    const replacementStr = this.repl.parser.prettyPrint(rule.rhs, 1);
+                    content += `Replacement:\n  ${replacementStr}`;
+
+                    // Guard (if present)
+                    if (rule.guard) {
+                        const guardStr = this.repl.parser.prettyPrint(rule.guard, 1);
+                        content += `\n\nGuard:\n  ${guardStr}`;
+                    }
+
+                    // Priority (if not default)
+                    if (rule.prio !== 0 && rule.prio !== 500) {
+                        content += `\n\nPriority: ${rule.prio}`;
+                    }
+
+                    // Module tag (if available)
+                    if (rule.module) {
+                        content += `\n\nModule: ${rule.module}`;
+                    }
+
+                    // Create section with rule name as title
+                    const priority = rule.prio !== 0 && rule.prio !== 500 ? ` [${rule.prio}]` : '';
+                    const module = rule.module ? ` (${rule.module})` : '';
+
+                    return {
+                        title: `${rule.name}${priority}${module}`,
+                        content: content,
+                        expanded: false,  // All collapsed by default
+                        searchableTitle: rule.name.toLowerCase()  // For search
+                    };
+                });
+
+                // Send structured output with special type for searchable accordion
+                this.repl.platform.printStructured({
+                    type: 'searchable-accordion',
+                    sections: ruleSections,
+                    placeholder: 'Search rules by name (fuzzy)...',
+                    itemLabel: 'rules'  // Custom label for items
+                });
+
+            } else {
+                // Regular REPL mode - simple list
+                this.repl.platform.printWithNewline(`Rules (${rules.length}):`);
+                for (const rule of rules) {
+                    const priority = rule.prio !== 0 && rule.prio !== 500 ? ` [${rule.prio}]` : '';
+                    this.repl.platform.printWithNewline(`  ${rule.name}${priority}`);
+                }
+            }
+        } catch (error) {
+            this.repl.platform.printWithNewline(`Error listing rules: ${error.message}`);
         }
         return true;
     }

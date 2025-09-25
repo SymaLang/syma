@@ -37,6 +37,7 @@ const moduleNameMap = {
     'core-json.syma': 'Core/Json',
     'core-tojson.syma': 'Core/ToJson',
     'core-fromjson-lex.syma': 'Core/FromJson/Lex',
+    'core-fromjson.syma': 'Core/FromJson',
 };
 
 console.log('Building stdlib modules for browser...');

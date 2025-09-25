@@ -1,8 +1,9 @@
 {Module Core/JSON
-  {Import Core/ToJSON as CR}
-  {Export ToJSON}
+  {Import Core/ToJSON as To}
+  {Import Core/FromJSON as From}
+  {Export FromJSON ToJSON}
   {Rules
-    ; -------- Public entry --------
-    {:rule ToJSON {ToJSON x_} -> {CR/ToJSON x_}}
+    {:rule ToJSON {ToJSON x_} -> {To/ToJSON x_}}
+    {:rule FromJSON {FromJSON s_} -> {From/FromJSON s_} :guard IsStr(s_)}
   }
 }

@@ -1,12 +1,12 @@
-{Module JSON
+{Module Core/FromJSON/Lex
   {Import Core/String as S open}
   {Export}
   {Rules
     ; ================ LEXER ===================
     ; Sanity
-    {R JSONLex/Value/True {JSONLex "true"} {TOKTRUE}}
-    {R JSONLex/Value/False {JSONLex "false"} {TOKFALSE}}
-    {R JSONLex/Value/Null {JSONLex "null"} {TOKNULL}}
+    {R JSONLex/Value/True {JSONLex "true"} Tokens({TOKTRUE})}
+    {R JSONLex/Value/False {JSONLex "false"} Tokens({TOKFALSE})}
+    {R JSONLex/Value/Null {JSONLex "null"} Tokens({TOKNULL})}
 
     {R JSONLex {JSONLex s_} Tokenize(SplitToChars(Unescape(s_))) :guard IsStr(s_)}
     {R Tokenize {Tokenize {Chars chars...}} {TokenizerState Start {Tokens} Chars(chars...)}}

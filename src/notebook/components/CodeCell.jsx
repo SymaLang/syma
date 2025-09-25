@@ -16,6 +16,7 @@ import { registerSymaLanguage, registerCompletionProvider } from '../syma-langua
 import { KeyboardShortcut } from './Tooltip';
 import { ActionButton, CellToolbar, CellControls, useToolbarVisibility } from './CellCommon';
 import { clearCellAccordionStates } from '../utils/accordion-state';
+import { SearchableAccordionOutput } from '../SearchableAccordionOutput';
 // Design tokens removed - using Tailwind classes directly
 
 // Component to render accordion outputs with persistent state
@@ -510,6 +511,14 @@ export function CodeCell({ cell, isSelected, onSelect, onAddBelow, onRunAllAbove
                                 ) : output.type === 'accordion' ? (
                                     <AccordionOutput
                                         sections={output.sections || []}
+                                        cellId={cell.id}
+                                        outputIndex={i}
+                                    />
+                                ) : output.type === 'searchable-accordion' ? (
+                                    <SearchableAccordionOutput
+                                        sections={output.sections || []}
+                                        placeholder={output.placeholder || 'Search...'}
+                                        itemLabel={output.itemLabel || 'items'}
                                         cellId={cell.id}
                                         outputIndex={i}
                                     />

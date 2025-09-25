@@ -2,6 +2,7 @@
   "Algebra/Simplify": "/stdlib/algebra-simplify.json",
   "Core/Effect": "/stdlib/core-effect.json",
   "Core/FromJson/Lex": "/stdlib/core-fromjson-lex.json",
+  "Core/FromJson": "/stdlib/core-fromjson.json",
   "Core/Fun/WithSugar": "/stdlib/core-fun-withsugar.json",
   "Core/Fun": "/stdlib/core-fun.json",
   "Core/Json": "/stdlib/core-json.json",

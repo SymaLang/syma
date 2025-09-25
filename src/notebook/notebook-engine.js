@@ -157,18 +157,20 @@ export class NotebookEngine {
 
             // Normalize the expression with optional trace
             let result;
+            let trace = null;
             if (this.repl.trace) {
-                const { result: normalized, trace } = engine.normalizeWithTrace(
+                const traceResult = engine.normalizeWithTrace(
                     expr,
                     rules,
                     this.repl.maxSteps,
                     false,
                     foldPrims
                 );
-                result = normalized;
+                result = traceResult.result;
+                trace = traceResult.trace;
 
                 // Show trace if available
-                if (trace.length > 0) {
+                if (trace && trace.length > 0) {
                     if (this.repl.traceDiff) {
                         // Diff trace mode - show only changes
                         const { getFocusedDiff } = await import('../core/ast-diff.js');
@@ -251,37 +253,61 @@ export class NotebookEngine {
 
                         outputs.push({ type: 'text', content: '═'.repeat(61) + '\n\n', volatile: true });
                     } else {
-                        // Simple trace mode - with collapsing
-                        const { collapseConsecutiveRules, formatCollapsedTrace } = await import('../core/trace-utils.js');
-                        outputs.push({ type: 'text', content: '\nTrace:\n', volatile: true });
+                        // Simple trace mode - with collapsing, using accordion output
+                        const { collapseConsecutiveRules, formatCollapsedTrace, getTraceStats } = await import('../core/trace-utils.js');
 
-                        const collapsed = collapseConsecutiveRules(trace);
-                        const formatted = formatCollapsedTrace(collapsed);
+                        // Output a summary message
                         outputs.push({
                             type: 'text',
-                            content: formatted + '\n',
+                            content: `Applied ${trace.length} rewrite steps:`,
                             volatile: true
                         });
 
-                        // Show hot spots if there are many steps
+                        // Build accordion sections
+                        const sections = [];
+
+                        // 1. Trace section (expanded by default)
+                        const collapsed = collapseConsecutiveRules(trace);
+                        const formatted = formatCollapsedTrace(collapsed);
+                        sections.push({
+                            title: `📊 Trace Steps`,
+                            content: formatted,
+                            expanded: true,
+                            persistedExpanded: true
+                        });
+
+                        // 2. Hot spots section (only if > 20 steps, collapsed by default)
                         if (trace.length > 20) {
-                            const { getTraceStats } = await import('../core/trace-utils.js');
                             const stats = getTraceStats(trace);
                             if (stats.hotRules.length > 0) {
-                                let hotSpotOutput = '\nHot spots:\n';
-                                for (const [rule, count] of stats.hotRules.slice(0, 5)) {
-                                    hotSpotOutput += `  ${rule}: ${count}×\n`;
+                                let hotSpotContent = '';
+                                for (const [rule, count] of stats.hotRules.slice(0, 10)) {
+                                    hotSpotContent += `${rule}: ${count}×\n`;
                                 }
-                                outputs.push({
-                                    type: 'text',
-                                    content: hotSpotOutput,
-                                    volatile: true
+                                sections.push({
+                                    title: '🔥 Hot spots',
+                                    content: hotSpotContent.trim(),
+                                    expanded: false,
+                                    persistedExpanded: false
                                 });
                             }
                         }
 
-                        outputs.push({ type: 'text', content: '\n', volatile: true });
+                        // The result will be added later as a separate output
+                        // For now, just output the trace sections as an accordion
+                        outputs.push({
+                            type: 'accordion',
+                            sections: sections,
+                            volatile: true
+                        });
                     }
+                } else if (trace) {
+                    // No rewrite steps applied - expression was already in normal form
+                    outputs.push({
+                        type: 'text',
+                        content: 'No rewrite steps applied (expression is already in normal form)',
+                        volatile: true
+                    });
                 }
             } else {
                 result = engine.normalize(expr, rules, this.repl.maxSteps, false, foldPrims);
@@ -296,10 +322,29 @@ export class NotebookEngine {
             // Wait for any effects
             await this.repl.waitForEffects();
 
-            outputs.push({
-                type: 'result',
-                content: output
-            });
+            // If we have trace output, add the result to the accordion
+            // Otherwise output it normally
+            if (this.repl.trace && trace && trace.length > 0 && !this.repl.traceDiff && !this.repl.traceVerbose) {
+                // Find the last accordion output and add the result section
+                for (let i = outputs.length - 1; i >= 0; i--) {
+                    if (outputs[i].type === 'accordion') {
+                        // Add result as the last section (expanded)
+                        outputs[i].sections.push({
+                            title: '✅ Result',
+                            content: output,
+                            expanded: true,
+                            persistedExpanded: true
+                        });
+                        break;
+                    }
+                }
+            } else {
+                // Normal result output
+                outputs.push({
+                    type: 'result',
+                    content: output
+                });
+            }
 
         } catch (error) {
             hasError = true;
@@ -372,7 +417,8 @@ export class NotebookEngine {
                                        trimmedLine === ':render multiline watch' ||
                                        trimmedLine === ':module multiline' ||
                                        trimmedLine === ':match' ||
-                                       trimmedLine === ':m';
+                                       trimmedLine === ':m' ||
+                                       trimmedLine === ':trace';
 
                     if (isMultiline) {
                         // Parse the command type and modifiers
@@ -457,6 +503,130 @@ export class NotebookEngine {
                                         outputs.push({
                                             type: 'error',
                                             content: `Error in match command: ${error.message}`,
+                                            traceback: error.stack
+                                        });
+                                    }
+                                }
+                            } else if (commandType === ':trace') {
+                                // For trace, join with newlines to preserve complex expressions
+                                const traceContent = contentLines.join('\n').trim();
+
+                                if (!traceContent) {
+                                    outputs.push({
+                                        type: 'error',
+                                        content: 'Error: Empty expression to trace'
+                                    });
+                                    hasError = true;
+                                } else {
+                                    try {
+                                        // Save current trace settings
+                                        const oldTrace = this.repl.trace;
+                                        const oldVerbose = this.repl.traceVerbose;
+                                        const oldDiff = this.repl.traceDiff;
+
+                                        // Enable trace mode
+                                        this.repl.trace = true;
+                                        this.repl.traceVerbose = false;
+                                        this.repl.traceDiff = false;
+
+                                        // Parse and evaluate the expression directly here
+                                        // This ensures it goes through the notebook-engine's trace formatting
+                                        const expr = this.repl.parser.parseString(traceContent);
+                                        const rules = engine.extractRules(this.repl.universe);
+
+                                        // Use normalizeWithTrace
+                                        const { result, trace } = engine.normalizeWithTrace(
+                                            expr,
+                                            rules,
+                                            this.repl.maxSteps || 10000,
+                                            false,
+                                            foldPrims
+                                        );
+
+                                        // Now format the trace output using accordion
+                                        if (trace && trace.length > 0) {
+                                            const { collapseConsecutiveRules, formatCollapsedTrace, getTraceStats } = await import('../core/trace-utils.js');
+
+                                            // Output a summary message
+                                            outputs.push({
+                                                type: 'text',
+                                                content: `Applied ${trace.length} rewrite steps:`,
+                                                volatile: true
+                                            });
+
+                                            // Build accordion sections
+                                            const sections = [];
+
+                                            // 1. Trace section (expanded by default)
+                                            const collapsed = collapseConsecutiveRules(trace);
+                                            const formatted = formatCollapsedTrace(collapsed);
+                                            sections.push({
+                                                title: `📊 Trace Steps`,
+                                                content: formatted,
+                                                expanded: true,
+                                                persistedExpanded: true
+                                            });
+
+                                            // 2. Hot spots section (only if > 20 steps, collapsed by default)
+                                            if (trace.length > 20) {
+                                                const stats = getTraceStats(trace);
+                                                if (stats.hotRules.length > 0) {
+                                                    let hotSpotContent = '';
+                                                    for (const [rule, count] of stats.hotRules.slice(0, 10)) {
+                                                        hotSpotContent += `${rule}: ${count}×\n`;
+                                                    }
+                                                    sections.push({
+                                                        title: '🔥 Hot spots',
+                                                        content: hotSpotContent.trim(),
+                                                        expanded: false,
+                                                        persistedExpanded: false
+                                                    });
+                                                }
+                                            }
+
+                                            // 3. Result section
+                                            const resultStr = this.repl.formatResult(result);
+                                            sections.push({
+                                                title: '✅ Result',
+                                                content: resultStr,
+                                                expanded: true,
+                                                persistedExpanded: true
+                                            });
+
+                                            // Output the accordion
+                                            outputs.push({
+                                                type: 'accordion',
+                                                sections: sections,
+                                                volatile: true
+                                            });
+                                        } else {
+                                            // No rewrite steps
+                                            outputs.push({
+                                                type: 'text',
+                                                content: 'No rewrite steps applied (expression is already in normal form)',
+                                                volatile: true
+                                            });
+
+                                            // Still show the result
+                                            const resultStr = this.repl.formatResult(result);
+                                            outputs.push({
+                                                type: 'result',
+                                                content: resultStr
+                                            });
+                                        }
+
+                                        // Store result for reference
+                                        this.repl.lastResult = result;
+
+                                        // Restore trace settings
+                                        this.repl.trace = oldTrace;
+                                        this.repl.traceVerbose = oldVerbose;
+                                        this.repl.traceDiff = oldDiff;
+                                    } catch (error) {
+                                        hasError = true;
+                                        outputs.push({
+                                            type: 'error',
+                                            content: `Error in trace command: ${error.message}`,
                                             traceback: error.stack
                                         });
                                     }
