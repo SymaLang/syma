@@ -7,6 +7,7 @@
 import { Sym, Str, Num, Call, isSym, isCall, isStr, isNum, deq } from '../ast-helpers.js';
 import * as engine from '../core/engine.js';
 import { foldPrims } from '../primitives.js';
+import { parseProgramArgsToKV, parseArgsString } from '../utils/args-parser.js';
 
 export class CommandProcessor {
     constructor(repl) {
@@ -82,8 +83,9 @@ Commands:
 File operations:
   :save <file>              Save universe to file (.syma or .json)
   :load <file>              Load universe from file
-  :bundle <file>            Bundle module and dependencies into universe
-  :reload                   Re-run last :bundle or :load command
+  :bundle <file> [:args ...]  Bundle module with optional arguments
+                            Example: :bundle demo.syma :args --input data.txt
+  :reload                   Re-run last :bundle or :load command (with args)
   :export <module>          Export single module to file
   :import <file>            Import module and dependencies into current universe
 
@@ -182,26 +184,54 @@ Debugging:
             return true;
         }
 
-        const { command, filename } = this.lastFileOperation;
-        this.repl.platform.printWithNewline(`Reloading: :${command} ${filename}`);
+        const { command, filename, programArgs } = this.lastFileOperation;
+
+        // Reconstruct the command string for display
+        let commandStr = `:${command} ${filename}`;
+        if (programArgs && programArgs.length > 0) {
+            commandStr += ` :args ${programArgs.join(' ')}`;
+        }
+        this.repl.platform.printWithNewline(`Reloading: ${commandStr}`);
 
         // Re-execute the last command
         if (command === 'load') {
             return await this.load([filename]);
         } else if (command === 'bundle') {
-            return await this.bundle([filename]);
+            // Reconstruct rawArgs with :args if needed
+            let rawArgs = filename;
+            if (programArgs && programArgs.length > 0) {
+                rawArgs += ` :args ${programArgs.join(' ')}`;
+            }
+            return await this.bundle([filename], rawArgs);
         }
         return true;
     }
 
     async bundle(args, rawArgs) {
         if (args.length === 0) {
-            this.repl.platform.printWithNewline("Usage: :bundle <module-file>");
+            this.repl.platform.printWithNewline("Usage: :bundle <module-file> [:args <arguments>]");
             this.repl.platform.printWithNewline("Example: :bundle src/modules/app-main.syma");
+            this.repl.platform.printWithNewline("Example: :bundle demo.syma :args --input data.txt --verbose");
             return true;
         }
 
-        const filename = args[0];
+        // Check if :args is present in rawArgs
+        const argsMarker = ':args';
+        const argsIndex = rawArgs.indexOf(argsMarker);
+        let filename = args[0];
+        let programArgs = [];
+
+        if (argsIndex !== -1) {
+            // Extract filename (everything before :args)
+            filename = rawArgs.substring(0, argsIndex).trim();
+
+            // Extract and parse arguments after :args
+            const argsString = rawArgs.substring(argsIndex + argsMarker.length).trim();
+            if (argsString) {
+                programArgs = parseArgsString(argsString);
+            }
+        }
+
         try {
             // Use child_process to run the compiler
             const { execSync } = await import('child_process');
@@ -253,6 +283,42 @@ Debugging:
 
             // Load the bundled universe
             this.repl.universe = universe;
+
+            // Inject arguments if provided and program has {Args} section
+            if (programArgs.length > 0) {
+                const program = engine.getProgram(this.repl.universe);
+                if (program) {
+                    // Find the {Args} node in the program
+                    const argsIndex = program.a.findIndex(n =>
+                        isCall(n) && isSym(n.h) && n.h.v === 'Args'
+                    );
+
+                    if (argsIndex !== -1) {
+                        // Parse arguments into KV nodes
+                        const kvNodes = parseProgramArgsToKV(programArgs);
+
+                        // Create new program with injected arguments
+                        const newProgram = {
+                            ...program,
+                            a: [...program.a]
+                        };
+
+                        // Replace the Args node with Args containing the KV pairs
+                        newProgram.a[argsIndex] = {
+                            k: 'Call',
+                            h: { k: 'Sym', v: 'Args' },
+                            a: kvNodes
+                        };
+
+                        // Update universe with new program
+                        this.repl.universe = engine.setProgram(this.repl.universe, newProgram);
+                        this.repl.platform.printWithNewline(`Injected ${kvNodes.length} argument(s) into {Args} section`);
+                    } else {
+                        this.repl.platform.printWithNewline(`Note: Program has no {Args} section, skipping argument injection`);
+                    }
+                }
+            }
+
             this.repl.universe = engine.enrichProgramWithEffects(this.repl.universe);
             // Apply RuleRules to transform the Universe permanently
             this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
@@ -260,8 +326,12 @@ Debugging:
             this.repl.platform.printWithNewline(`Module ${moduleName} bundled and loaded successfully\n`);
             // this.repl.platform.printWithNewline(`Found ${allFiles.length} module files\n`);
 
-            // Save for :reload
-            this.lastFileOperation = { command: 'bundle', filename };
+            // Save for :reload (including args if present)
+            this.lastFileOperation = {
+                command: 'bundle',
+                filename,
+                programArgs: programArgs  // Save args for reload
+            };
 
             // Don't automatically process effects on bundle - let :norm do that
             // This gives user control over when to run the program

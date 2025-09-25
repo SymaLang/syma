@@ -1,0 +1,12 @@
+{Module
+  Demo/Args
+  {Export}
+  {Program
+    {EffQueue}
+    {Effects {Pending} {Inbox}}
+    {Args}
+  }
+  {Rules
+    
+  }
+}

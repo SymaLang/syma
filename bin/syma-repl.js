@@ -22,6 +22,7 @@ import * as engine from '../src/core/engine.js';
 import { foldPrims } from '../src/primitives.js';
 import { createEffectsProcessor } from '../src/effects/processor.js';
 import { isCall, isSym } from '../src/ast-helpers.js';
+import { parseProgramArgsToKV } from '../src/utils/args-parser.js';
 
 const require = createRequire(import.meta.url);
 const packageInfo = require('../package.json');
@@ -39,11 +40,22 @@ function parseArgs() {
         runFile: null,  // New: file to run directly
         executeExpr: null,
         maxSteps: 10000,
-        replMode: true   // Default to REPL mode
+        replMode: true,   // Default to REPL mode
+        programArgs: []  // Arguments to pass to the program (after --)
     };
 
-    for (let i = 0; i < args.length; i++) {
-        const arg = args[i];
+    // Check if there's a -- separator
+    const separatorIndex = args.indexOf('--');
+    let mainArgs = args;
+
+    if (separatorIndex !== -1) {
+        // Split arguments: before -- for syma, after -- for the program
+        mainArgs = args.slice(0, separatorIndex);
+        options.programArgs = args.slice(separatorIndex + 1);
+    }
+
+    for (let i = 0; i < mainArgs.length; i++) {
+        const arg = mainArgs[i];
 
         switch (arg) {
             case '-h':
@@ -66,14 +78,14 @@ function parseArgs() {
                 break;
 
             case '--history':
-                if (i + 1 < args.length) {
-                    options.historyFile = args[++i];
+                if (i + 1 < mainArgs.length) {
+                    options.historyFile = mainArgs[++i];
                 }
                 break;
 
             case '--rc':
-                if (i + 1 < args.length) {
-                    options.rcFile = args[++i];
+                if (i + 1 < mainArgs.length) {
+                    options.rcFile = mainArgs[++i];
                 }
                 break;
 
@@ -83,22 +95,22 @@ function parseArgs() {
 
             case '-l':
             case '--load':
-                if (i + 1 < args.length) {
-                    options.loadFile = args[++i];
+                if (i + 1 < mainArgs.length) {
+                    options.loadFile = mainArgs[++i];
                 }
                 break;
 
             case '-e':
             case '--eval':
-                if (i + 1 < args.length) {
-                    options.executeExpr = args[++i];
+                if (i + 1 < mainArgs.length) {
+                    options.executeExpr = mainArgs[++i];
                     options.replMode = false;
                 }
                 break;
 
             case '--max-steps':
-                if (i + 1 < args.length) {
-                    options.maxSteps = parseInt(args[++i]);
+                if (i + 1 < mainArgs.length) {
+                    options.maxSteps = parseInt(mainArgs[++i]);
                 }
                 break;
 
@@ -122,7 +134,7 @@ function showHelp() {
 Syma Runtime - Execute Syma Programs and Interactive REPL
 
 Usage:
-  syma [options] [file]            # Run a program or start REPL
+  syma [options] [file] [-- args]  # Run a program with arguments
   syma <file.syma>                 # Run a Syma program
   syma <file.json>                 # Run compiled universe
   syma                             # Start interactive REPL
@@ -139,6 +151,13 @@ Options:
   --no-rc              Don't load RC file
   --max-steps <n>      Maximum normalization steps (default: 10000)
 
+Program Arguments:
+  Arguments after -- are passed to the program's {Args} section
+  --key value          Creates {KV "key" "value"}
+  --flag               Creates {KV "flag" Empty}
+  -x value             Creates {KV "x" "value"}
+  positional           Creates {KV 0 "positional"} (numbered)
+
 REPL Commands:
   :help                Show available commands
   :quit                Exit the REPL
@@ -150,6 +169,7 @@ Examples:
   syma -e "{Add 1 2}"              # Evaluate expression
   syma -l todo.syma                # Load file and start REPL
   syma --trace program.syma        # Run with tracing enabled
+  syma prog.syma -- --input file.txt --verbose  # Run with args
 `);
 }
 
@@ -242,6 +262,44 @@ async function runProgram(filePath, platform, options) {
         universe = await compileSymaFile(filePath, platform);
     } else {
         throw new Error(`Unknown file type: ${filePath}`);
+    }
+
+    // Inject command-line arguments if the program has an {Args} section
+    if (options.programArgs && options.programArgs.length > 0) {
+        const program = engine.getProgram(universe);
+        if (program) {
+            // Find the {Args} node in the program
+            const argsIndex = program.a.findIndex(n =>
+                isCall(n) && isSym(n.h) && n.h.v === 'Args'
+            );
+
+            if (argsIndex !== -1) {
+                // Parse arguments into KV nodes
+                const kvNodes = parseProgramArgsToKV(options.programArgs);
+
+                // Create new program with injected arguments
+                const newProgram = {
+                    ...program,
+                    a: [...program.a]
+                };
+
+                // Replace the Args node with Args containing the KV pairs
+                newProgram.a[argsIndex] = {
+                    k: 'Call',
+                    h: { k: 'Sym', v: 'Args' },
+                    a: kvNodes
+                };
+
+                // Update universe with new program
+                universe = engine.setProgram(universe, newProgram);
+
+                if (options.trace) {
+                    platform.print(`Injected ${kvNodes.length} argument(s) into {Args} section\n`);
+                }
+            } else if (options.trace) {
+                platform.print(`Note: Program has no {Args} section, skipping argument injection\n`);
+            }
+        }
     }
 
     // Ensure universe has Effects structure
