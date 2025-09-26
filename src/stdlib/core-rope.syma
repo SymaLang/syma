@@ -1,4 +1,5 @@
 {Module Core/Rope
+  {Import Core/}
   {Export RopeEmit RopeCat RopeCat3 Cat4}
   {Rules
     {:rule Rope/id/left  {RopeCat "" x_}              -> x_}

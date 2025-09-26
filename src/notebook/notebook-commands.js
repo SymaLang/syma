@@ -453,6 +453,35 @@ export class NotebookCommands {
             }
         }
 
+        // IMPORTANT: Auto-import Core/Syntax/Global before ANY module import
+        // This ensures all modules get proper transformations
+        const globalSyntaxName = 'Core/Syntax/Global';
+        if (!this.globalSyntaxImported && moduleName &&
+            moduleName.toLowerCase() !== globalSyntaxName.toLowerCase()) {
+            // Load stdlib module index to check if it exists
+            const index = await this.loadModuleIndex();
+
+            // Check for Core/Syntax/Global with case-insensitive matching
+            let globalSyntaxPath = index[globalSyntaxName];
+            let actualGlobalSyntaxName = globalSyntaxName;
+
+            if (!globalSyntaxPath) {
+                // Try case-insensitive search
+                const lowerName = globalSyntaxName.toLowerCase();
+                const foundName = Object.keys(index).find(m => m.toLowerCase() === lowerName);
+                if (foundName) {
+                    globalSyntaxPath = index[foundName];
+                    actualGlobalSyntaxName = foundName;
+                }
+            }
+
+            if (globalSyntaxPath) {
+                this.repl.platform.printWithNewline(`Auto-importing ${actualGlobalSyntaxName}...`);
+                await this.importModule(actualGlobalSyntaxName, globalSyntaxPath, { open: false, macro: true });
+                this.globalSyntaxImported = true;
+            }
+        }
+
         if (!moduleName) {
             this.repl.platform.printWithNewline("Usage: :import <module-name> [open] [macro]");
             this.repl.platform.printWithNewline("Examples:");
@@ -487,15 +516,6 @@ export class NotebookCommands {
 
             // Load stdlib module index
             const index = await this.loadModuleIndex();
-
-            // First, ensure Core/Syntax/Global is imported (if it exists and not already imported)
-            // This is imported into the MAIN UNIVERSE, not per-module
-            const globalSyntaxName = 'Core/Syntax/Global';
-            if (!this.globalSyntaxImported && index[globalSyntaxName] && moduleName !== globalSyntaxName) {
-                this.repl.platform.printWithNewline(`Auto-importing ${globalSyntaxName}...`);
-                await this.importModule(globalSyntaxName, index[globalSyntaxName], { open: false, macro: true });
-                this.globalSyntaxImported = true;
-            }
 
             // Check if module exists in stdlib
             const modulePath = index[moduleName];
@@ -564,8 +584,22 @@ export class NotebookCommands {
                 } else {
                     // Import from stdlib
                     const index = await this.loadModuleIndex();
-                    const modulePath = index[imp.module];
+                    let modulePath = index[imp.module];
+
+                    // If not found, try case variations (like in main import function)
+                    if (!modulePath) {
+                        const lowerName = imp.module.toLowerCase();
+                        const foundName = Object.keys(index).find(m => m.toLowerCase() === lowerName);
+
+                        if (foundName) {
+                            modulePath = index[foundName];
+                            this.repl.platform.printWithNewline(`  Note: Using ${foundName} for ${imp.module}`);
+                        }
+                    }
+
                     if (modulePath) {
+                        // Use the original module name from the import statement, not the case-corrected one
+                        // This ensures processOpenImport works correctly with the symbols in the compiled module
                         await this.importModule(imp.module, modulePath, importModifiers);
                     } else {
                         this.repl.platform.printWithNewline(`  Warning: Dependency ${imp.module} not found`);
@@ -585,31 +619,46 @@ export class NotebookCommands {
                 processedUniverse = this.processOpenImport(compiledUniverse, moduleName);
             }
 
+            // Create a temporary universe with the imported rules and current RuleRules
+            // This allows us to apply Core/Syntax/Global transformations to the imported module
+            const tempUniverse = JSON.parse(JSON.stringify(processedUniverse));
+            const currentRuleRules = engine.findSection(this.repl.universe, "RuleRules");
+
+            if (currentRuleRules && isCall(currentRuleRules) && currentRuleRules.a.length > 0) {
+                // Replace or add RuleRules section in temp universe
+                let tempRuleRules = engine.findSection(tempUniverse, "RuleRules");
+                if (!tempRuleRules) {
+                    tempUniverse.a = tempUniverse.a || [];
+                    tempUniverse.a.push(currentRuleRules);
+                } else {
+                    // Merge current RuleRules into temp universe
+                    for (const rr of currentRuleRules.a) {
+                        tempRuleRules.a.push(rr);
+                    }
+                }
+
+                // Apply RuleRules to transform the imported module's rules
+                processedUniverse = engine.applyRuleRules(tempUniverse, foldPrims);
+            }
+
             // Merge into current universe
-            this.mergeUniverses(processedUniverse, moduleName, modifiers);
+            const mergeStats = this.mergeUniverses(processedUniverse, moduleName, modifiers);
 
             // Apply RuleRules to transform the Universe permanently after merge
             this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
 
             this.repl.platform.printWithNewline(`Notebook module ${moduleName} imported successfully`);
 
-            // Show what was imported - count from the actual universe after merging
-            const rulesAfter = engine.extractRules(this.repl.universe);
-            const rulesBefore = engine.extractRules(this.repl.universe); // This is wrong, but keeping structure
-
-            // Count rules that belong to this module
-            const rulesNode = engine.findSection(this.repl.universe, "Rules");
-            let moduleRuleCount = 0;
-            if (rulesNode && isCall(rulesNode)) {
-                for (const rule of rulesNode.a) {
-                    if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' &&
-                        rule.a.length > 0 && isStr(rule.a[0]) && rule.a[0].v === moduleName) {
-                        moduleRuleCount++;
-                    }
-                }
+            // Report what was imported
+            if (mergeStats.rulesAdded > 0) {
+                this.repl.platform.printWithNewline(`Added ${mergeStats.rulesAdded} rules`);
+            } else if (mergeStats.rulesSkipped > 0) {
+                this.repl.platform.printWithNewline(`All ${mergeStats.rulesSkipped} rules already exist in universe`);
             }
 
-            this.repl.platform.printWithNewline(`Added ${moduleRuleCount} rules from ${moduleName}`);
+            if (mergeStats.ruleRulesAdded > 0) {
+                this.repl.platform.printWithNewline(`Added ${mergeStats.ruleRulesAdded} meta-rules`);
+            }
 
         } catch (error) {
             throw new Error(`Failed to import notebook module: ${error.message}`);
@@ -641,17 +690,78 @@ export class NotebookCommands {
                 processedUniverse = this.processOpenImport(compiledUniverse, moduleName);
             }
 
-            // Merge into current universe
-            this.mergeUniverses(processedUniverse, moduleName, modifiers);
+            // Create a temporary universe with the imported rules and current RuleRules
+            // This allows us to apply Core/Syntax/Global transformations to the imported module
+            const tempUniverse = JSON.parse(JSON.stringify(processedUniverse));
+            const currentRuleRules = engine.findSection(this.repl.universe, "RuleRules");
 
-            // Apply RuleRules to transform the Universe permanently after merge
+            if (currentRuleRules && isCall(currentRuleRules) && currentRuleRules.a.length > 0) {
+                // Replace or add RuleRules section in temp universe
+                let tempRuleRules = engine.findSection(tempUniverse, "RuleRules");
+                if (!tempRuleRules) {
+                    tempUniverse.a = tempUniverse.a || [];
+                    tempUniverse.a.push(currentRuleRules);
+                } else {
+                    // Merge current RuleRules into temp universe
+                    for (const rr of currentRuleRules.a) {
+                        tempRuleRules.a.push(rr);
+                    }
+                }
+
+                // Apply RuleRules to transform the imported module's rules
+                processedUniverse = engine.applyRuleRules(tempUniverse, foldPrims);
+            }
+
+            // Merge into current universe (this may skip duplicates)
+            const mergeStats = this.mergeUniverses(processedUniverse, moduleName, modifiers);
+
+            // Apply RuleRules again to the merged universe for any new transformations
             this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
+
+            // If we just imported Core/Syntax/Global, we need to re-apply transformations to ALL rules
+            // This handles the case where notebook modules were imported before Core/Syntax/Global existed
+            if (moduleName.toLowerCase() === 'core/syntax/global') {
+                // Mark that we've imported Core/Syntax/Global (regardless of how it was imported)
+                this.globalSyntaxImported = true;
+
+                this.repl.platform.printWithNewline(`Applying ${moduleName} transformations to all existing rules...`);
+                // Apply RuleRules multiple times to ensure all transformations are complete
+                let prevUniverse = null;
+                let iterations = 0;
+                const maxIterations = 10;
+
+                while (iterations < maxIterations) {
+                    prevUniverse = JSON.stringify(this.repl.universe);
+                    this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
+                    iterations++;
+
+                    // If universe didn't change, we're done
+                    if (JSON.stringify(this.repl.universe) === prevUniverse) {
+                        break;
+                    }
+                }
+
+                this.repl.platform.printWithNewline(`Applied transformations in ${iterations} iteration${iterations !== 1 ? 's' : ''}`);
+            }
 
             this.repl.platform.printWithNewline(`Module ${moduleName} imported successfully`);
 
-            // Show what was imported
-            const importedRules = engine.extractRules(processedUniverse);
-            this.repl.platform.printWithNewline(`Added ${importedRules.length} rules from ${moduleName} and its dependencies`);
+            // Report what was imported
+            if (mergeStats.rulesAdded > 0) {
+                this.repl.platform.printWithNewline(`Added ${mergeStats.rulesAdded} new rules`);
+            } else if (mergeStats.rulesSkipped > 0) {
+                this.repl.platform.printWithNewline(`All ${mergeStats.rulesSkipped} rules already exist in universe`);
+            } else {
+                // Check if the module actually has rules
+                const moduleRules = engine.extractRules(compiledUniverse);
+                if (moduleRules.length === 0) {
+                    this.repl.platform.printWithNewline(`Module has no rules`);
+                }
+            }
+
+            if (mergeStats.ruleRulesAdded > 0) {
+                this.repl.platform.printWithNewline(`Added ${mergeStats.ruleRulesAdded} meta-rules`);
+            }
 
         } catch (error) {
             throw new Error(`Failed to load module: ${error.message}`);
@@ -819,6 +929,13 @@ export class NotebookCommands {
             this.repl.pushUndo();
         }
 
+        const stats = {
+            rulesAdded: 0,
+            rulesSkipped: 0,
+            ruleRulesAdded: 0,
+            ruleRulesSkipped: 0
+        };
+
         // Extract rules from imported universe
         const importedRules = engine.findSection(importedUniverse, "Rules");
         const hasRules = importedRules && isCall(importedRules) && importedRules.a.length > 0;
@@ -830,7 +947,7 @@ export class NotebookCommands {
         // If module has neither Rules nor RuleRules, warn and return
         if (!hasRules && !hasRuleRules) {
             this.repl.platform.printWithNewline(`Warning: No rules or meta-rules found in module ${moduleName}`);
-            return;
+            return stats;
         }
 
         // Get current rules section (or create if missing)
@@ -891,9 +1008,6 @@ export class NotebookCommands {
             }
 
             // Merge imported rules, checking for conflicts
-            let addedCount = 0;
-            let skippedCount = 0;
-
             for (const importedRule of importedRules.a) {
                 let ruleName = null;
 
@@ -912,7 +1026,7 @@ export class NotebookCommands {
 
                 // Skip if rule already exists
                 if (ruleName && existingRuleNames.has(ruleName)) {
-                    skippedCount++;
+                    stats.rulesSkipped++;
                     continue;
                 }
 
@@ -921,11 +1035,11 @@ export class NotebookCommands {
                 if (ruleName) {
                     existingRuleNames.add(ruleName);
                 }
-                addedCount++;
+                stats.rulesAdded++;
             }
 
-            if (skippedCount > 0) {
-                this.repl.platform.printWithNewline(`(Skipped ${skippedCount} rules that already exist)`);
+            if (stats.rulesSkipped > 0) {
+                this.repl.platform.printWithNewline(`(Skipped ${stats.rulesSkipped} rules that already exist)`);
             }
         }
 
@@ -963,9 +1077,10 @@ export class NotebookCommands {
             // Add imported RuleRules
             for (const rr of importedRuleRules.a) {
                 currentRuleRules.a.push(rr);
+                stats.ruleRulesAdded++;
             }
 
-            this.repl.platform.printWithNewline(`Added ${importedRuleRules.a.length} meta-rules`);
+            this.repl.platform.printWithNewline(`Added ${stats.ruleRulesAdded} meta-rules`);
         }
 
         // Also merge MacroScopes if present
@@ -1026,6 +1141,8 @@ export class NotebookCommands {
                 }
             }
         }
+
+        return stats;
     }
 
     async save(args) {
