@@ -30,6 +30,12 @@
     {:rule J/obj/joinN {JObjJoin kv_ kv2_ rest...} -> {RopeCat3 {JPair kv_} ", " {JObjJoin kv2_ rest...}}}
 
     ; -------- Public entry --------
-    {:rule ToJSON {ToJSON x_} -> {RopeEmit {JVal x_}}}
+    {R ToJSON/a {ToJSON x_} {RopeEmit {JVal x_} } {IsNum {Frozen x_}}}
+    {R ToJSON/b {ToJSON x_} {RopeEmit {JVal x_} } {IsStr {Frozen x_}}}
+    {R ToJSON/c {ToJSON x_} {RopeEmit {JVal x_} } {Eq Empty {Frozen x_}}}
+    {R ToJSON/d {ToJSON x_} {RopeEmit {JVal x_} } {Eq True {Frozen x_}}}
+    {R ToJSON/e {ToJSON x_} {RopeEmit {JVal x_} } {Eq False {Frozen x_}}}
+    {R ToJSON/f {ToJSON {head_ v...}} {RopeEmit {JVal {head_ v...}} } {Eq JSONArr {Frozen head_}}}
+    {R ToJSON/g {ToJSON {head_ v...}} {RopeEmit {JVal {head_ v...}} } {Eq JSONObj {Frozen head_}}}
   }
 }

@@ -296,6 +296,32 @@ Use guards in RuleRules to conditionally generate rules:
   {DefOpt "Feature2" {Disabled} False}} ; This doesn't
 ```
 
+### Using Frozen in Generated Guards
+
+When generating rules with guards, use `Frozen` to check matched values without normalization:
+
+```lisp
+{RuleRules
+  {R "TypedRule"
+     {TypedFunc name_ type_}
+     {R name_
+        {name_ x_}
+        {Process x_}
+        {IsType type_ {Frozen x_}}}}  ; Check x_ AS-IS
+
+{Rules
+  {TypedFunc "ProcessNum" Num}
+  {TypedFunc "ProcessStr" Str}}
+```
+
+This generates rules that check the actual matched value:
+```lisp
+{R "ProcessNum" {ProcessNum x_} {Process x_} {IsType Num {Frozen x_}}}
+{R "ProcessStr" {ProcessStr x_} {Process x_} {IsType Str {Frozen x_}}}
+```
+
+Without `Frozen`, the value might be transformed by other rules before the type check!
+
 ### Recursive Rule Generation
 
 RuleRules can generate rules that themselves use meta-patterns:
@@ -508,16 +534,18 @@ Test RuleRules incrementally:
        {R {Concat "Get/" {ToString name_}}
           {Get name_ {Object fields...}}
           {FindField name_ fields... default_}}
-       ; Setter with type check
+       ; Setter with type check using Frozen
        {R {Concat "Set/" {ToString name_}}
           {Set name_ value_ {Object fields...}}
           {Object {UpdateField name_ value_ fields...}}
-          :guard {IsType type_ value_}}}}}}
+          :guard {IsType type_ {Frozen value_}}}}}}  ; Check value AS-IS
 
 {Rules
   {Field Age Number 0}
   {Field Name String ""}}
 ```
+
+**Note:** Using `{Frozen value_}` in the guard ensures we check the actual type of the value being set, not a potentially transformed version. This is crucial for type safety!
 
 ### Example 3: Pattern Matching Compiler
 
@@ -594,6 +622,7 @@ Master RuleRules, and you master the art of writing programs that write themselv
 - `ToString` - Convert symbols to strings
 - `Add`, `Sub` - Arithmetic for counters (like Arity)
 - Pattern variables - Preserved in final rules
+- `Frozen` - Prevent normalization in guards (e.g., `{IsNum {Frozen x_}}`)
 
 ### Execution Order
 1. Parse source code

@@ -1,5 +1,6 @@
-{Module Core/FromJSON
+{Module FromJSON
   {Import Core/FromJSON/Lex as JSONLex open}
+  {Import Core/FromJSON/Annotate as JSONAnnotate open}
   {Export FromJSON}
   {Rules
     {R FromJSON FromJSON(s_) ParseJSONTokens({JSONLex s_})}
@@ -12,150 +13,125 @@
 
     ;; ------- Real start -----
     {R FromJSON/Start 
-      {ParseJSONTokens {Tokens f_ t...}} 
+      {ParseJSONTokens {Tokens f_ t...}}
+      {AnnotateJSONTokens {Tokens f_ t...}}
+    }
+
+    {R FromJSON/Annotate
+      {AnnotateJSONTokens {Tokens f_ t...}}
       {Parsing {Annotate {NestId 0 {Stack}} {Depth 0} {AnnotatedTokens} {Curr f_} {Tokens t...}}}
     }
-    ;; ---------- Annotating braces and brackets -----------
-    {R FromJSON/Parsing/Annotate/Skip
-      {Parsing {Annotate {NestId nid_ stack_} {Depth depth_} {AnnotatedTokens at...} {Curr f_} {Tokens next_ t...}}}
-      {Parsing {Annotate {NestId nid_ stack_} {Depth depth_} {AnnotatedTokens at... f_} {Curr next_} {Tokens t...}}}
-      :guard Not(Or(Eq(f_, {TOKLBRACK}), Eq(f_, {TOKLCURLY}), Eq(f_, {TOKRBRACK}), Eq(f_, {TOKRCURLY})))
-    }
-    {R FromJSON/Parsing/Annotate/Nest
-      {Parsing {Annotate {NestId nid_ {Stack s...}} {Depth depth_} {AnnotatedTokens at...} {Curr {tok_ rest...}} {Tokens next_ t...}}}
-      {Parsing {Annotate {NestId Add(nid_, 1) {Stack s... nid_}} {Depth Add(depth_, 1)} {AnnotatedTokens at... {tok_ nid_ rest...}} {Curr next_} {Tokens t...}}}
-      :guard Or(Eq(tok_, TOKLBRACK), Eq(tok_, TOKLCURLY))
-    }
-    {R FromJSON/Parsing/Annotate/Out
-      {Parsing {Annotate {NestId nid_ {Stack s... last_}} {Depth depth_} {AnnotatedTokens at...} {Curr {tok_ rest...}} {Tokens next_ t...}}}
-      {Parsing {Annotate {NestId nid_ {Stack s...}} {Depth Sub(depth_, 1)} {AnnotatedTokens at... {tok_ last_ rest...}} {Curr next_} {Tokens t...}}}
-      :guard Or(Eq(tok_, TOKRBRACK), Eq(tok_, TOKRCURLY))
-    }
-    {R FromJSON/Parsing/Annotate/Out/Leaf
-      {Parsing {Annotate {NestId nid_ {Stack s... last_}} {Depth depth_} {AnnotatedTokens at...} {Curr {tok_ rest...}} {Tokens}}}
-      {Parsing {CheckNestingDepth {NestId nid_} {Depth Sub(depth_, 1)} {AnnotatedTokens at... {tok_ last_ rest...}}}}
-      :guard Or(Eq(tok_, TOKRBRACK), Eq(tok_, TOKRCURLY))
-    }
-    {R FromJSON/Parsing/Annotate/Out/End
-      {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at...}}}
-      {Parsing {AnnotatedTokens at...}}
-      :guard Eq(depth_, 0)
-    }
-    {R FromJSON/Parsing/Annotate/Out/Err
-      {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at...}}}
-      {Parsing {Error "Not balanced [] or {}"} {AnnotatedTokens at...}}
-      :guard Neq(depth_, 0)
-    }
+    
     ;; ---------- Parsing -----------
     {R FromJSON/Parsing/Parse/Start
       {Parsing {AnnotatedTokens at...}}
-      {Parsing Parse({AnnotatedTokens at...})}
+      {Parsing Parse {CurrentFrameType Empty} {NestIdStack} {Frames} {AnnotatedTokens at...}}
     }
 
-    // {R FromJSON/Parsing/Parse/End/Value
-    //   {Parsing Parse({AnnotatedTokens {head_ rest...}})}
-    //   {head_ rest...}
-    //   :guard Or(Eq(head_, JSONArr), Eq(head_, JSONObj), Eq(head_, JSONStr))
-    // }
-
-    {R FromJSON/Parsing/Parse/End/Value
-      {Parsing Parse({AnnotatedTokens {head_ rest...}})}
-      {Parsed head_ rest...}
-      :guard Or(Eq(head_, JSONArr), Eq(head_, JSONObj), Eq(head_, JSONStr))
+    {R FromJSON/Parsing/Parse/End
+      {Parsing End json_}
+      json_
     }
 
-    ; Only collapse once rest... is empty
-    {R FromJSON/Done
-      {Parsed v_}
-      {JSON.Value v_}
-      :guard Empty(rest...)
+    ; Eat commas
+    {R FromJSON/Parsing/Parse/EatComma
+      {Parsing Parse {CurrentFrameType cft_} {NestIdStack s...} {Frames f...} {AnnotatedTokens {TOKCOMMA} at...}}
+      {Parsing Parse {CurrentFrameType cft_} {NestIdStack s...} {Frames f...} {AnnotatedTokens at...}}
     }
 
-    ;; -------- Values ----------
+    {R FromJSON/Parsing/Parse/JSONObj/StartFrame
+      {Parsing Parse {CurrentFrameType _} {NestIdStack s...} {Frames f...} {AnnotatedTokens {head_ v_} at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s... v_} {Frames f... {JSONObj {JSONKV}}} {AnnotatedTokens at...}}
+      :guard Eq(head_, TOKLCURLY)
+    }
+
+    {R FromJSON/Parsing/Parse/JSONArr/StartFrame
+      {Parsing Parse {CurrentFrameType _} {NestIdStack s...} {Frames f...} {AnnotatedTokens {head_ v_} at...}}
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... v_} {Frames f... {JSONArr}} {AnnotatedTokens at...}}
+      :guard Eq(head_, TOKLBRACK)
+    }
+
+    {R FromJSON/Parsing/Parse/JSONObj/EndFrame/InObj
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata... {JSONKV k_}} {lastframetype_ lft... lfl_}} {AnnotatedTokens {head_ v_} at...}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata... {JSONKV k_ {lastframetype_ lft...}} {JSONKV}}} {AnnotatedTokens at...}}
+      :guard And(Eq(head_, TOKRCURLY), Eq(prevframetype_, JSONObj))
+    }
+
+    {R FromJSON/Parsing/Parse/JSONObj/EndFrame/InArr
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata...} {lastframetype_ lft... lfl_}} {AnnotatedTokens {head_ v_} at...}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata...  {lastframetype_ lft...}}} {AnnotatedTokens at...}}
+      :guard And(Eq(head_, TOKRCURLY), Eq(prevframetype_, JSONArr))
+    }
+
+    {R FromJSON/Parsing/Parse/JSONArr/EndFrame/InObj
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata... {JSONKV k_}} {lastframetype_ lft...}} {AnnotatedTokens {head_ v_} at...}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata... {JSONKV k_ {lastframetype_ lft...}} {JSONKV} }} {AnnotatedTokens at...}}
+      :guard And(Eq(head_, TOKRBRACK), Eq(prevframetype_, JSONObj))
+    }
+    {R FromJSON/Parsing/Parse/JSONArr/EndFrame/InObj/EmptyArr
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata... {JSONKV k_}} {lastframetype_}} {AnnotatedTokens {head_ v_} at...}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata... {JSONKV k_ {lastframetype_}} {JSONKV} }} {AnnotatedTokens at...}}
+      :guard And(Eq(head_, TOKRBRACK), Eq(prevframetype_, JSONObj))
+    }
+
+    {R FromJSON/Parsing/Parse/JSONArr/EndFrame/InArr
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata...} {lastframetype_ lft...}} {AnnotatedTokens {head_ lastid_} at...}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata...  {lastframetype_ lft...}}} {AnnotatedTokens at...}}
+      :guard And(Eq(head_, TOKRBRACK), Eq(prevframetype_, JSONArr))
+    }
+
+    {R FromJSON/Parsing/Parse/JSONObj/LastFrame
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack lastid_} {Frames {JSONObj kvs... kv_}} {AnnotatedTokens {TOKRCURLY lastid_}}}
+      {Parsing End {JSONObj kvs...}}
+    }
+
+    {R FromJSON/Parsing/Parse/JSONArr/LastFrame
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack lastid_} {Frames lastFrame_} {AnnotatedTokens {TOKRBRACK lastid_}}}
+      {Parsing End lastFrame_}
+    }
+
+    {R FromJSON/Parsing/Parse/JSONArr
+      {Parsing Parse before... {Frames f... {JSONArr v...}} {AnnotatedTokens {head_ tokv...} at...}}
+      {Parsing Parse before... {Frames f... {JSONArr v... }} {ParseValue {head_ tokv...}} {AnnotatedTokens at...}}
+      :guard And(Neq(head_, TOKRBRACK), Neq(head_, TOKRCURLY))
+    }
+    {R FromJSON/Parsing/Parse/JSONArr/ParsedValue
+      {Parsing Parse before... {Frames f... {JSONArr v... }} {ParsedValue pv_} {AnnotatedTokens at...}}
+      {Parsing Parse before... {Frames f... {JSONArr v... pv_}} {AnnotatedTokens at...}}
+    }
+   
+   {R FromJSON/Parsing/Parse/JSONObj/Key
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV}}} {AnnotatedTokens {TOKSTR s_} {TOKCOLON} at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV s_}}} {AnnotatedTokens at...}}
+    }
+    {R FromJSON/Parsing/Parse/JSONObj/Value
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_}}} {AnnotatedTokens {head_ v...} at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_}}} {ParseValue {head_ v...}} {AnnotatedTokens at...}}
+      :guard And(Neq(head_, TOKRBRACK), Neq(head_, TOKRCURLY))
+    }
+    {R FromJSON/Parsing/Parse/JSONObj/ParsedValue
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_}}} {ParsedValue v_} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_ v_} {JSONKV}}} {AnnotatedTokens at...}}
+    }
 
     {R FromJSON/Parsing/Parse/Value/Num
-      {ParseValue {Value {tokhead_ n_}}}
-      ParseNum(n_)
-      :guard Eq(tokhead_, TOKNUM)
+      {ParseValue {head_ v_}} {ParsedValue ParseNum(v_)} :guard Eq(head_, TOKNUM)
     }
 
-    {R FromJSON/Parsing/Parse/Value/String
-      {ParseValue {Value {tokhead_ s_}}}
-      s_
-      :guard Eq(tokhead_, TOKSTR)
+    {R FromJSON/Parsing/Parse/Value/Str
+      {ParseValue {head_ s_}} {ParsedValue s_} :guard Eq(head_, TOKSTR)
     }
 
-    {R FromJSON/Parsing/Parse/Value/Prim
-      {ParseValue {Value {tokhead_}}}
-      ConvertPrim(tokhead_)
+    {R FromJSON/Parsing/Parse/Value/True
+      {ParseValue {head_}} {ParsedValue True} :guard Eq(head_, TOKTRUE)
     }
 
-    {R FromJSON/Parsing/Helpers/ConvertPrim/Null ConvertPrim(TOKNULL) Empty}
-    {R FromJSON/Parsing/Helpers/ConvertPrim/True ConvertPrim(TOKTRUE) True}
-    {R FromJSON/Parsing/Helpers/ConvertPrim/False ConvertPrim(TOKFALSE) False}
-
-    ;; --------- Array parsing ---------
-    {R FromJSON/Parsing/Parse/Array
-      {Parsing Parse({AnnotatedTokens {TOKLBRACK n_} at... {TOKRBRACK n_} rest...})}
-      {Parsing Parse({AnnotatedTokens {ParseArrayItems {ParsedItems} Values(at...)} rest...})}
+    {R FromJSON/Parsing/Parse/Value/False
+      {ParseValue {head_}} {ParsedValue False} :guard Eq(head_, TOKFALSE)
     }
 
-    {R FromJSON/Parsing/Parse/Array/EatComma
-       {ParseArrayItems pi_ Values({TOKCOMMA}, rest...)}
-       {ParseArrayItems pi_ Values(rest...)}
-    }
-
-    {R FromJSON/Parsing/Parse/Array/Array
-       {ParseArrayItems {ParsedItems pi...} {Values {TOKLBRACK n_} at... {TOKRBRACK n_} rest...}}
-       {ParseArrayItems {ParsedItems pi... {ParseArrayItems {ParsedItems} Values(at...)}} Values(rest...)}
-    }
-
-    {R FromJSON/Parsing/Parse/Array/Object
-       {ParseArrayItems {ParsedItems pi...} {Values {TOKLCURLY n_} at... {TOKRCURLY n_} rest...}}
-       {ParseArrayItems {ParsedItems pi... {ParseObjectItems {ParsedItems} Values(at...)}} Values(rest...)}
-    }
-
-    {R FromJSON/Parsing/Parse/Array/Item/Prim
-       {ParseArrayItems {ParsedItems pi...} {Values tok_ rest...}}
-       {ParseArrayItems {ParsedItems pi... {ParseValue {Value tok_}} } {Values rest...}}
-    }
-
-    {R FromJSON/Parsing/Parse/Array/Item/End
-       {ParseArrayItems {ParsedItems pi...} {Values}}
-       {JSONArr pi...}
-    }
-
-    ;; --------- Object parsing ---------
-    {R FromJSON/Parsing/Parse/Object
-      {Parsing Parse({AnnotatedTokens {TOKLCURLY n_} at... {TOKRCURLY n_} rest...})}
-      {Parsing Parse({AnnotatedTokens {ParseObjectItems {ParsedItems} Values(at...)} rest...})}
-    }
-
-    {R FromJSON/Parsing/Parse/Object/EatComma
-      {ParseObjectItems pi_ Values({TOKCOMMA}, rest...)}
-      {ParseObjectItems pi_ Values(rest...)}
-    }
-
-    {R FromJSON/Parsing/Parse/Object/KV/Array
-      {ParseObjectItems {ParsedItems pi...} {Values k_ {TOKCOLON} {TOKLBRACK n_} at... {TOKRBRACK n_} rest...}}
-      {ParseObjectItems {ParsedItems pi... {JSONKV {ParseValue {Value k_}} {ParseArrayItems {ParsedItems} Values(at...)}}} Values(rest...)}
-    }
-    {R FromJSON/Parsing/Parse/Object/KV/Object
-      {ParseObjectItems {ParsedItems pi...} {Values k_ {TOKCOLON} {TOKLCURLY n_} at... {TOKRCURLY n_} rest...}}
-      {ParseObjectItems {ParsedItems pi... {JSONKV {ParseValue {Value k_}} {ParseObjectItems {ParsedItems} Values(at...)}}} Values(rest...)}
-    }
-    {R FromJSON/Parsing/Parse/Object/KV
-      {ParseObjectItems {ParsedItems pi...} Values(k_, {TOKCOLON}, v_, rest...)}
-      {ParseObjectItems {ParsedItems pi... {JSONKV {ParseValue {Value k_}} {ParseValue {Value v_}}}} Values(rest...)}
-    }
-    {R FromJSON/Parsing/Parse/Array/Object/End
-       {ParseObjectItems {ParsedItems pi...} {Values}}
-       {JSONObj pi...}
-    }
-    ;; TODO: Think how to propagate this error up — for now looks impossible
-    {R FromJSON/Parsing/Parse/Array/Object/Error
-       {ParseObjectItems {ParsedItems pi...} {Values rest...}}
-       {Error "Malformed JSON object" {ParsedItems pi...} {Values rest...}}
+    {R FromJSON/Parsing/Parse/Value/Null
+      {ParseValue {head_}} {ParsedValue Empty} :guard Eq(head_, TOKNULL)
     }
   }
 }

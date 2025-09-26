@@ -638,7 +638,28 @@ export class NotebookCommands {
                 }
 
                 // Apply RuleRules to transform the imported module's rules
-                processedUniverse = engine.applyRuleRules(tempUniverse, foldPrims);
+                const transformedUniverse = engine.applyRuleRules(tempUniverse, foldPrims);
+
+                // Remove the RuleRules we temporarily added (keep only the module's own RuleRules)
+                const originalRuleRules = engine.findSection(processedUniverse, "RuleRules");
+                const transformedRuleRules = engine.findSection(transformedUniverse, "RuleRules");
+
+                if (transformedRuleRules) {
+                    if (originalRuleRules) {
+                        // Keep only the original RuleRules from the imported module
+                        transformedRuleRules.a = originalRuleRules.a;
+                    } else {
+                        // No original RuleRules, remove the section entirely
+                        const rrIndex = transformedUniverse.a.findIndex(
+                            section => isCall(section) && isSym(section.h) && section.h.v === "RuleRules"
+                        );
+                        if (rrIndex >= 0) {
+                            transformedUniverse.a.splice(rrIndex, 1);
+                        }
+                    }
+                }
+
+                processedUniverse = transformedUniverse;
             }
 
             // Merge into current universe
@@ -709,7 +730,28 @@ export class NotebookCommands {
                 }
 
                 // Apply RuleRules to transform the imported module's rules
-                processedUniverse = engine.applyRuleRules(tempUniverse, foldPrims);
+                const transformedUniverse = engine.applyRuleRules(tempUniverse, foldPrims);
+
+                // Remove the RuleRules we temporarily added (keep only the module's own RuleRules)
+                const originalRuleRules = engine.findSection(processedUniverse, "RuleRules");
+                const transformedRuleRules = engine.findSection(transformedUniverse, "RuleRules");
+
+                if (transformedRuleRules) {
+                    if (originalRuleRules) {
+                        // Keep only the original RuleRules from the imported module
+                        transformedRuleRules.a = originalRuleRules.a;
+                    } else {
+                        // No original RuleRules, remove the section entirely
+                        const rrIndex = transformedUniverse.a.findIndex(
+                            section => isCall(section) && isSym(section.h) && section.h.v === "RuleRules"
+                        );
+                        if (rrIndex >= 0) {
+                            transformedUniverse.a.splice(rrIndex, 1);
+                        }
+                    }
+                }
+
+                processedUniverse = transformedUniverse;
             }
 
             // Merge into current universe (this may skip duplicates)
@@ -1074,13 +1116,28 @@ export class NotebookCommands {
                 currentRuleRules.a = filteredRuleRules;
             }
 
-            // Add imported RuleRules
+            // Add imported RuleRules, checking for duplicates
+            const existingRuleRuleStrings = new Set(
+                currentRuleRules.a.map(rr => JSON.stringify(rr))
+            );
+
             for (const rr of importedRuleRules.a) {
-                currentRuleRules.a.push(rr);
-                stats.ruleRulesAdded++;
+                const rrString = JSON.stringify(rr);
+                if (!existingRuleRuleStrings.has(rrString)) {
+                    currentRuleRules.a.push(rr);
+                    existingRuleRuleStrings.add(rrString);
+                    stats.ruleRulesAdded++;
+                } else {
+                    stats.ruleRulesSkipped++;
+                }
             }
 
-            this.repl.platform.printWithNewline(`Added ${stats.ruleRulesAdded} meta-rules`);
+            if (stats.ruleRulesAdded > 0) {
+                this.repl.platform.printWithNewline(`Added ${stats.ruleRulesAdded} meta-rules`);
+            }
+            if (stats.ruleRulesSkipped > 0) {
+                this.repl.platform.printWithNewline(`(Skipped ${stats.ruleRulesSkipped} duplicate meta-rules)`);
+            }
         }
 
         // Also merge MacroScopes if present

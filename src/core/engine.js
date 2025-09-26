@@ -494,6 +494,161 @@ export function match(pat, subj, env = {}) {
     throw new Error("match: unknown pattern node");
 }
 
+/**
+ * Substitute with special handling for Frozen nodes
+ * Frozen nodes have their contents substituted but not normalized
+ */
+export function substWithFrozen(expr, env, preserveUnboundPatterns = false) {
+    // Handle Frozen nodes - substitute contents but mark to prevent normalization
+    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen" && expr.a.length === 1) {
+        // Substitute inside the Frozen, but keep the Frozen wrapper
+        const substituted = subst(expr.a[0], env, preserveUnboundPatterns);
+        return Call(Sym("Frozen"), substituted);
+    }
+
+    // For Var and VarRest, use normal substitution
+    if (isVar(expr) || isVarRest(expr)) {
+        return subst(expr, env, preserveUnboundPatterns);
+    }
+
+    // For other Call nodes, recursively handle any Frozen children
+    if (isCall(expr)) {
+        const h = substWithFrozen(expr.h, env, preserveUnboundPatterns);
+        const mapped = expr.a.map(arg => substWithFrozen(arg, env, preserveUnboundPatterns));
+
+        // Handle splices from VarRest substitutions
+        const flat = [];
+        for (const m of mapped) {
+            if (isSplice(m)) flat.push(...m.items);
+            else flat.push(m);
+        }
+        return Call(h, ...flat);
+    }
+
+    // For atoms (Sym, Num, Str), return as-is
+    return expr;
+}
+
+/**
+ * Normalize with special handling for Frozen nodes
+ * Frozen nodes prevent normalization of their contents
+ */
+export function normalizeWithFrozen(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false) {
+    // If this is a Frozen node, don't normalize its contents
+    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen") {
+        return expr;  // Return as-is, preventing normalization
+    }
+
+    // For non-Frozen nodes, use special normalization that respects Frozen children
+    let cur = expr;
+    for (let i = 0; i < maxSteps; i++) {
+        const step = applyOnceWithFrozen(cur, rules, foldPrimsFn, preserveUnboundPatterns);
+        const afterRules = step.expr;
+        cur = (skipPrims || !foldPrimsFn) ? afterRules : foldPrimsWithFrozen(afterRules, foldPrimsFn);
+
+        // Check if either rules or primitives changed the expression
+        const changed = step.changed || !deq(afterRules, cur);
+        if (!changed) return cur;
+    }
+    throw new Error("normalizeWithFrozen: exceeded maxSteps (possible non-termination)");
+}
+
+/**
+ * Apply rules once, but skip Frozen nodes at any level
+ */
+function applyOnceWithFrozen(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
+    // Don't try to rewrite Frozen nodes
+    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen") {
+        return {changed: false, expr};
+    }
+
+    // Try to rewrite this node
+    for (const r of rules) {
+        const env = match(r.lhs, expr, {});
+        if (env) {
+            // Check guard if present
+            if (r.guard) {
+                // Substitute the guard with matched bindings, preserving Frozen wrappers
+                const guardValue = substWithFrozen(r.guard, env, preserveUnboundPatterns);
+                const evaluatedGuard = normalizeWithFrozen(guardValue, rules, 100, false, foldPrimsFn, preserveUnboundPatterns);
+                // Guard must evaluate to the symbol True
+                if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
+                    continue; // Guard failed, try next rule
+                }
+            }
+            const out = subst(r.rhs, env, preserveUnboundPatterns);
+            return {changed: true, expr: out};
+        }
+    }
+
+    // Otherwise try children (but skip Frozen children)
+    if (isCall(expr)) {
+        for (let i = 0; i < expr.a.length; i++) {
+            const child = expr.a[i];
+            // Skip rewriting inside Frozen nodes
+            if (isCall(child) && isSym(child.h) && child.h.v === "Frozen") {
+                continue;
+            }
+            const res = applyOnceWithFrozen(child, rules, foldPrimsFn, preserveUnboundPatterns);
+            if (res.changed) {
+                const next = clone(expr);
+                next.a[i] = res.expr;
+                return {changed: true, expr: next};
+            }
+        }
+    }
+
+    return {changed: false, expr};
+}
+
+/**
+ * Fold primitives with special handling for Frozen nodes
+ */
+function foldPrimsWithFrozen(expr, foldPrimsFn) {
+    // If this is a Frozen node, don't fold its contents
+    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen") {
+        return expr;  // Return as-is
+    }
+
+    // For Call nodes, recursively process arguments but handle Frozen specially
+    if (isCall(expr) && isSym(expr.h)) {
+        const op = expr.h.v;
+
+        // For type checking and comparison primitives, unwrap any Frozen arguments
+        // These primitives need to examine the actual value, not the normalized version
+        const primitivesNeedingUnwrap = [
+            // Type checking
+            "IsNum", "IsStr", "IsSym", "IsTrue", "IsFalse",
+            // Comparisons
+            "Eq", "Neq", "Lt", "Gt", "Lte", "Gte",
+            // String operations that need to see the actual value
+            "StrLen", "IndexOf", "Substring"
+        ];
+
+        if (primitivesNeedingUnwrap.includes(op)) {
+            const processedArgs = expr.a.map(arg => {
+                if (isCall(arg) && isSym(arg.h) && arg.h.v === "Frozen" && arg.a.length === 1) {
+                    // Return the unwrapped content for checking/comparison
+                    return arg.a[0];
+                }
+                return arg;
+            });
+
+            // Create new expression with unwrapped args and fold it
+            const newExpr = Call(expr.h, ...processedArgs);
+            return foldPrimsFn(newExpr);
+        }
+
+        // For other operations, recursively process but preserve Frozen
+        const processedArgs = expr.a.map(arg => foldPrimsWithFrozen(arg, foldPrimsFn));
+        const newExpr = Call(expr.h, ...processedArgs);
+        return foldPrimsFn(newExpr);
+    }
+
+    // For non-Call nodes, use normal primitive folding
+    return foldPrimsFn(expr);
+}
+
 export function subst(expr, env, preserveUnboundPatterns = false) {
     // Handle /! nodes - prevent substitution of their contents (unbound variables)
     if (isCall(expr) && isSym(expr.h) && expr.h.v === "/!" && expr.a.length === 1) {
@@ -577,11 +732,12 @@ export function applyOnce(expr, rules, foldPrimsFn = null, preserveUnboundPatter
         if (env) {
             // Check guard if present
             if (r.guard) {
-                // Substitute the guard with matched bindings
-                const guardValue = subst(r.guard, env, preserveUnboundPatterns);
+                // Substitute the guard with matched bindings, preserving Frozen wrappers
+                const guardValue = substWithFrozen(r.guard, env, preserveUnboundPatterns);
                 // Fully normalize the guard expression (not just fold primitives)
                 // This allows guards to use user-defined predicates, not just primitives
-                const evaluatedGuard = normalize(guardValue, rules, 100, false, foldPrimsFn, preserveUnboundPatterns);
+                // Frozen nodes prevent normalization of their contents
+                const evaluatedGuard = normalizeWithFrozen(guardValue, rules, 100, false, foldPrimsFn, preserveUnboundPatterns);
                 // Guard must evaluate to the symbol True
                 if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
                     continue; // Guard failed, try next rule
@@ -618,11 +774,12 @@ export function applyOnceTrace(expr, rules, foldPrimsFn = null) {
             if (env) {
                 // Check guard if present
                 if (r.guard) {
-                    // Substitute the guard with matched bindings
-                    const guardValue = subst(r.guard, env);
+                    // Substitute the guard with matched bindings, preserving Frozen wrappers
+                    const guardValue = substWithFrozen(r.guard, env);
                     // Fully normalize the guard expression (not just fold primitives)
                     // This allows guards to use user-defined predicates, not just primitives
-                    const evaluatedGuard = normalize(guardValue, rules, 100, false, foldPrimsFn);
+                    // Frozen nodes prevent normalization of their contents
+                    const evaluatedGuard = normalizeWithFrozen(guardValue, rules, 100, false, foldPrimsFn);
                     // Guard must evaluate to the symbol True
                     if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
                         continue; // Guard failed, try next rule

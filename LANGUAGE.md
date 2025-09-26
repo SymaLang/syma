@@ -293,8 +293,47 @@ R("IsPositive", Check(n_), "positive", Gt(n_, 0))
 R("GuardedRule", pattern, replacement, IsNum(n_), 50)
 ```
 
+### Guard Evaluation and the Frozen Wrapper
+
+Guards are fully normalized with all rules, which allows using user-defined predicates. However, this can sometimes cause issues when you want to check the matched value as-is, without normalization.
+
+**The Frozen Wrapper:**
+The `Frozen` wrapper prevents normalization of its contents during guard evaluation:
+
+```lisp
+; Check if x_ is a number AFTER normalization (might transform first)
+{R "Rule1" {Process x_} result {IsNum x_}}
+
+; Check if x_ is a number AS-IS, without any transformation
+{R "Rule2" {Process x_} result {IsNum {Frozen x_}}}
+```
+
+**When to use Frozen:**
+- Use `{Frozen x_}` when you want to check the exact matched value without transformation
+- Useful for type checking before any rules transform the value
+- Essential when the matched value might be transformed by other rules before the check
+
+**Examples with Frozen:**
+```lisp
+; These rules check the matched value without transformation
+{R "JSONNum" {ToJSON x_} {Str x_} {IsNum {Frozen x_}}}
+{R "JSONStr" {ToJSON x_} {Quote x_} {IsStr {Frozen x_}}}
+{R "EmptyCheck" {Process x_} "empty" {Eq Empty {Frozen x_}}}
+{R "BoolCheck" {Process x_} "true" {Eq True {Frozen x_}}}
+```
+
+**User-defined predicates still work:**
+```lisp
+; IsDigit is defined as a rule, needs normalization to work
+{R "DigitCheck" {Parse c_} digit {IsDigit c_}}  ; No Frozen needed
+
+; But for primitives checking the actual value:
+{R "NumCheck" {Parse n_} number {IsNum {Frozen n_}}}
+```
+
 **Important Notes:**
-- Guards are evaluated after primitive folding, so `IsNum(n_)` works correctly
+- Guards are fully normalized with all rules (allows user-defined predicates)
+- Use `Frozen` wrapper to prevent normalization of specific values in guards
 - The named syntax (`:guard`, `:prio`) shown in some examples does NOT currently work
 - Use positional arguments (4th for guard/priority, 5th for priority if guard present)
 

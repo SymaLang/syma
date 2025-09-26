@@ -148,7 +148,7 @@
   ; Digit or "-" switches tokenizer state to number
   {R Tokenize/Mode/Num/Int/Leaf
     {TokenizerState Processing Number/Int {Focus a_} {Tokens tok... {TOKNUM num...}} {Chars}} 
-    {TokenizerState End {Tokens tok... {TOKNUM Concat(num..., a_)} }} 
+    {TokenizerState Processing Default {Focus a_} {Tokens tok... {TOKNUM num...}} {Chars}}
     :guard Not(IsValidIntCont(a_))
   }
 
