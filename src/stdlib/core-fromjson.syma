@@ -52,10 +52,23 @@
       {Parsing Parse({AnnotatedTokens at...})}
     }
 
+    // {R FromJSON/Parsing/Parse/End/Value
+    //   {Parsing Parse({AnnotatedTokens {head_ rest...}})}
+    //   {head_ rest...}
+    //   :guard Or(Eq(head_, JSONArr), Eq(head_, JSONObj), Eq(head_, JSONStr))
+    // }
+
     {R FromJSON/Parsing/Parse/End/Value
       {Parsing Parse({AnnotatedTokens {head_ rest...}})}
-      {head_ rest...}
+      {Parsed head_ rest...}
       :guard Or(Eq(head_, JSONArr), Eq(head_, JSONObj), Eq(head_, JSONStr))
+    }
+
+    ; Only collapse once rest... is empty
+    {R FromJSON/Done
+      {Parsed v_}
+      {JSON.Value v_}
+      :guard Empty(rest...)
     }
 
     ;; -------- Values ----------

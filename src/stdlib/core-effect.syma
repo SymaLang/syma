@@ -18,6 +18,11 @@
       {PlumbEnd {EffQueue {Emit {ReadLineEff}} rest...}}
     )
     R(
+      "EnqueueEffect/FileRead",
+      {Plumb {EffQueue {FileRead p_} rest...}},
+      {PlumbEnd {EffQueue {Emit {FileReadEff p_}} rest...}}
+    )
+    R(
       "PrintEff/New",
       {PrintEff m_},
       {Print FreshId() {Message m_}}
@@ -26,6 +31,11 @@
       "ReadLineEff/New",
       {ReadLineEff},
       {ReadLine FreshId()}
+    )
+    R(
+      "FileReadEff/New",
+      {FileReadEff path_},
+      {FileRead FreshId() {Path path_}}
     )
     R(
       "PrintComplete",

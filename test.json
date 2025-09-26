@@ -1,0 +1,29 @@
+{
+    "array": [1, 2, 3, 4, 5],
+    "nested": {
+        "a": 1,
+        "b": 2,
+        "c": {
+            "d": 3
+        }
+    },
+    "boolean": true,
+    "nullValue": null,
+    "objectArray": [
+        {"key1": "value1"},
+        {"key2": "value2"}
+    ],
+    "arrayOfArrays": [
+        [1, 2],
+        [3, 4]
+    ],
+    "mixedArray": [1, "two", {"three": 3}, [4]],
+    "emptyObject": {},
+    "emptyArray": [],
+    "number": 42,
+    "float": 3.14,
+    "string": "Hello, World!",
+    "specialChars": "!@#$%^&*()_+-=[]{}|;':,.<>/?`~",
+    "escapedString": "Line1\nLine2\tTabbed",
+    "unicode": "こんにちは"
+}

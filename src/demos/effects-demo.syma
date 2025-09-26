@@ -1,10 +1,8 @@
 {Module Demo/Effects
-  ;; ========= Program =========
   {Program
     {App
       {State
         {EffectsDemo
-          ;; KV-based state structure
           {KV StoredValue     ""}
           {KV StorageStatus   "Ready"}
           {KV ClipboardText   ""}

@@ -78,12 +78,26 @@ export class NotebookCommands {
             case 'trace':
                 // Handle :trace command with multiline support
                 const traceArgs = command.slice(cmd.length + 2).trim(); // Get everything after :trace
-                if (traceArgs === '') {
-                    // No arguments - enter multiline mode for complex expressions
+
+                // Parse modifiers (verbose, diff)
+                let verbose = false;
+                let diff = false;
+                let exprText = traceArgs;
+
+                if (traceArgs.startsWith('verbose ')) {
+                    verbose = true;
+                    exprText = traceArgs.slice(8).trim(); // Remove 'verbose '
+                } else if (traceArgs.startsWith('diff ')) {
+                    diff = true;
+                    exprText = traceArgs.slice(5).trim(); // Remove 'diff '
+                }
+
+                if (exprText === '') {
+                    // No expression - enter multiline mode for complex expressions
                     return false; // Signal that this needs multiline handling
                 } else {
-                    // Has arguments - handle inline trace with accordion output
-                    return await this.processInlineTrace(traceArgs);
+                    // Has expression - handle inline trace with accordion output
+                    return await this.processInlineTrace(exprText, verbose, diff);
                 }
             case 'import':
                 return await this.import(args);
@@ -174,7 +188,7 @@ export class NotebookCommands {
         }
     }
 
-    async processInlineTrace(exprText) {
+    async processInlineTrace(exprText, verbose = false, diff = false) {
         // Process inline trace command with accordion output
         try {
             // Parse and evaluate the expression
@@ -198,17 +212,81 @@ export class NotebookCommands {
                 const { collapseConsecutiveRules, formatCollapsedTrace, getTraceStats } = await import('../core/trace-utils.js');
 
                 // Output a summary message
-                this.repl.platform.printWithNewline(`Applied ${trace.length} rewrite steps:`);
+                const modeLabel = verbose ? " (verbose)" : diff ? " (diff)" : "";
+                this.repl.platform.printWithNewline(`Applied ${trace.length} rewrite steps${modeLabel}:`);
 
                 // Build accordion sections
                 const sections = [];
 
                 // 1. Trace section (expanded by default)
-                const collapsed = collapseConsecutiveRules(trace);
-                const formatted = formatCollapsedTrace(collapsed);
+                let traceContent;
+
+                if (verbose) {
+                    // Verbose mode: show pattern, replacement, and matched expressions
+                    const lines = [];
+                    const rules = engine.extractRules(this.repl.universe);
+
+                    for (const step of trace) {
+                        // Find the rule to get its pattern and replacement
+                        const rule = rules.find(r => r.name === step.rule);
+
+                        lines.push(`Step ${step.i + 1}: Rule "${step.rule}"`);
+                        lines.push('─'.repeat(40));
+
+                        if (rule) {
+                            lines.push(`Pattern:     ${this.repl.parser.prettyPrint(rule.lhs)}`);
+                            lines.push(`Replacement: ${this.repl.parser.prettyPrint(rule.rhs)}`);
+                            if (rule.guard) {
+                                lines.push(`Guard:       ${this.repl.parser.prettyPrint(rule.guard)}`);
+                            }
+                        }
+
+                        // Show the matched expression and result if available
+                        if (step.before && step.after) {
+                            lines.push(`\nMatched:     ${this.repl.parser.prettyPrint(step.before)}`);
+                            lines.push(`Result:      ${this.repl.parser.prettyPrint(step.after)}`);
+                        }
+
+                        // Show path if not at root
+                        if (step.path && step.path.length > 0) {
+                            lines.push(`Path:        [${step.path.join(', ')}]`);
+                        }
+
+                        lines.push(''); // Empty line between steps
+                    }
+                    traceContent = lines.join('\n');
+
+                } else if (diff) {
+                    // Diff mode: show only what changed
+                    const { getFocusedDiff } = await import('../core/ast-diff.js');
+                    const lines = [];
+
+                    for (const step of trace) {
+                        lines.push(`Step ${step.i + 1}: Rule "${step.rule}"`);
+
+                        if (step.before && step.after) {
+                            const diffStr = getFocusedDiff(
+                                step.before,
+                                step.after,
+                                this.repl.parser,
+                                step.path || []
+                            );
+                            lines.push(diffStr);
+                        }
+
+                        lines.push(''); // Empty line between steps
+                    }
+                    traceContent = lines.join('\n');
+
+                } else {
+                    // Normal mode: collapsed consecutive rules
+                    const collapsed = collapseConsecutiveRules(trace);
+                    traceContent = formatCollapsedTrace(collapsed);
+                }
+
                 sections.push({
                     title: `📊 Trace Steps`,
-                    content: formatted,
+                    content: traceContent,
                     expanded: true,
                     persistedExpanded: true
                 });
@@ -246,12 +324,62 @@ export class NotebookCommands {
                 });
             } else if (trace && trace.length > 0) {
                 // Non-notebook mode or no trace - use regular output
-                const { collapseConsecutiveRules, formatCollapsedTrace } = await import('../core/trace-utils.js');
-                this.repl.platform.printWithNewline(`Applied ${trace.length} rewrite steps:\n`);
+                const modeLabel = verbose ? " (verbose)" : diff ? " (diff)" : "";
+                this.repl.platform.printWithNewline(`Applied ${trace.length} rewrite steps${modeLabel}:\n`);
 
-                const collapsed = collapseConsecutiveRules(trace);
-                const formatted = formatCollapsedTrace(collapsed);
-                this.repl.platform.printWithNewline(formatted);
+                if (verbose) {
+                    // Verbose mode for non-notebook
+                    const rules = engine.extractRules(this.repl.universe);
+
+                    for (const step of trace) {
+                        const rule = rules.find(r => r.name === step.rule);
+
+                        this.repl.platform.printWithNewline(`\nStep ${step.i + 1}: Rule "${step.rule}"`);
+                        this.repl.platform.printWithNewline('─'.repeat(40));
+
+                        if (rule) {
+                            this.repl.platform.printWithNewline(`Pattern:     ${this.repl.parser.prettyPrint(rule.lhs)}`);
+                            this.repl.platform.printWithNewline(`Replacement: ${this.repl.parser.prettyPrint(rule.rhs)}`);
+                            if (rule.guard) {
+                                this.repl.platform.printWithNewline(`Guard:       ${this.repl.parser.prettyPrint(rule.guard)}`);
+                            }
+                        }
+
+                        if (step.before && step.after) {
+                            this.repl.platform.printWithNewline(`\nMatched:     ${this.repl.parser.prettyPrint(step.before)}`);
+                            this.repl.platform.printWithNewline(`Result:      ${this.repl.parser.prettyPrint(step.after)}`);
+                        }
+
+                        if (step.path && step.path.length > 0) {
+                            this.repl.platform.printWithNewline(`Path:        [${step.path.join(', ')}]`);
+                        }
+                    }
+
+                } else if (diff) {
+                    // Diff mode for non-notebook
+                    const { getFocusedDiff } = await import('../core/ast-diff.js');
+
+                    for (const step of trace) {
+                        this.repl.platform.printWithNewline(`\nStep ${step.i + 1}: Rule "${step.rule}"`);
+
+                        if (step.before && step.after) {
+                            const diffStr = getFocusedDiff(
+                                step.before,
+                                step.after,
+                                this.repl.parser,
+                                step.path || []
+                            );
+                            this.repl.platform.printWithNewline(diffStr);
+                        }
+                    }
+
+                } else {
+                    // Normal mode: collapsed consecutive rules
+                    const { collapseConsecutiveRules, formatCollapsedTrace } = await import('../core/trace-utils.js');
+                    const collapsed = collapseConsecutiveRules(trace);
+                    const formatted = formatCollapsedTrace(collapsed);
+                    this.repl.platform.printWithNewline(formatted);
+                }
 
                 // Show result
                 this.repl.platform.printWithNewline('\nResult:');

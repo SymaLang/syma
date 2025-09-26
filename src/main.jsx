@@ -1,13 +1,26 @@
-// React entry point
+// Main entry point - conditionally loads notebook or demo runtime
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+// Check if we're in demo mode
+const isDemo = import.meta.env.VITE_DEMO_MODE === 'true' ||
+                window.location.search.includes('demo=true') ||
+                window.location.pathname.includes('/demo');
 
-import App from './App';
-
-const root = ReactDOM.createRoot(document.getElementById('app'));
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+if (isDemo) {
+  // Load demo runtime
+  import('./main-syma.js');
+} else {
+  // Load React notebook app
+  import('react').then(React => {
+    import('react-dom/client').then(ReactDOM => {
+      import('./App').then(AppModule => {
+        const App = AppModule.default;
+        const root = ReactDOM.createRoot(document.getElementById('app'));
+        root.render(
+          React.createElement(React.StrictMode, null,
+            React.createElement(App)
+          )
+        );
+      });
+    });
+  });
+}

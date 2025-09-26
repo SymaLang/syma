@@ -67,9 +67,16 @@ export class SymaREPL {
             this.platform.setReplMode(true, completer);
         }
 
+        // Create a wrapper around the platform to intercept exit calls
+        const platformWrapper = Object.create(this.platform);
+        platformWrapper.exit = (exitCode) => {
+            // Instead of actually exiting, just display the exit code
+            this.platform.print(`\n[Exit effect received with code ${exitCode}]\n`);
+        };
+
         // Initialize effects processor
         this.effectsProcessor = createEffectsProcessor(
-            this.platform,
+            platformWrapper,
             () => engine.getProgram(this.universe),
             (newProg) => {
                 // After effects update, normalize to trigger inbox processing rules

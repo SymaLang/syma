@@ -819,7 +819,8 @@ export class EffectsProcessor {
         const [code] = req.a;
         const exitCode = code && isNum(code) ? code.v : 0;
         this.platform.exit(exitCode);
-        return null; // No response needed
+        // Note: The Exit effect is manually removed from Pending in the main processing loop
+        // since it doesn't follow the standard ID-based removal pattern
     }
 
     /**
@@ -910,8 +911,23 @@ export class EffectsProcessor {
                         break;
 
                     case "Exit":
+                        // Exit effect doesn't have an ID, so we need to handle it specially
                         this.processExit(req);
-                        continue;
+                        // Manually remove the Exit effect from pending since it doesn't have a standard ID
+                        const updatedProgramForExit = clone(program);
+                        const effectsForExit = findEffects(updatedProgramForExit);
+                        if (effectsForExit && effectsForExit.a[0] && isCall(effectsForExit.a[0])) {
+                            const pendingForExit = effectsForExit.a[0];
+                            // Remove this specific Exit effect
+                            pendingForExit.a = pendingForExit.a.filter(r => {
+                                if (!isCall(r) || !isSym(r.h) || r.h.v !== "Exit") return true;
+                                // Check if it's the same exit code
+                                return !deq(r.a[0], req.a[0]);
+                            });
+                        }
+                        this.setProgramFn(updatedProgramForExit);
+                        this.onUpdate();
+                        break; // Process one at a time
 
                     // Async effects (WebSocket, Timer, AnimationFrame)
                     case "WsConnect":

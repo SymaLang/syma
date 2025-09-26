@@ -13,6 +13,10 @@
        {Get tag_ key_ {tag_ rest...}}
        -100}
 
+    {R "Get/NotFound"
+       {Get tag_ key_ {tag_}}
+       Empty}
+
     ;; Put value into KV list {replace existing}
     {R "Put/Replace"
        {Put tag_ key_ v_ {tag_ before... {KV key_ _} after...}}

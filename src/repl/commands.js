@@ -87,7 +87,10 @@ File operations:
                             Example: :bundle demo.syma :args --input data.txt
   :reload                   Re-run last :bundle or :load command (with args)
   :export <module>          Export single module to file
-  :import <file>            Import module and dependencies into current universe
+  :import <module> [open] [macro]  Import stdlib module or file
+                            Examples: :import Core/String
+                                     :import Core/Fun open
+                                     :import Core/Plumb open macro
 
 Universe management:
   :clear                    Reset universe to empty state
@@ -358,55 +361,142 @@ Debugging:
     }
 
     async import(args, rawArgs) {
-        const filename = args[0];
-        // Note: 'open' parameter doesn't make sense for :import since we're not in a module context
-        // All imports are effectively added to the global namespace
+        const moduleName = args[0];
 
-        if (!filename) {
-            this.repl.platform.printWithNewline("Usage: :import <filename>");
-            this.repl.platform.printWithNewline("Note: Imports a module and its dependencies into the current universe");
+        // Parse modifiers (open, macro)
+        const modifiers = {
+            open: false,
+            macro: false
+        };
+
+        for (let i = 1; i < args.length; i++) {
+            if (args[i] === 'open') {
+                modifiers.open = true;
+            } else if (args[i] === 'macro') {
+                modifiers.macro = true;
+            }
+        }
+
+        if (!moduleName) {
+            this.repl.platform.printWithNewline("Usage: :import <module-name> [open] [macro]");
+            this.repl.platform.printWithNewline("       :import <file.syma> [open] [macro]");
+            this.repl.platform.printWithNewline("");
+            this.repl.platform.printWithNewline("Examples:");
+            this.repl.platform.printWithNewline("  :import Core/String          # Normal import (qualified symbols)");
+            this.repl.platform.printWithNewline("  :import Core/String open     # Open import (unqualified symbols)");
+            this.repl.platform.printWithNewline("  :import Core/Fun macro       # Import with macro rules");
+            this.repl.platform.printWithNewline("  :import Core/Plumb open macro # Both modifiers");
+            this.repl.platform.printWithNewline("  :import ./my-module.syma    # Import from file");
+            this.repl.platform.printWithNewline("");
+            this.repl.platform.printWithNewline("Available stdlib modules:");
+
+            // List available stdlib modules
+            const stdlibModules = {
+                'Core/Main': 'core-main.syma',
+                'Core/String': 'core-string.syma',
+                'Core/List': 'core-list.syma',
+                'Core/Fun': 'core-fun.syma',
+                'Core/Fun/WithSugar': 'core-fun-withsugar.syma',
+                'Core/KV': 'core-kv.syma',
+                'Core/Plumb': 'core-plumb.syma',
+                'Core/Zipper': 'core-zipper.syma',
+                'Core/Set': 'core-set.syma',
+                'Core/Effect': 'core-effect.syma',
+                'Core/Syntax/Global': 'core-syntax-global.syma',
+                'Core/Rope': 'core-rope.syma',
+                'Core/Json': 'core-json.syma',
+                'Core/ToJson': 'core-tojson.syma',
+                'Core/FromJson/Lex': 'core-fromjson-lex.syma',
+                'Core/FromJson': 'core-fromjson.syma',
+                'Algebra/Simplify': 'algebra-simplify.syma',
+                'Notebook/UI': 'notebook-ui.syma'
+            };
+
+            for (const [name] of Object.entries(stdlibModules).sort()) {
+                this.repl.platform.printWithNewline(`  ${name}`);
+            }
             return true;
         }
 
         try {
-            // Use child_process to run the compiler (same as :bundle)
+            // Check if it's a stdlib module or a file path
+            const stdlibModules = {
+                'Core/Main': 'core-main.syma',
+                'Core/String': 'core-string.syma',
+                'Core/List': 'core-list.syma',
+                'Core/Fun': 'core-fun.syma',
+                'Core/Fun/WithSugar': 'core-fun-withsugar.syma',
+                'Core/KV': 'core-kv.syma',
+                'Core/Plumb': 'core-plumb.syma',
+                'Core/Zipper': 'core-zipper.syma',
+                'Core/Set': 'core-set.syma',
+                'Core/Effect': 'core-effect.syma',
+                'Core/Syntax/Global': 'core-syntax-global.syma',
+                'Core/Rope': 'core-rope.syma',
+                'Core/Json': 'core-json.syma',
+                'Core/ToJson': 'core-tojson.syma',
+                'Core/FromJson/Lex': 'core-fromjson-lex.syma',
+                'Core/FromJson': 'core-fromjson.syma',
+                'Algebra/Simplify': 'algebra-simplify.syma',
+                'Notebook/UI': 'notebook-ui.syma'
+            };
+
+            let filename;
+            let resolvedModuleName = moduleName;
+
+            if (stdlibModules[moduleName]) {
+                // It's a stdlib module - resolve to file path
+                filename = `src/stdlib/${stdlibModules[moduleName]}`;
+            } else if (moduleName.includes('/') || moduleName.endsWith('.syma')) {
+                // It's a file path
+                filename = moduleName;
+
+                // Extract module name from the file
+                const content = await this.repl.platform.readFile(filename);
+                const ast = this.repl.parser.parseString(content, filename);
+
+                if (!isCall(ast) || !isSym(ast.h) || ast.h.v !== 'Module') {
+                    throw new Error('File is not a module (must start with Module)');
+                }
+
+                const nameNode = ast.a[0];
+                if (!isSym(nameNode)) {
+                    throw new Error('Module name must be a symbol');
+                }
+                resolvedModuleName = nameNode.v;
+            } else {
+                throw new Error(`Unknown module: ${moduleName}`);
+            }
+
+            const importDesc = modifiers.open ?
+                (modifiers.macro ? `${resolvedModuleName} (open, with macros)` : `${resolvedModuleName} (open)`) :
+                (modifiers.macro ? `${resolvedModuleName} (with macros)` : resolvedModuleName);
+            this.repl.platform.printWithNewline(`Importing module ${importDesc}...`);
+
+            // Use child_process to run the compiler in library mode
             const { execSync } = await import('child_process');
-
-            // Read the module to get its name
-            const content = await this.repl.platform.readFile(filename);
-            const ast = this.repl.parser.parseString(content, filename);
-
-            if (!isCall(ast) || !isSym(ast.h) || ast.h.v !== 'Module') {
-                throw new Error('File is not a module (must start with Module)');
-            }
-
-            const nameNode = ast.a[0];
-            if (!isSym(nameNode)) {
-                throw new Error('Module name must be a symbol');
-            }
-            const moduleName = nameNode.v;
-
-            this.repl.platform.printWithNewline(`Importing module ${moduleName}...`);
-
-            // Run the compiler in library mode (no Program section required)
-            // The compiler will handle dependency resolution automatically
-            const command = `node bin/syma-compile.js ${filename} --library`;
+            const command = `node bin/syma-compile.js ${filename} --library --stdlib src/stdlib`;
             const result = execSync(command, { encoding: 'utf8', cwd: process.cwd() });
 
             // Parse the resulting Universe
-            const compiledUniverse = JSON.parse(result);
+            let compiledUniverse = JSON.parse(result);
 
-            // Now merge the compiled universe into our current one
-            this.mergeUniverses(compiledUniverse, moduleName);
+            // Process for open imports if needed
+            if (modifiers.open) {
+                compiledUniverse = this.processOpenImport(compiledUniverse, resolvedModuleName);
+            }
+
+            // Merge the compiled universe into our current one
+            this.mergeUniverses(compiledUniverse, resolvedModuleName, modifiers);
 
             // Apply RuleRules to transform the Universe permanently after merge
             this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
 
-            this.repl.platform.printWithNewline(`Module ${moduleName} imported successfully`);
+            this.repl.platform.printWithNewline(`Module ${resolvedModuleName} imported successfully`);
 
             // Show what was imported
             const importedRules = engine.extractRules(compiledUniverse);
-            this.repl.platform.printWithNewline(`Added ${importedRules.length} rules from ${moduleName} and its dependencies`);
+            this.repl.platform.printWithNewline(`Added ${importedRules.length} rules from ${resolvedModuleName} and its dependencies`);
 
         } catch (error) {
             this.repl.platform.printWithNewline(`Failed to import: ${error.message}`);
@@ -417,89 +507,225 @@ Debugging:
         return true;
     }
 
-    // Helper method to merge universes
-    mergeUniverses(importedUniverse, moduleName) {
-        // Save undo state
-        this.repl.pushUndo();
+    // Process open imports (create unqualified versions of rules)
+    processOpenImport(universe, moduleName) {
+        // For open imports, create duplicate rules without the module prefix
+        // This makes symbols available both qualified and unqualified
+        const processed = JSON.parse(JSON.stringify(universe)); // Deep clone
 
-        // Extract rules from imported universe
-        const importedRules = engine.findSection(importedUniverse, "Rules");
+        const rules = engine.findSection(processed, "Rules");
+        if (!rules || !isCall(rules)) return processed;
 
-        if (!importedRules || !isCall(importedRules) || importedRules.a.length === 0) {
-            this.repl.platform.printWithNewline(`Warning: No rules found in module ${moduleName}`);
-            return;
-        }
+        const additionalRules = [];
 
-        // Get current rules section (or create if missing)
-        let currentRules = engine.findSection(this.repl.universe, "Rules");
+        for (const rule of rules.a) {
+            // Process TaggedRule
+            if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' && rule.a.length > 1) {
+                const innerRule = rule.a[1];
+                if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R' && innerRule.a.length >= 3) {
+                    const pattern = innerRule.a[1];
+                    const replacement = innerRule.a[2];
 
-        if (!currentRules) {
-            // Create Rules section if it doesn't exist
-            if (!isCall(this.repl.universe)) {
-                throw new Error("Invalid universe structure");
-            }
-            currentRules = Call(Sym("Rules"));
-            this.repl.universe.a.push(currentRules);
-        }
+                    // Check if pattern is a qualified symbol from this module
+                    if (isSym(pattern) && pattern.v.startsWith(`${moduleName}/`)) {
+                        const unqualifiedName = pattern.v.slice(moduleName.length + 1);
 
-        // Build a set of existing rule names for conflict detection
-        const existingRuleNames = new Set();
-        for (const rule of currentRules.a) {
-            if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length > 0) {
-                const nameArg = rule.a[0];
-                if (isStr(nameArg)) {
-                    existingRuleNames.add(nameArg.v);
-                }
-            }
-        }
-
-        // Merge imported rules, checking for conflicts
-        let addedCount = 0;
-        let skippedCount = 0;
-
-        for (const rule of importedRules.a) {
-            if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length > 0) {
-                const nameArg = rule.a[0];
-                if (isStr(nameArg)) {
-                    const ruleName = nameArg.v;
-                    if (existingRuleNames.has(ruleName)) {
-                        this.repl.platform.printWithNewline(`  Skipping rule "${ruleName}" (already exists)`);
-                        skippedCount++;
-                    } else {
-                        currentRules.a.push(rule);
-                        existingRuleNames.add(ruleName);
-                        addedCount++;
+                        // Create an unqualified version of the rule
+                        const unqualifiedRule = Call(
+                            Sym('TaggedRule'),
+                            Str(moduleName),
+                            Call(
+                                Sym('R'),
+                                Str(`${unqualifiedName}/OpenImport`),
+                                Sym(unqualifiedName),
+                                replacement,
+                                innerRule.a[3] || Num(500) // Priority
+                            )
+                        );
+                        additionalRules.push(unqualifiedRule);
                     }
                 }
             }
         }
 
-        if (addedCount > 0) {
-            this.repl.platform.printWithNewline(`  Added ${addedCount} new rules`);
-        }
-        if (skippedCount > 0) {
-            this.repl.platform.printWithNewline(`  Skipped ${skippedCount} existing rules`);
+        // Add the unqualified rules
+        rules.a.push(...additionalRules);
+
+        return processed;
+    }
+
+    // Helper method to merge universes
+    mergeUniverses(importedUniverse, moduleName, modifiers = {}) {
+        // Save undo state
+        this.repl.pushUndo();
+
+        // Extract rules from imported universe
+        const importedRules = engine.findSection(importedUniverse, "Rules");
+        const hasRules = importedRules && isCall(importedRules) && importedRules.a.length > 0;
+
+        // Check for RuleRules as well
+        const importedRuleRules = engine.findSection(importedUniverse, "RuleRules");
+        const hasRuleRules = importedRuleRules && isCall(importedRuleRules) && importedRuleRules.a.length > 0;
+
+        // If module has neither Rules nor RuleRules, warn and return
+        if (!hasRules && !hasRuleRules) {
+            this.repl.platform.printWithNewline(`Warning: No rules or meta-rules found in module ${moduleName}`);
+            return;
         }
 
-        // Also merge RuleRules if present
-        const importedRuleRules = engine.findSection(importedUniverse, "RuleRules");
-        if (importedRuleRules && isCall(importedRuleRules) && importedRuleRules.a.length > 0) {
+        // Process Rules if they exist
+        if (hasRules) {
+            // Get current rules section (or create if missing)
+            let currentRules = engine.findSection(this.repl.universe, "Rules");
+
+            if (!currentRules) {
+                // Create Rules section if it doesn't exist
+                if (!isCall(this.repl.universe)) {
+                    throw new Error("Invalid universe structure");
+                }
+                currentRules = Call(Sym("Rules"));
+                this.repl.universe.a.push(currentRules);
+            }
+
+            // Build a set of existing rule names for conflict detection
+            const existingRuleNames = new Set();
+            for (const rule of currentRules.a) {
+                if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length > 0) {
+                    const nameArg = rule.a[0];
+                    if (isStr(nameArg)) {
+                        existingRuleNames.add(nameArg.v);
+                    }
+                } else if (isCall(rule) && isSym(rule.h) && rule.h.v === 'TaggedRule' && rule.a.length > 1) {
+                    // Handle tagged rules
+                    const innerRule = rule.a[1];
+                    if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R' && innerRule.a.length > 0) {
+                        const nameArg = innerRule.a[0];
+                        if (isStr(nameArg)) {
+                            existingRuleNames.add(nameArg.v);
+                        }
+                    }
+                }
+            }
+
+            // Merge imported rules, checking for conflicts
+            let addedCount = 0;
+            let skippedCount = 0;
+
+            for (const importedRule of importedRules.a) {
+                let ruleName = null;
+
+                // Extract rule name for conflict detection
+                if (isCall(importedRule) && isSym(importedRule.h)) {
+                    if (importedRule.h.v === 'R' && importedRule.a.length > 0 && isStr(importedRule.a[0])) {
+                        ruleName = importedRule.a[0].v;
+                    } else if (importedRule.h.v === 'TaggedRule' && importedRule.a.length > 1) {
+                        const innerRule = importedRule.a[1];
+                        if (isCall(innerRule) && isSym(innerRule.h) && innerRule.h.v === 'R' &&
+                            innerRule.a.length > 0 && isStr(innerRule.a[0])) {
+                            ruleName = innerRule.a[0].v;
+                        }
+                    }
+                }
+
+                // Skip if rule already exists
+                if (ruleName && existingRuleNames.has(ruleName)) {
+                    skippedCount++;
+                    continue;
+                }
+
+                // Add the rule
+                currentRules.a.push(importedRule);
+                if (ruleName) {
+                    existingRuleNames.add(ruleName);
+                }
+                addedCount++;
+            }
+
+            if (addedCount > 0) {
+                this.repl.platform.printWithNewline(`  Added ${addedCount} new rules`);
+            }
+            if (skippedCount > 0) {
+                this.repl.platform.printWithNewline(`  Skipped ${skippedCount} existing rules`);
+            }
+        }
+
+        // Also merge RuleRules if present (and macro modifier is set)
+        if (modifiers.macro && hasRuleRules) {
             let currentRuleRules = engine.findSection(this.repl.universe, "RuleRules");
 
             if (!currentRuleRules) {
-                // Just add the entire RuleRules section if we don't have one
-                this.repl.universe.a.push(importedRuleRules);
-                this.repl.platform.printWithNewline(`  Added ${importedRuleRules.a.length} meta-rules`);
-            } else {
-                // Merge meta-rules
-                let metaAdded = 0;
-                for (const rule of importedRuleRules.a) {
-                    // For simplicity, just add all meta-rules (they're less likely to conflict)
-                    currentRuleRules.a.push(rule);
-                    metaAdded++;
+                // Create RuleRules section if it doesn't exist
+                currentRuleRules = Call(Sym("RuleRules"));
+                this.repl.universe.a.push(currentRuleRules);
+            }
+
+            // Merge meta-rules
+            let metaAdded = 0;
+            for (const rule of importedRuleRules.a) {
+                // For simplicity, just add all meta-rules (they're less likely to conflict)
+                currentRuleRules.a.push(rule);
+                metaAdded++;
+            }
+            if (metaAdded > 0) {
+                this.repl.platform.printWithNewline(`  Added ${metaAdded} meta-rules`);
+            }
+        }
+
+        // Also merge MacroScopes if present
+        const importedMacroScopes = engine.findSection(importedUniverse, "MacroScopes");
+        if (importedMacroScopes && isCall(importedMacroScopes) && importedMacroScopes.a.length > 0) {
+            let currentMacroScopes = engine.findSection(this.repl.universe, "MacroScopes");
+
+            if (!currentMacroScopes) {
+                // Create MacroScopes section if it doesn't exist
+                currentMacroScopes = Call(Sym("MacroScopes"));
+                this.repl.universe.a.push(currentMacroScopes);
+            }
+
+            // Build a map of existing module scopes to avoid duplicates
+            const existingScopes = new Map();
+            for (const entry of currentMacroScopes.a) {
+                if (isCall(entry) && isSym(entry.h) && entry.h.v === "Module" &&
+                    entry.a.length >= 2 && isStr(entry.a[0])) {
+                    const modName = entry.a[0].v;
+                    existingScopes.set(modName, entry);
                 }
-                if (metaAdded > 0) {
-                    this.repl.platform.printWithNewline(`  Added ${metaAdded} meta-rules`);
+            }
+
+            // Merge imported MacroScopes, avoiding duplicates
+            for (const ms of importedMacroScopes.a) {
+                if (isCall(ms) && isSym(ms.h) && ms.h.v === "Module" &&
+                    ms.a.length >= 2 && isStr(ms.a[0])) {
+                    const modName = ms.a[0].v;
+
+                    if (!existingScopes.has(modName)) {
+                        // Module not present yet, add it
+                        currentMacroScopes.a.push(ms);
+                        existingScopes.set(modName, ms);
+                    } else if (ms.a.length >= 2 && isCall(ms.a[1])) {
+                        // Module exists, merge the RuleRulesFrom if needed
+                        const existingEntry = existingScopes.get(modName);
+                        const importedRuleRules = ms.a[1];
+                        const existingRuleRules = existingEntry.a[1];
+
+                        if (isCall(importedRuleRules) && isSym(importedRuleRules.h) &&
+                            importedRuleRules.h.v === "RuleRulesFrom" &&
+                            isCall(existingRuleRules) && isSym(existingRuleRules.h) &&
+                            existingRuleRules.h.v === "RuleRulesFrom") {
+
+                            // Merge the RuleRulesFrom lists, avoiding duplicates
+                            const existingModules = new Set(
+                                existingRuleRules.a.filter(isStr).map(s => s.v)
+                            );
+
+                            for (const rrMod of importedRuleRules.a) {
+                                if (isStr(rrMod) && !existingModules.has(rrMod.v)) {
+                                    existingRuleRules.a.push(rrMod);
+                                    existingModules.add(rrMod.v);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1326,8 +1552,8 @@ Debugging:
             this.repl.platform.printWithNewline("  Pattern expression...");
             this.repl.platform.printWithNewline("  [:rewrite");
             this.repl.platform.printWithNewline("    Replacement expression...]");
-            this.repl.platform.printWithNewline("  [:target or :norm");
-            this.repl.platform.printWithNewline("    Target expression...]");
+            this.repl.platform.printWithNewline("  [:target or :norm or :universe");
+            this.repl.platform.printWithNewline("    Target expression... (or :universe to match/rewrite the universe)]");
             this.repl.platform.printWithNewline("  :end");
 
             this.repl.multilineMode = true;
@@ -1361,20 +1587,25 @@ Debugging:
         }
 
         if (args[0] === 'help') {
-            this.repl.platform.printWithNewline("Usage: :match [<pattern> [:rewrite <replacement>] [:target/:norm <expression>]]");
+            this.repl.platform.printWithNewline("Usage: :match [<pattern> [:rewrite <replacement>] [:target/:norm/:universe <expression>]]");
             this.repl.platform.printWithNewline("\nMultiline mode:");
             this.repl.platform.printWithNewline("  :match                          - Enter multiline mode");
             this.repl.platform.printWithNewline("  {Complex Pattern}");
             this.repl.platform.printWithNewline("  :rewrite                        - Optional rewrite clause");
             this.repl.platform.printWithNewline("  {Complex Replacement}");
-            this.repl.platform.printWithNewline("  :target                         - Target expression (or :norm)");
+            this.repl.platform.printWithNewline("  :target                         - Target expression");
             this.repl.platform.printWithNewline("  {Complex Target}");
+            this.repl.platform.printWithNewline("  :norm                           - Target expression (normalized)");
+            this.repl.platform.printWithNewline("  {Expression to normalize}");
+            this.repl.platform.printWithNewline("  :universe                       - Match/rewrite the universe itself");
             this.repl.platform.printWithNewline("  :end                            - End multiline input");
             this.repl.platform.printWithNewline("\nInline examples:");
             this.repl.platform.printWithNewline("  :match {Program p_}                    - Match against universe");
             this.repl.platform.printWithNewline("  :match {F x_ y_} :target {F 1 2}      - Match against expression");
             this.repl.platform.printWithNewline("  :match result_ :norm {+ 1 2}          - Match normalized expression");
             this.repl.platform.printWithNewline("  :match {F x_ y_} :rewrite {G y_ x_} :target {F 1 2}  - Rewrite with bindings");
+            this.repl.platform.printWithNewline("  :match {Universe {Program p_} r...} :rewrite {Universe {Program {Modified p_}} r...} :universe");
+            this.repl.platform.printWithNewline("                                         - Rewrite the universe structure");
             this.repl.platform.printWithNewline("\nPattern syntax:");
             this.repl.platform.printWithNewline("  x_    - Variable (matches any single expression)");
             this.repl.platform.printWithNewline("  x...  - Rest variable (matches zero or more expressions)");
@@ -1391,7 +1622,7 @@ Debugging:
                 // Split the multiline input by section markers
                 const lines = rawArgs.split('\n');
                 let currentSection = 'pattern';
-                let sections = { pattern: [], rewrite: null, target: null, norm: null };
+                let sections = { pattern: [], rewrite: null, target: null, norm: null, universe: false };
 
                 for (const line of lines) {
                     const trimmed = line.trim();
@@ -1404,7 +1635,10 @@ Debugging:
                     } else if (trimmed === ':norm') {
                         currentSection = 'norm';
                         sections.norm = [];
-                    } else if (currentSection && sections[currentSection] !== null) {
+                    } else if (trimmed === ':universe') {
+                        currentSection = 'universe';
+                        sections.universe = true;
+                    } else if (currentSection && currentSection !== 'universe' && sections[currentSection] !== null) {
                         sections[currentSection].push(line);
                     }
                 }
@@ -1412,6 +1646,7 @@ Debugging:
                 // Join each section and parse
                 let pattern, target, rewritePattern = null, matchAgainstUniverse = true;
                 let shouldNormalize = false;
+                let rewriteUniverse = false;
 
                 // Parse pattern (required)
                 const patternText = sections.pattern.join('\n').trim();
@@ -1431,8 +1666,36 @@ Debugging:
                     rewritePattern = this.repl.parser.parseString(rewriteText);
                 }
 
-                // Parse target or norm if present
-                if (sections.target) {
+                // Parse target or norm or universe if present
+                if (sections.universe) {
+                    // :universe mode - match/rewrite against a section of the universe
+                    // Determine which section to target based on the pattern
+                    if (isCall(pattern) && isSym(pattern.h)) {
+                        const patternHead = pattern.h.v;
+
+                        if (patternHead === 'Program') {
+                            // Match against the Program section
+                            target = engine.getProgram(this.repl.universe);
+                        } else if (patternHead === 'Rules' || patternHead === 'RuleRules' || patternHead === 'MacroScopes') {
+                            // Match against the specific section
+                            const section = this.repl.universe.a.find(s =>
+                                isCall(s) && isSym(s.h) && s.h.v === patternHead
+                            );
+                            target = section || { k: 'Call', h: { k: 'Sym', v: patternHead }, a: [] };
+                        } else if (patternHead === 'Universe') {
+                            // Match against the entire universe
+                            target = this.repl.universe;
+                        } else {
+                            // Default: try matching against Program
+                            target = engine.getProgram(this.repl.universe);
+                        }
+                    } else {
+                        // Default: match against Program if pattern doesn't specify section
+                        target = engine.getProgram(this.repl.universe);
+                    }
+                    matchAgainstUniverse = false;
+                    rewriteUniverse = true;
+                } else if (sections.target) {
                     const targetText = sections.target.join('\n').trim();
                     if (!targetText) {
                         this.repl.platform.printWithNewline("Error: Target expression is required after :target");
@@ -1513,6 +1776,99 @@ Debugging:
                 // Now perform the match with the parsed sections
                 const env = engine.match(pattern, target);
 
+                // If we're rewriting the universe and the match succeeded
+                if (rewriteUniverse && env && rewritePattern) {
+                    // Save undo state
+                    this.repl.pushUndo();
+
+                    // Apply the rewrite
+                    const rewritten = engine.subst(rewritePattern, env);
+
+                    // Determine which section we matched against based on the pattern
+                    let matchedSection = 'Program'; // Default
+                    if (isCall(pattern) && isSym(pattern.h)) {
+                        matchedSection = pattern.h.v;
+                    }
+
+                    // Now update the appropriate section with the rewritten result
+                    if (matchedSection === 'Program') {
+                        // When matching against Program, the rewrite result IS the new program content
+                        // We need to preserve the Program wrapper
+                        const currentProgram = engine.getProgram(this.repl.universe);
+                        if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === 'Program') {
+                            // If rewrite produced a full Program node, use it directly
+                            this.repl.universe = engine.setProgram(this.repl.universe, rewritten);
+                        } else {
+                            // Otherwise, wrap the result as the new Program content
+                            // Preserve EffQueue and Effects from the original program
+                            const effQueue = currentProgram.a.find(n => isCall(n) && isSym(n.h) && n.h.v === 'EffQueue');
+                            const effects = currentProgram.a.find(n => isCall(n) && isSym(n.h) && n.h.v === 'Effects');
+                            const newProgram = {
+                                k: 'Call',
+                                h: { k: 'Sym', v: 'Program' },
+                                a: [
+                                    effQueue || { k: 'Call', h: { k: 'Sym', v: 'EffQueue' }, a: [] },
+                                    effects || { k: 'Call', h: { k: 'Sym', v: 'Effects' }, a: [
+                                        { k: 'Call', h: { k: 'Sym', v: 'Pending' }, a: [] },
+                                        { k: 'Call', h: { k: 'Sym', v: 'Inbox' }, a: [] }
+                                    ]},
+                                    rewritten
+                                ]
+                            };
+                            this.repl.universe = engine.setProgram(this.repl.universe, newProgram);
+                        }
+                    } else if (matchedSection === 'Rules' || matchedSection === 'RuleRules' || matchedSection === 'MacroScopes') {
+                        // For other sections, replace them directly
+                        const universeIndex = this.repl.universe.a.findIndex(n =>
+                            isCall(n) && isSym(n.h) && n.h.v === matchedSection
+                        );
+                        if (universeIndex !== -1) {
+                            // Check if rewrite produced a full section node
+                            if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === matchedSection) {
+                                this.repl.universe.a[universeIndex] = rewritten;
+                            } else {
+                                // Wrap the result in the section
+                                this.repl.universe.a[universeIndex] = {
+                                    k: 'Call',
+                                    h: { k: 'Sym', v: matchedSection },
+                                    a: Array.isArray(rewritten.a) ? rewritten.a : [rewritten]
+                                };
+                            }
+                        } else {
+                            // Add new section
+                            if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === matchedSection) {
+                                this.repl.universe.a.push(rewritten);
+                            } else {
+                                this.repl.universe.a.push({
+                                    k: 'Call',
+                                    h: { k: 'Sym', v: matchedSection },
+                                    a: Array.isArray(rewritten.a) ? rewritten.a : [rewritten]
+                                });
+                            }
+                        }
+                    } else if (matchedSection === 'Universe') {
+                        // If we matched the entire universe, replace it entirely
+                        if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === 'Universe') {
+                            this.repl.universe = rewritten;
+                        } else {
+                            // This shouldn't happen, but handle it gracefully
+                            this.repl.platform.printWithNewline("Error: Rewrite result is not a valid Universe");
+                        }
+                    } else {
+                        // Unknown section - try to handle gracefully
+                        this.repl.platform.printWithNewline(`Warning: Unknown section type: ${matchedSection}`);
+                    }
+
+                    // Apply RuleRules to transform the Universe permanently
+                    this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
+
+                    this.repl.platform.printWithNewline("Universe successfully rewritten!");
+                    this.repl.platform.printWithNewline("\nNew universe:");
+                    const output = this.repl.formatResult(this.repl.universe);
+                    this.repl.platform.printWithNewline(output);
+                    return true;
+                }
+
                 // Use helper method to print results (pass normalization info if applicable)
                 const normalizedInfo = (typeof shouldNormalize === 'object') ? shouldNormalize : null;
                 if (this.printMatchResults(env, rewritePattern, normalizedInfo)) {
@@ -1560,18 +1916,22 @@ Debugging:
             const targetMarker = ':target';
             const normMarker = ':norm';
             const rewriteMarker = ':rewrite';
+            const universeMarker = ':universe';
             const targetIndex = rawArgs.indexOf(targetMarker);
             const normIndex = rawArgs.indexOf(normMarker);
             const rewriteIndex = rawArgs.indexOf(rewriteMarker);
+            const universeIndex = rawArgs.indexOf(universeMarker);
 
             let pattern, target, rewritePattern = null, matchAgainstUniverse = true;
             let shouldNormalize = false;
+            let rewriteUniverse = false;
 
             // Parse the pattern first - it's always at the beginning
             let patternEndPos = rawArgs.length;
             if (rewriteIndex !== -1) patternEndPos = Math.min(patternEndPos, rewriteIndex);
             if (targetIndex !== -1) patternEndPos = Math.min(patternEndPos, targetIndex);
             if (normIndex !== -1) patternEndPos = Math.min(patternEndPos, normIndex);
+            if (universeIndex !== -1) patternEndPos = Math.min(patternEndPos, universeIndex);
 
             const patternText = rawArgs.substring(0, patternEndPos).trim();
             if (!patternText) {
@@ -1584,6 +1944,7 @@ Debugging:
                 let rewriteEndPos = rawArgs.length;
                 if (targetIndex > rewriteIndex) rewriteEndPos = targetIndex;
                 if (normIndex > rewriteIndex) rewriteEndPos = Math.min(rewriteEndPos, normIndex);
+                if (universeIndex > rewriteIndex) rewriteEndPos = Math.min(rewriteEndPos, universeIndex);
 
                 const rewriteText = rawArgs.substring(rewriteIndex + rewriteMarker.length, rewriteEndPos).trim();
                 if (!rewriteText) {
@@ -1593,7 +1954,38 @@ Debugging:
                 rewritePattern = this.repl.parser.parseString(rewriteText);
             }
 
-            if (targetIndex !== -1 && (normIndex === -1 || targetIndex < normIndex)) {
+            if (universeIndex !== -1) {
+                // :universe mode - match/rewrite against a section of the universe
+                pattern = this.repl.parser.parseString(patternText);
+
+                // Determine which section to target based on the pattern
+                if (isCall(pattern) && isSym(pattern.h)) {
+                    const patternHead = pattern.h.v;
+
+                    if (patternHead === 'Program') {
+                        // Match against the Program section
+                        target = engine.getProgram(this.repl.universe);
+                    } else if (patternHead === 'Rules' || patternHead === 'RuleRules' || patternHead === 'MacroScopes') {
+                        // Match against the specific section
+                        const section = this.repl.universe.a.find(s =>
+                            isCall(s) && isSym(s.h) && s.h.v === patternHead
+                        );
+                        target = section || { k: 'Call', h: { k: 'Sym', v: patternHead }, a: [] };
+                    } else if (patternHead === 'Universe') {
+                        // Match against the entire universe
+                        target = this.repl.universe;
+                    } else {
+                        // Default: try matching against Program
+                        target = engine.getProgram(this.repl.universe);
+                    }
+                } else {
+                    // Default: match against Program if pattern doesn't specify section
+                    target = engine.getProgram(this.repl.universe);
+                }
+
+                matchAgainstUniverse = false; // We're explicitly targeting a section
+                rewriteUniverse = true; // Flag to indicate we should update universe with rewrite result
+            } else if (targetIndex !== -1 && (normIndex === -1 || targetIndex < normIndex)) {
                 // :target mode - use expression as-is
                 const targetText = rawArgs.substring(targetIndex + targetMarker.length).trim();
 
@@ -1697,6 +2089,99 @@ Debugging:
 
             // Perform the match
             const env = engine.match(pattern, target);
+
+            // If we're rewriting the universe and the match succeeded
+            if (rewriteUniverse && env && rewritePattern) {
+                // Save undo state
+                this.repl.pushUndo();
+
+                // Apply the rewrite
+                const rewritten = engine.subst(rewritePattern, env);
+
+                // Determine which section we matched against based on the pattern
+                let matchedSection = 'Program'; // Default
+                if (isCall(pattern) && isSym(pattern.h)) {
+                    matchedSection = pattern.h.v;
+                }
+
+                // Now update the appropriate section with the rewritten result
+                if (matchedSection === 'Program') {
+                    // When matching against Program, the rewrite result IS the new program content
+                    // We need to preserve the Program wrapper
+                    const currentProgram = engine.getProgram(this.repl.universe);
+                    if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === 'Program') {
+                        // If rewrite produced a full Program node, use it directly
+                        this.repl.universe = engine.setProgram(this.repl.universe, rewritten);
+                    } else {
+                        // Otherwise, wrap the result as the new Program content
+                        // Preserve EffQueue and Effects from the original program
+                        const effQueue = currentProgram.a.find(n => isCall(n) && isSym(n.h) && n.h.v === 'EffQueue');
+                        const effects = currentProgram.a.find(n => isCall(n) && isSym(n.h) && n.h.v === 'Effects');
+                        const newProgram = {
+                            k: 'Call',
+                            h: { k: 'Sym', v: 'Program' },
+                            a: [
+                                effQueue || { k: 'Call', h: { k: 'Sym', v: 'EffQueue' }, a: [] },
+                                effects || { k: 'Call', h: { k: 'Sym', v: 'Effects' }, a: [
+                                    { k: 'Call', h: { k: 'Sym', v: 'Pending' }, a: [] },
+                                    { k: 'Call', h: { k: 'Sym', v: 'Inbox' }, a: [] }
+                                ]},
+                                rewritten
+                            ]
+                        };
+                        this.repl.universe = engine.setProgram(this.repl.universe, newProgram);
+                    }
+                } else if (matchedSection === 'Rules' || matchedSection === 'RuleRules' || matchedSection === 'MacroScopes') {
+                    // For other sections, replace them directly
+                    const universeIndex = this.repl.universe.a.findIndex(n =>
+                        isCall(n) && isSym(n.h) && n.h.v === matchedSection
+                    );
+                    if (universeIndex !== -1) {
+                        // Check if rewrite produced a full section node
+                        if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === matchedSection) {
+                            this.repl.universe.a[universeIndex] = rewritten;
+                        } else {
+                            // Wrap the result in the section
+                            this.repl.universe.a[universeIndex] = {
+                                k: 'Call',
+                                h: { k: 'Sym', v: matchedSection },
+                                a: Array.isArray(rewritten.a) ? rewritten.a : [rewritten]
+                            };
+                        }
+                    } else {
+                        // Add new section
+                        if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === matchedSection) {
+                            this.repl.universe.a.push(rewritten);
+                        } else {
+                            this.repl.universe.a.push({
+                                k: 'Call',
+                                h: { k: 'Sym', v: matchedSection },
+                                a: Array.isArray(rewritten.a) ? rewritten.a : [rewritten]
+                            });
+                        }
+                    }
+                } else if (matchedSection === 'Universe') {
+                    // If we matched the entire universe, replace it entirely
+                    if (isCall(rewritten) && isSym(rewritten.h) && rewritten.h.v === 'Universe') {
+                        this.repl.universe = rewritten;
+                    } else {
+                        // This shouldn't happen, but handle it gracefully
+                        this.repl.platform.printWithNewline("Error: Rewrite result is not a valid Universe");
+                    }
+                } else {
+                    // Unknown section - try to handle gracefully
+                    this.repl.platform.printWithNewline(`Warning: Unknown section type: ${matchedSection}`);
+                }
+
+                // Apply RuleRules to transform the Universe permanently
+                this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
+
+                this.repl.platform.printWithNewline("Universe successfully rewritten!");
+                this.repl.platform.printWithNewline("\nNew universe:");
+                const output = this.repl.formatResult(this.repl.universe);
+                this.repl.platform.printWithNewline(output);
+                return true;
+            }
 
             // Use helper method to print results (pass normalization info if applicable)
             const normalizedInfo = (typeof shouldNormalize === 'object') ? shouldNormalize : null;
