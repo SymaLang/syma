@@ -34,7 +34,10 @@ export class SymaREPL {
         this.rcFile = options.rcFile;
         this.multilineBuffer = [];
         this.multilineMode = false;
+        this.multilineExplicit = false; // Track if multiline was started explicitly with \
         this.prettyPrint = options.prettyPrint !== false; // Default to true
+        this.inNormCommand = false; // Track if we're in a :norm command
+        this.normCommandTraces = []; // Accumulate traces during :norm
 
         // Undo stack
         this.undoStack = [];
@@ -81,8 +84,30 @@ export class SymaREPL {
             (newProg) => {
                 // After effects update, normalize to trigger inbox processing rules
                 const rules = engine.extractRules(this.universe);
-                const normalized = engine.normalize(newProg, rules, this.maxSteps, false, foldPrims);
-                this.universe = engine.setProgram(this.universe, normalized);
+
+                // If trace is enabled and we're in :norm context, collect trace
+                if (this.trace && this.inNormCommand) {
+                    const { result: normalized, trace } = engine.normalizeWithTrace(
+                        newProg,
+                        rules,
+                        this.maxSteps,
+                        false,
+                        foldPrims
+                    );
+
+                    if (trace.length > 0) {
+                        // Accumulate the trace to show later
+                        this.normCommandTraces.push({
+                            label: 'Effects processing',
+                            trace: trace
+                        });
+                    }
+
+                    this.universe = engine.setProgram(this.universe, normalized);
+                } else {
+                    const normalized = engine.normalize(newProg, rules, this.maxSteps, false, foldPrims);
+                    this.universe = engine.setProgram(this.universe, normalized);
+                }
             },
             () => {
                 // No need to re-render in REPL context
@@ -147,6 +172,7 @@ export class SymaREPL {
                     if (this.multilineMode) {
                         this.platform.print("Multiline input cancelled\n");
                         this.multilineMode = false;
+                        this.multilineExplicit = false;
                         this.multilineBuffer = [];
                         continue;
                     } else {
@@ -169,6 +195,99 @@ export class SymaREPL {
     }
 
     async processInput(input) {
+        // Handle multiline mode (either from backslash or incomplete expression)
+        if (this.multilineMode) {
+            if (input.trim() === '.') {
+                // End multiline mode and process buffer
+                this.multilineMode = false;
+                this.multilineExplicit = false;
+                const fullInput = this.multilineBuffer.join('\n');
+                this.multilineBuffer = [];
+                return await this.processCompleteInput(fullInput);
+            } else {
+                this.multilineBuffer.push(input);
+
+                // Check if we have a complete expression now
+                const currentInput = this.multilineBuffer.join('\n');
+                if (this.isCompleteExpression(currentInput) && !this.multilineExplicit) {
+                    // Auto-complete for pasted multiline content
+                    this.multilineMode = false;
+                    this.multilineExplicit = false;
+                    this.multilineBuffer = [];
+                    return await this.processCompleteInput(currentInput);
+                }
+
+                return true;
+            }
+        }
+
+        // Check if input starts explicit multiline mode with backslash
+        if (input.trim().endsWith('\\')) {
+            this.multilineMode = true;
+            this.multilineExplicit = true;  // Explicit mode requires '.' to end
+            this.multilineBuffer.push(input.slice(0, -1).trimEnd());
+            return true;
+        }
+
+        // Check if this is the start of an incomplete expression (likely pasted)
+        if (!this.isCompleteExpression(input)) {
+            // Enter implicit multiline mode
+            this.multilineMode = true;
+            this.multilineExplicit = false;  // Implicit mode auto-completes
+            this.multilineBuffer.push(input);
+            return true;
+        }
+
+        // Single complete expression - process normally
+        return await this.processSingleLineInput(input);
+    }
+
+    // Helper to check if an expression is complete (balanced parens/braces)
+    isCompleteExpression(input) {
+        // Skip commands
+        if (input.trim().startsWith(':')) {
+            return true;
+        }
+
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+
+        for (let i = 0; i < input.length; i++) {
+            const char = input[i];
+
+            if (escapeNext) {
+                escapeNext = false;
+                continue;
+            }
+
+            if (char === '\\') {
+                escapeNext = true;
+                continue;
+            }
+
+            if (char === '"' && !inString) {
+                inString = true;
+            } else if (char === '"' && inString) {
+                inString = false;
+            } else if (!inString) {
+                if (char === '(' || char === '{' || char === '[') {
+                    depth++;
+                } else if (char === ')' || char === '}' || char === ']') {
+                    depth--;
+                    if (depth < 0) {
+                        // More closing than opening - definitely wrong
+                        return true;  // Let parser handle the error
+                    }
+                }
+            }
+        }
+
+        // If we're still in a string or have unmatched opening parens, it's incomplete
+        return depth === 0 && !inString;
+    }
+
+    async processSingleLineInput(input) {
         const trimmed = input.trim();
 
         // Don't save quit commands to history
@@ -198,27 +317,9 @@ export class SymaREPL {
             this.platform.addToReplHistory(input);
         }
 
-        // Handle multiline mode
-        if (this.multilineMode) {
-            if (input.trim() === '.') {
-                // End multiline mode and process buffer
-                this.multilineMode = false;
-                const fullInput = this.multilineBuffer.join('\n');
-                this.multilineBuffer = [];
-                return await this.processCompleteInput(fullInput);
-            } else {
-                this.multilineBuffer.push(input);
-                return true;
-            }
-        }
-
-        // Check if input starts multiline mode
-        if (input.trim().endsWith('\\')) {
-            this.multilineMode = true;
-            this.multilineBuffer.push(input.slice(0, -1));
-            return true;
-        }
-
+        // At this point, we've already determined this is a complete single-line input
+        // (multiline handling happens in processInput before we get here)
+        // So just process it directly
         return await this.processCompleteInput(input);
     }
 
@@ -572,5 +673,112 @@ export class SymaREPL {
     // Export freshId for command use
     freshId() {
         return freshId();
+    }
+
+    // Helper method to show trace output (extracted for reuse)
+    async showTrace(trace, rules) {
+        if (trace.length === 0) return;
+
+        if (this.traceStatsOnly) {
+            // Stats-only mode
+            const { getTraceStats, formatTraceStats } = await import('../core/trace-utils.js');
+            this.platform.print("\nTrace Statistics:\n");
+            this.platform.print("─" + "─".repeat(40) + "\n");
+            const stats = getTraceStats(trace);
+            this.platform.print(formatTraceStats(stats) + '\n');
+            this.platform.print("─" + "─".repeat(40) + "\n\n");
+        } else if (this.traceDiff) {
+            // Diff trace mode: show only what changed
+            const { getFocusedDiff } = await import('../core/ast-diff.js');
+            this.platform.print("\nDiff Trace:\n");
+            this.platform.print("═" + "═".repeat(60) + "\n");
+
+            for (const step of trace) {
+                this.platform.print(`\nStep ${step.i + 1}: Rule "${step.rule}"\n`);
+                this.platform.print("─" + "─".repeat(60) + "\n");
+
+                if (step.before && step.after) {
+                    const diffOutput = getFocusedDiff(step.before, step.after, this.parser);
+                    this.platform.print(diffOutput + "\n");
+                } else {
+                    this.platform.print("(no diff available)\n");
+                }
+
+                if (step.path.length > 0) {
+                    this.platform.print(`At path: [${step.path.join(' → ')}]\n`);
+                }
+            }
+
+            this.platform.print("═" + "═".repeat(60) + "\n\n");
+        } else if (this.traceVerbose) {
+            // Verbose trace mode: show pattern, matched part, and rewrite
+            this.platform.print("\nVerbose Trace:\n");
+            this.platform.print("═" + "═".repeat(60) + "\n");
+
+            for (const step of trace) {
+                // Find the rule to get its pattern and replacement
+                const rule = rules.find(r => r.name === step.rule);
+
+                this.platform.print(`\nStep ${step.i + 1}: Rule "${step.rule}"\n`);
+                this.platform.print("─" + "─".repeat(60) + "\n");
+
+                // Show the rule pattern and replacement if found
+                if (rule) {
+                    const patternStr = this.parser.prettyPrint ?
+                        this.parser.prettyPrint(rule.lhs) :
+                        this.parser.nodeToString(rule.lhs);
+                    const replacementStr = this.parser.prettyPrint ?
+                        this.parser.prettyPrint(rule.rhs) :
+                        this.parser.nodeToString(rule.rhs);
+
+                    this.platform.print(`Pattern:     ${patternStr}\n`);
+                    this.platform.print(`Replacement: ${replacementStr}\n`);
+
+                    if (rule.guard) {
+                        const guardStr = this.parser.prettyPrint ?
+                            this.parser.prettyPrint(rule.guard) :
+                            this.parser.nodeToString(rule.guard);
+                        this.platform.print(`Guard:       ${guardStr}\n`);
+                    }
+                }
+
+                // Show the matched expression and result if available
+                if (step.before && step.after) {
+                    const beforeStr = this.parser.prettyPrint ?
+                        this.parser.prettyPrint(step.before) :
+                        this.parser.nodeToString(step.before);
+                    const afterStr = this.parser.prettyPrint ?
+                        this.parser.prettyPrint(step.after) :
+                        this.parser.nodeToString(step.after);
+
+                    this.platform.print(`\nMatched:     ${beforeStr}\n`);
+                    this.platform.print(`Rewrote to:  ${afterStr}\n`);
+                }
+
+                this.platform.print(`At path:     [${step.path.join(' → ')}]\n`);
+            }
+
+            this.platform.print("═" + "═".repeat(60) + "\n\n");
+        } else {
+            // Simple trace mode - with collapsing
+            const { collapseConsecutiveRules, formatCollapsedTrace } = await import('../core/trace-utils.js');
+            this.platform.print("\nTrace:\n");
+            const collapsed = collapseConsecutiveRules(trace);
+            const formatted = formatCollapsedTrace(collapsed);
+            this.platform.print(formatted + '\n');
+
+            // Show hot spots if there are many steps
+            if (trace.length > 20) {
+                const { getTraceStats } = await import('../core/trace-utils.js');
+                const stats = getTraceStats(trace);
+                if (stats.hotRules.length > 0) {
+                    this.platform.print('\nHot spots:\n');
+                    for (const [rule, count] of stats.hotRules.slice(0, 5)) {
+                        this.platform.print(`  ${rule}: ${count}×\n`);
+                    }
+                }
+            }
+            this.platform.print("\n");
+        }
     }
 }

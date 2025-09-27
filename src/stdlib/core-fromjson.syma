@@ -1,4 +1,4 @@
-{Module FromJSON
+{Module Core/FromJSON
   {Import Core/FromJSON/Lex as JSONLex open}
   {Import Core/FromJSON/Annotate as JSONAnnotate open}
   {Export FromJSON}

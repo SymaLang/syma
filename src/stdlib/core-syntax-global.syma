@@ -9,5 +9,11 @@
     {R "Sugar/Rule/Error/MissingArrow"
        {:rule nm_ lhs_ rhs_ opts...}      ; no '->' token present
        {Error "Missing '->' in :rule" nm_}}
+
+    R(
+      "Sugar/RuleShorthand",
+      {SYMAWHAT_ -> SYMAREPLACE_ rest...},
+      {R ReplaceAll(ToString(SYMAWHAT_), " ", "/") SYMAWHAT_ SYMAREPLACE_ rest...}
+    )
   }
 }

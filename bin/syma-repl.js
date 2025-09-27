@@ -468,6 +468,9 @@ async function main() {
 
             // Start interactive REPL
             await repl.run();
+
+            // Ensure clean exit after REPL completes
+            process.exit(0);
         }
     } catch (error) {
         console.error('Fatal error:', error);

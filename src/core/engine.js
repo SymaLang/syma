@@ -381,6 +381,8 @@ function createMetaFoldPrimsFn(originalFoldPrimsFn) {
         'Join',        // Array joining
         'Split',       // String splitting
         'Splat',       // Splat
+        'Replace',     // String replacement
+        'ReplaceAll',  // String replacement
         '...!'         // Splat
         // Note: Explicitly exclude:
         // - FreshId (side effects)

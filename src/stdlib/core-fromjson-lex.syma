@@ -128,6 +128,11 @@
     :guard Eq(a_, "]")}
 
     ; Eating spaces
+    {R Tokenize/Mode/Default/EatFiveSpaces
+    {TokenizerState Processing Default {Focus a_} {Tokens tok...} Chars(b_, c_, d_, e_, next_, chars...)} 
+    {TokenizerState Processing Default {Focus next_} {Tokens tok...} Chars(chars...)} 
+    :guard And(IsWhitespace(a_), IsWhitespace(b_), IsWhitespace(c_), IsWhitespace(d_), IsWhitespace(e_))}
+
     {R Tokenize/Mode/Default/EatSpaces 
     {TokenizerState Processing Default {Focus a_} {Tokens tok...} Chars(next_, chars...)} 
     {TokenizerState Processing Default {Focus next_} {Tokens tok...} Chars(chars...)} 

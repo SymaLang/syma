@@ -91,6 +91,7 @@ function foldPrimitive(op, args, skipFolds) {
         case "Substring": return foldSubstring(args);
         case "IndexOf": return foldIndexOf(args);
         case "Replace": return foldReplace(args);
+        case "ReplaceAll": return foldReplaceAll(args);
         case "Split": return foldSplit(args);
         case "SplitToChars": return foldSplitToChars(args);
         case "SplitBy": return foldSplitBy(args);
@@ -493,6 +494,30 @@ function foldIndexOf(args) {
 function foldReplace(args) {
     if (args.length === 3 && isStr(args[0]) && isStr(args[1]) && isStr(args[2])) {
         const result = args[0].v.replace(args[1].v, args[2].v);
+        return Str(result);
+    }
+    return null;
+}
+
+/**
+ * Replace all occurrences: ReplaceAll[Str, search, replacement] -> Str(replaced)
+ */
+function foldReplaceAll(args) {
+    if (args.length === 3 && isStr(args[0]) && isStr(args[1]) && isStr(args[2])) {
+        // Use replaceAll if available (ES2021+) or fall back to global regex
+        const search = args[1].v;
+        const replacement = args[2].v;
+        let result;
+
+        if (String.prototype.replaceAll) {
+            // Use native replaceAll if available
+            result = args[0].v.replaceAll(search, replacement);
+        } else {
+            // Fallback for older environments: escape regex special chars and use global replace
+            const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            result = args[0].v.replace(new RegExp(escaped, 'g'), replacement);
+        }
+
         return Str(result);
     }
     return null;

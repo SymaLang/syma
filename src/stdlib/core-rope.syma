@@ -5,8 +5,8 @@
     {:rule Rope/id/right {RopeCat x_ ""}              -> x_}
     {:rule Rope/assoc    {RopeCat a_ {RopeCat b_ c_}} -> {RopeCat {RopeCat a_ b_} c_}}
     {:rule Rope/emit/cat {RopeEmit {RopeCat a_ b_}}   -> {Concat {RopeEmit a_} {RopeEmit b_}}}
-    {:rule Rope/emit/str {RopeEmit s_}                -> s_ :guard IsStr(s_)}
-    {:rule Rope/emit/num {RopeEmit n_}                -> ToString(n_) :guard IsNum(n_)}
+    {:rule Rope/emit/str {RopeEmit s_}                -> s_ :guard IsStr({Frozen s_})}
+    {:rule Rope/emit/num {RopeEmit n_}                -> ToString(n_) :guard IsNum({Frozen n_})}
     {:rule Rope/cat3     {RopeCat3 a_ b_ c_}          -> {RopeCat a_ {RopeCat b_ c_}}}
     {:rule Rope/cat4     {RopeCat4 a_ b_ c_ d_}       -> {RopeCat {RopeCat a_ b_} {RopeCat c_ d_}}}
 
