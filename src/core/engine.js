@@ -13,6 +13,140 @@ const isVar = n => isCall(n) && isSym(n.h) && n.h.v === "Var" && n.a.length === 
 const isVarRest = n =>
     isCall(n) && isSym(n.h) && n.h.v === "VarRest" && n.a.length === 1 && isStr(n.a[0]);
 
+/**
+ * Analyze a pattern to determine its indexing key.
+ * Returns { type, key, arity } where:
+ * - type: "call", "atom", or "universal"
+ * - key: the indexing key (head symbol for calls, value for atoms, null for universal)
+ * - arity: number for fixed arity, "*" for variable arity, null for non-calls
+ */
+function analyzePattern(pattern) {
+    if (isVar(pattern)) {
+        // Top-level Var matches anything
+        return { type: "universal", key: null, arity: null };
+    }
+
+    if (isSym(pattern)) {
+        return { type: "atom", key: `sym:${pattern.v}`, arity: null };
+    }
+
+    if (isNum(pattern)) {
+        return { type: "atom", key: `num:${pattern.v}`, arity: null };
+    }
+
+    if (isStr(pattern)) {
+        return { type: "atom", key: `str:${pattern.v}`, arity: null };
+    }
+
+    if (isCall(pattern)) {
+        // For Call patterns, index by head
+        // Head could be a symbol or a Var
+        if (isVar(pattern.h)) {
+            // Call with Var head matches any call
+            return { type: "universal", key: null, arity: null };
+        }
+
+        if (!isSym(pattern.h)) {
+            // Complex head (nested Call) - treat as universal for now
+            return { type: "universal", key: null, arity: null };
+        }
+
+        const headSymbol = pattern.h.v;
+
+        // Check if arguments contain VarRest (variable arity)
+        const hasVarRest = pattern.a.some(arg => isVarRest(arg));
+        const arity = hasVarRest ? "*" : pattern.a.length;
+
+        return { type: "call", key: headSymbol, arity };
+    }
+
+    // Unknown pattern type - treat as universal
+    return { type: "universal", key: null, arity: null };
+}
+
+/**
+ * Create an indexed structure for efficient rule lookup.
+ * Returns { byHead, byAtom, universal, allRules }
+ */
+export function indexRules(rules) {
+    const index = {
+        byHead: {},      // { headSymbol: { arity: [rules] } }
+        byAtom: {},      // { "type:value": [rules] }
+        universal: [],   // rules that match anything
+        allRules: rules  // keep original array for fallback
+    };
+
+    for (const rule of rules) {
+        const analysis = analyzePattern(rule.lhs);
+
+        if (analysis.type === "universal") {
+            index.universal.push(rule);
+        } else if (analysis.type === "atom") {
+            if (!index.byAtom[analysis.key]) {
+                index.byAtom[analysis.key] = [];
+            }
+            index.byAtom[analysis.key].push(rule);
+        } else if (analysis.type === "call") {
+            if (!index.byHead[analysis.key]) {
+                index.byHead[analysis.key] = {};
+            }
+            if (!index.byHead[analysis.key][analysis.arity]) {
+                index.byHead[analysis.key][analysis.arity] = [];
+            }
+            index.byHead[analysis.key][analysis.arity].push(rule);
+        }
+    }
+
+    return index;
+}
+
+/**
+ * Get applicable rules for an expression using the index.
+ * Returns an array of rules that could potentially match.
+ */
+function getApplicableRules(expr, ruleIndex) {
+    const applicable = [];
+
+    // Always include universal rules
+    applicable.push(...ruleIndex.universal);
+
+    if (isSym(expr)) {
+        const key = `sym:${expr.v}`;
+        if (ruleIndex.byAtom[key]) {
+            applicable.push(...ruleIndex.byAtom[key]);
+        }
+    } else if (isNum(expr)) {
+        const key = `num:${expr.v}`;
+        if (ruleIndex.byAtom[key]) {
+            applicable.push(...ruleIndex.byAtom[key]);
+        }
+    } else if (isStr(expr)) {
+        const key = `str:${expr.v}`;
+        if (ruleIndex.byAtom[key]) {
+            applicable.push(...ruleIndex.byAtom[key]);
+        }
+    } else if (isCall(expr) && isSym(expr.h)) {
+        const headSymbol = expr.h.v;
+        const arity = expr.a.length;
+
+        if (ruleIndex.byHead[headSymbol]) {
+            // Add rules with exact arity match
+            if (ruleIndex.byHead[headSymbol][arity]) {
+                applicable.push(...ruleIndex.byHead[headSymbol][arity]);
+            }
+            // Add rules with variable arity (VarRest)
+            if (ruleIndex.byHead[headSymbol]["*"]) {
+                applicable.push(...ruleIndex.byHead[headSymbol]["*"]);
+            }
+        }
+    }
+
+    // If no specific rules found and expr is a Call with non-symbol head,
+    // we already included universal rules above
+
+    return applicable;
+}
+
 // --- Meta-rule helpers ---
 export function findSection(universe, name) {
     if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
@@ -87,7 +221,7 @@ export function extractRulesFromNode(rulesNode) {
         rs.push({ name: nm.v, lhs, rhs, guard, prio });
     }
     rs.sort((a, b) => b.prio - a.prio);
-    return rs;
+    return indexRules(rs);
 }
 
 export function extractRules(universe) {
@@ -119,7 +253,7 @@ export function extractRules(universe) {
 
     // Sort by priority
     rules.sort((a, b) => b.prio - a.prio);
-    return rules;
+    return indexRules(rules);
 }
 
 /**
@@ -207,10 +341,11 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
             // Wrap the single rule in a Rules node for normalization
             const singleRuleNode = Call(Sym("Rules"), actualRule);
 
-            // Apply the applicable meta-rules
+            // Apply the applicable meta-rules (index them first)
+            const indexedMetaRules = indexRules(applicableMetaRules);
             const transformedNode = normalize(
                 singleRuleNode,
-                applicableMetaRules,
+                indexedMetaRules,
                 10000,
                 false,
                 metaFoldPrimsFn,
@@ -237,8 +372,9 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
 
                     // Evaluate the name expression (e.g., Concat, ToString, Add operations)
                     // Use the meta fold function to evaluate these expressions
+                    const emptyRuleIndex = indexRules([]);
                     const evaluatedName = metaFoldPrimsFn ?
-                        normalize(nameExpr, [], 1000, false, metaFoldPrimsFn, false) :
+                        normalize(nameExpr, emptyRuleIndex, 1000, false, metaFoldPrimsFn, false) :
                         nameExpr;
 
                     // Reconstruct the R node with evaluated name
@@ -676,12 +812,17 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
 /* --------------------- Rewriting ----------------------------- */
 
 /**
- * Try to match and apply a rule to an expression.
+ * Try to match and apply a rule to an expression using indexed rules.
  * Returns {matched: true, result: expr, rule: ruleObject} if successful,
  * or {matched: false} if no rule matches.
+ * @param {*} expr - Expression to match
+ * @param {Object} ruleIndex - Indexed rule structure
  */
-function tryMatchRule(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
-    for (const r of rules) {
+function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatterns = false) {
+    // Get only the applicable rules for this expression
+    const rulesToCheck = getApplicableRules(expr, ruleIndex);
+
+    for (const r of rulesToCheck) {
         const env = match(r.lhs, expr, {});
         if (env) {
             // Check guard if present
@@ -689,9 +830,8 @@ function tryMatchRule(expr, rules, foldPrimsFn = null, preserveUnboundPatterns =
                 // Substitute the guard with matched bindings, preserving Frozen wrappers
                 const guardValue = substWithFrozen(r.guard, env, preserveUnboundPatterns);
                 // Fully normalize the guard expression (not just fold primitives)
-                // This allows guards to use user-defined predicates, not just primitives
-                // Frozen nodes prevent normalization of their contents
-                const evaluatedGuard = normalizeWithFrozen(guardValue, rules, 100, false, foldPrimsFn, preserveUnboundPatterns);
+                // Guards need access to all rules, not just applicable ones
+                const evaluatedGuard = normalizeWithFrozen(guardValue, ruleIndex, 100, false, foldPrimsFn, preserveUnboundPatterns);
                 // Guard must evaluate to the symbol True
                 if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
                     continue; // Guard failed, try next rule

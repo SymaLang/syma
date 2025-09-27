@@ -209,7 +209,8 @@ export class NotebookEngine {
 
                         for (const step of trace) {
                             // Find the rule to get its pattern and replacement
-                            const rule = rules.find(r => r.name === step.rule);
+                            const flatRules = rules.allRules || rules;
+                            const rule = flatRules.find(r => r.name === step.rule);
 
                             let traceOutput = `\nStep ${step.i + 1}: Rule "${step.rule}"\n`;
                             traceOutput += '─'.repeat(60) + '\n';

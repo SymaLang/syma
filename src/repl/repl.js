@@ -402,8 +402,9 @@ export class SymaREPL {
                         this.platform.print("═" + "═".repeat(60) + "\n");
 
                         for (const step of trace) {
-                            // Find the rule to get its pattern and replacement
-                            const rule = rules.find(r => r.name === step.rule);
+                            // Find the rule to get its pattern and replacement (extract flat array from indexed structure)
+                            const flatRules = rules.allRules || rules;
+                            const rule = flatRules.find(r => r.name === step.rule);
 
                             this.platform.print(`\nStep ${step.i + 1}: Rule "${step.rule}"\n`);
                             this.platform.print("─" + "─".repeat(60) + "\n");
@@ -619,7 +620,9 @@ export class SymaREPL {
 
     // Helper methods for commands
     getRules() {
-        return engine.extractRules(this.universe);
+        const indexedRules = engine.extractRules(this.universe);
+        // Return the flat array for commands that expect it
+        return indexedRules.allRules || [];
     }
 
     addRule(rule) {
@@ -652,7 +655,8 @@ export class SymaREPL {
 
     async applyAction(action) {
         this.pushUndo();
-        const rules = this.getRules();
+        // engine.dispatch expects the indexed rules structure, not flat array
+        const rules = engine.extractRules(this.universe);
         this.universe = engine.dispatch(
             this.universe,
             rules,
@@ -678,6 +682,9 @@ export class SymaREPL {
     // Helper method to show trace output (extracted for reuse)
     async showTrace(trace, rules) {
         if (trace.length === 0) return;
+
+        // Extract flat array if rules is an indexed structure
+        const flatRules = rules.allRules || rules;
 
         if (this.traceStatsOnly) {
             // Stats-only mode
@@ -717,7 +724,7 @@ export class SymaREPL {
 
             for (const step of trace) {
                 // Find the rule to get its pattern and replacement
-                const rule = rules.find(r => r.name === step.rule);
+                const rule = flatRules.find(r => r.name === step.rule);
 
                 this.platform.print(`\nStep ${step.i + 1}: Rule "${step.rule}"\n`);
                 this.platform.print("─" + "─".repeat(60) + "\n");

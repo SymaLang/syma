@@ -228,7 +228,8 @@ export class NotebookCommands {
 
                     for (const step of trace) {
                         // Find the rule to get its pattern and replacement
-                        const rule = rules.find(r => r.name === step.rule);
+                        const flatRules = rules.allRules || rules;
+                        const rule = flatRules.find(r => r.name === step.rule);
 
                         lines.push(`Step ${step.i + 1}: Rule "${step.rule}"`);
                         lines.push('─'.repeat(40));
@@ -332,7 +333,8 @@ export class NotebookCommands {
                     const rules = engine.extractRules(this.repl.universe);
 
                     for (const step of trace) {
-                        const rule = rules.find(r => r.name === step.rule);
+                        const flatRules = rules.allRules || rules;
+                        const rule = flatRules.find(r => r.name === step.rule);
 
                         this.repl.platform.printWithNewline(`\nStep ${step.i + 1}: Rule "${step.rule}"`);
                         this.repl.platform.printWithNewline('─'.repeat(40));
@@ -796,7 +798,8 @@ export class NotebookCommands {
             } else {
                 // Check if the module actually has rules
                 const moduleRules = engine.extractRules(compiledUniverse);
-                if (moduleRules.length === 0) {
+                const flatModuleRules = moduleRules.allRules || moduleRules;
+                if (flatModuleRules.length === 0) {
                     this.repl.platform.printWithNewline(`Module has no rules`);
                 }
             }
@@ -1292,7 +1295,8 @@ export class NotebookCommands {
 
                     // Show summary
                     const rules = engine.extractRules(this.repl.universe);
-                    this.repl.platform.printWithNewline(`Loaded ${rules.length} rules`);
+                    const flatRules = rules.allRules || rules;
+                    this.repl.platform.printWithNewline(`Loaded ${flatRules.length} rules`);
                 } catch (error) {
                     this.repl.platform.printWithNewline(`Failed to load: ${error.message}`);
                 }
@@ -1510,8 +1514,9 @@ Examples:
     listRules(args) {
         try {
             const rules = engine.extractRules(this.repl.universe);
+            const flatRules = rules.allRules || rules;
 
-            if (rules.length === 0) {
+            if (flatRules.length === 0) {
                 this.repl.platform.printWithNewline("No rules defined");
                 return true;
             }
@@ -1521,10 +1526,10 @@ Examples:
 
             if (isNotebook && this.repl.platform.printStructured) {
                 // Create structured output for notebook
-                this.repl.platform.printWithNewline(`Found ${rules.length} rules (searchable):`);
+                this.repl.platform.printWithNewline(`Found ${flatRules.length} rules (searchable):`);
 
                 // Create sections for each rule
-                const ruleSections = rules.map((rule, index) => {
+                const ruleSections = flatRules.map((rule, index) => {
                     // Format rule details
                     let content = '';
 
@@ -1574,8 +1579,8 @@ Examples:
 
             } else {
                 // Regular REPL mode - simple list
-                this.repl.platform.printWithNewline(`Rules (${rules.length}):`);
-                for (const rule of rules) {
+                this.repl.platform.printWithNewline(`Rules (${flatRules.length}):`);
+                for (const rule of flatRules) {
                     const priority = rule.prio !== 0 && rule.prio !== 500 ? ` [${rule.prio}]` : '';
                     this.repl.platform.printWithNewline(`  ${rule.name}${priority}`);
                 }
