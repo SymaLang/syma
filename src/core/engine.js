@@ -536,71 +536,20 @@ export function substWithFrozen(expr, env, preserveUnboundPatterns = false) {
  * Frozen nodes prevent normalization of their contents
  */
 export function normalizeWithFrozen(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false) {
-    // If this is a Frozen node, don't normalize its contents
-    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen") {
-        return expr;  // Return as-is, preventing normalization
-    }
-
-    // For non-Frozen nodes, use special normalization that respects Frozen children
-    let cur = expr;
-    for (let i = 0; i < maxSteps; i++) {
-        const step = applyOnceWithFrozen(cur, rules, foldPrimsFn, preserveUnboundPatterns);
-        const afterRules = step.expr;
-        cur = (skipPrims || !foldPrimsFn) ? afterRules : foldPrimsWithFrozen(afterRules, foldPrimsFn);
-
-        // Check if either rules or primitives changed the expression
-        const changed = step.changed || !deq(afterRules, cur);
-        if (!changed) return cur;
-    }
-    throw new Error("normalizeWithFrozen: exceeded maxSteps (possible non-termination)");
+    return normalizeIterative(expr, rules, maxSteps, skipPrims, foldPrimsFn, preserveUnboundPatterns, {
+        skipFrozen: true,
+        includeTrace: false
+    });
 }
 
 /**
  * Apply rules once, but skip Frozen nodes at any level
  */
 function applyOnceWithFrozen(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
-    // Don't try to rewrite Frozen nodes
-    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen") {
-        return {changed: false, expr};
-    }
-
-    // Try to rewrite this node
-    for (const r of rules) {
-        const env = match(r.lhs, expr, {});
-        if (env) {
-            // Check guard if present
-            if (r.guard) {
-                // Substitute the guard with matched bindings, preserving Frozen wrappers
-                const guardValue = substWithFrozen(r.guard, env, preserveUnboundPatterns);
-                const evaluatedGuard = normalizeWithFrozen(guardValue, rules, 100, false, foldPrimsFn, preserveUnboundPatterns);
-                // Guard must evaluate to the symbol True
-                if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
-                    continue; // Guard failed, try next rule
-                }
-            }
-            const out = subst(r.rhs, env, preserveUnboundPatterns);
-            return {changed: true, expr: out};
-        }
-    }
-
-    // Otherwise try children (but skip Frozen children)
-    if (isCall(expr)) {
-        for (let i = 0; i < expr.a.length; i++) {
-            const child = expr.a[i];
-            // Skip rewriting inside Frozen nodes
-            if (isCall(child) && isSym(child.h) && child.h.v === "Frozen") {
-                continue;
-            }
-            const res = applyOnceWithFrozen(child, rules, foldPrimsFn, preserveUnboundPatterns);
-            if (res.changed) {
-                const next = clone(expr);
-                next.a[i] = res.expr;
-                return {changed: true, expr: next};
-            }
-        }
-    }
-
-    return {changed: false, expr};
+    return applyOnceIterative(expr, rules, foldPrimsFn, preserveUnboundPatterns, {
+        skipFrozen: true,
+        includeDebugInfo: false
+    });
 }
 
 /**
@@ -726,9 +675,12 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
 
 /* --------------------- Rewriting ----------------------------- */
 
-/* applyOnce: outermost-first, highest-priority rule wins */
-export function applyOnce(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
-    // Try to rewrite this node
+/**
+ * Try to match and apply a rule to an expression.
+ * Returns {matched: true, result: expr, rule: ruleObject} if successful,
+ * or {matched: false} if no rule matches.
+ */
+function tryMatchRule(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
     for (const r of rules) {
         const env = match(r.lhs, expr, {});
         if (env) {
@@ -746,144 +698,218 @@ export function applyOnce(expr, rules, foldPrimsFn = null, preserveUnboundPatter
                 }
             }
             const out = subst(r.rhs, env, preserveUnboundPatterns);
-            return {changed: true, expr: out};
+            return {matched: true, result: out, rule: r};
         }
     }
-    // Otherwise try children (pre-order)
-    if (isCall(expr)) {
-        for (let i = 0; i < expr.a.length; i++) {
-            const child = expr.a[i];
-            const res = applyOnce(child, rules, foldPrimsFn, preserveUnboundPatterns);
-            if (res.changed) {
-                const next = clone(expr);
-                next.a[i] = res.expr;
-                return {changed: true, expr: next};
+    return {matched: false};
+}
+
+/**
+ * Unified iterative apply-once implementation.
+ * Options:
+ * - skipFrozen: Skip traversal into Frozen nodes
+ * - includeDebugInfo: Include rule name, path, before/after for debugging
+ */
+function applyOnceIterative(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false, options = {}) {
+    const {skipFrozen = false, includeDebugInfo = false} = options;
+
+    // Always track path internally (it's cheap and simplifies the algorithm)
+    const work = [{parent: null, node: expr, path: []}];
+
+    while (work.length) {
+        const {parent, node, path} = work.shift();
+
+        // Skip Frozen nodes if requested
+        if (skipFrozen && isCall(node) && isSym(node.h) && node.h.v === "Frozen") {
+            if (!parent) return {changed: false, expr};
+            continue;
+        }
+
+        // Try to match and apply a rule at this node
+        const matchResult = tryMatchRule(node, rules, foldPrimsFn, preserveUnboundPatterns);
+        if (matchResult.matched) {
+            const out = matchResult.result;
+
+            // Reconstruct the tree with the replacement
+            let resultExpr;
+            if (!parent) {
+                // Root node was replaced
+                resultExpr = out;
+            } else {
+                // Navigate to the location and replace
+                resultExpr = clone(expr);
+                let cursor = resultExpr;
+
+                // Navigate to the parent using the path (excluding last step)
+                for (let i = 0; i < path.length - 1; i++) {
+                    const p = path[i];
+                    cursor = (p === 'h') ? cursor.h : cursor.a[p];
+                }
+
+                // Apply the replacement at the last step
+                if (path.length > 0) {
+                    const last = path[path.length - 1];
+                    if (last === 'h') {
+                        cursor.h = out;
+                    } else {
+                        cursor.a[last] = out;
+                    }
+                } else {
+                    // path is empty, we're at root
+                    resultExpr = out;
+                }
+            }
+
+            // Return with or without debug info
+            if (includeDebugInfo) {
+                return {
+                    changed: true,
+                    expr: resultExpr,
+                    rule: matchResult.rule.name,
+                    path: path,
+                    before: node,
+                    after: out
+                };
+            } else {
+                return {changed: true, expr: resultExpr};
+            }
+        }
+
+        // Enqueue children for traversal (pre-order: head first, then args)
+        if (isCall(node)) {
+            // Add head to work queue (unless it's Frozen and we're skipping)
+            if (!(skipFrozen && isSym(node.h) && node.h.v === "Frozen")) {
+                work.push({
+                    parent: node,
+                    node: node.h,
+                    path: path.concat('h')
+                });
+            }
+
+            // Add arguments to work queue
+            for (let i = 0; i < node.a.length; i++) {
+                const child = node.a[i];
+                // Skip Frozen children if requested
+                if (skipFrozen && isCall(child) && isSym(child.h) && child.h.v === "Frozen") {
+                    continue;
+                }
+                work.push({
+                    parent: node,
+                    node: child,
+                    path: path.concat(i)
+                });
             }
         }
     }
-    return {changed: false, expr};
+
+    // No rule matched
+    if (includeDebugInfo) {
+        return {changed: false, expr, rule: null, path: null, before: null, after: null};
+    } else {
+        return {changed: false, expr};
+    }
+}
+
+/* applyOnce: outermost-first, highest-priority rule wins */
+export function applyOnce(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
+    return applyOnceIterative(expr, rules, foldPrimsFn, preserveUnboundPatterns, {
+        skipFrozen: false,
+        includeDebugInfo: false
+    });
 }
 
 /* Tracing variant: track rule name + path of rewrite (iterative, pre-order) */
-export function applyOnceTrace(expr, rules, foldPrimsFn = null) {
-    // Work items hold: parentRef, keyInParent, node, path (array of 'h' or arg index)
-    const work = [{ parent: null, key: null, node: expr, path: [] }];
-    while (work.length) {
-        const { parent, key, node, path } = work.shift();
-        // Try rules at this node
-        for (const r of rules) {
-            const env = match(r.lhs, node, {});
-            if (env) {
-                // Check guard if present
-                if (r.guard) {
-                    // Substitute the guard with matched bindings, preserving Frozen wrappers
-                    const guardValue = substWithFrozen(r.guard, env);
-                    // Fully normalize the guard expression (not just fold primitives)
-                    // This allows guards to use user-defined predicates, not just primitives
-                    // Frozen nodes prevent normalization of their contents
-                    const evaluatedGuard = normalizeWithFrozen(guardValue, rules, 100, false, foldPrimsFn);
-                    // Guard must evaluate to the symbol True
-                    if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
-                        continue; // Guard failed, try next rule
-                    }
-                }
-                const out = subst(r.rhs, env);
-                if (parent === null) {
-                    return {
-                        changed: true,
-                        expr: out,
-                        rule: r.name,
-                        path,
-                        before: node,
-                        after: out
-                    };
-                } else {
-                    // write in place into a cloned top-level expr
-                    const root = clone(expr);
-                    // navigate to parent along path excluding last step
-                    let cursor = root;
-                    for (let i = 0; i < path.length - 1; i++) {
-                        const p = path[i];
-                        cursor = (p === 'h') ? cursor.h : cursor.a[p];
-                    }
-                    const last = path[path.length - 1];
-                    if (last === undefined) {
-                        // path points to root
-                        return {
-                            changed: true, expr: out, rule: r.name, path, before: node, after: out
-                        };
-                    }
-                    if (last === 'h') cursor.h = out; else cursor.a[last] = out;
-                    return {
-                        changed: true,
-                        expr: root,
-                        rule: r.name,
-                        path,
-                        before: node,
-                        after: out
-                    };
-                }
-            }
+export function applyOnceTrace(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false) {
+    return applyOnceIterative(expr, rules, foldPrimsFn, preserveUnboundPatterns, {
+        skipFrozen: false,
+        includeDebugInfo: true
+    });
+}
+
+/**
+ * Unified normalization implementation.
+ * Options:
+ * - skipFrozen: Use frozen-aware apply and fold functions
+ * - includeTrace: Build and return a trace of rewrite steps
+ */
+function normalizeIterative(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false, options = {}) {
+    const {skipFrozen = false, includeTrace = false} = options;
+
+    // Special case: if expr is Frozen and we're skipping frozen, return immediately
+    if (skipFrozen && isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen") {
+        return includeTrace ? {result: expr, trace: []} : expr;
+    }
+
+    let cur = expr;
+    const trace = includeTrace ? [] : null;
+
+    for (let i = 0; i < maxSteps; i++) {
+        // Apply rules once (using appropriate variant)
+        const step = skipFrozen
+            ? applyOnceWithFrozen(cur, rules, foldPrimsFn, preserveUnboundPatterns)
+            : includeTrace
+                ? applyOnceTrace(cur, rules, foldPrimsFn, preserveUnboundPatterns)
+                : applyOnce(cur, rules, foldPrimsFn, preserveUnboundPatterns);
+
+        const afterRules = step.expr;
+
+        // Fold primitives if enabled (using appropriate variant)
+        cur = (skipPrims || !foldPrimsFn)
+            ? afterRules
+            : skipFrozen
+                ? foldPrimsWithFrozen(afterRules, foldPrimsFn)
+                : foldPrimsFn(afterRules);
+
+        // Check if either rules or primitives changed the expression
+        const changed = step.changed || !deq(afterRules, cur);
+        if (!changed) {
+            return includeTrace ? {result: cur, trace} : cur;
         }
-        // Enqueue children (pre-order: head, then args)
-        if (isCall(node)) {
-            work.push({ parent: node, key: 'h', node: node.h, path: path.concat('h') });
-            for (let i = 0; i < node.a.length; i++) {
-                work.push({ parent: node, key: i, node: node.a[i], path: path.concat(i) });
+
+        // Add to trace if enabled
+        if (includeTrace) {
+            if (step.changed) {
+                trace.push({
+                    i,
+                    rule: step.rule,
+                    path: step.path,
+                    before: step.before,
+                    after: step.after
+                });
+            } else {
+                // Primitive folding happened
+                trace.push({
+                    i,
+                    rule: "[primitive folding]",
+                    path: [],
+                    before: afterRules,
+                    after: cur
+                });
             }
         }
     }
-    return { changed: false, expr, rule: null, path: null, before: null, after: null };
+
+    const errorMsg = skipFrozen
+        ? "normalizeWithFrozen: exceeded maxSteps (possible non-termination)"
+        : includeTrace
+            ? "normalizeWithTrace: exceeded maxSteps (possible non-termination)"
+            : "normalize: exceeded maxSteps (possible non-termination)";
+    throw new Error(errorMsg);
 }
 
 export function normalize(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false) {
-    let cur = expr;
-    for (let i = 0; i < maxSteps; i++) {
-        const step = applyOnce(cur, rules, foldPrimsFn, preserveUnboundPatterns);
-        const afterRules = step.expr;
-        cur = (skipPrims || !foldPrimsFn) ? afterRules : foldPrimsFn(afterRules);
-
-        // Check if either rules or primitives changed the expression
-        const changed = step.changed || !deq(afterRules, cur);
-        if (!changed) return cur;
-    }
-    throw new Error("normalize: exceeded maxSteps (possible non-termination)");
+    return normalizeIterative(expr, rules, maxSteps, skipPrims, foldPrimsFn, preserveUnboundPatterns, {
+        skipFrozen: false,
+        includeTrace: false
+    });
 }
 
 /* Normalization with step trace for debugger UIs */
-export function normalizeWithTrace(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null) {
-    let cur = expr;
-    const trace = [];
-    for (let i = 0; i < maxSteps; i++) {
-        const step = applyOnceTrace(cur, rules, foldPrimsFn);
-        const afterRules = step.expr;
-        cur = (skipPrims || !foldPrimsFn) ? afterRules : foldPrimsFn(afterRules);
-
-        // Check if either rules or primitives changed the expression
-        const changed = step.changed || !deq(afterRules, cur);
-        if (!changed) return {result: cur, trace};
-
-        // Human-friendly snapshot of *this* rewrite
-        if (step.changed) {
-            trace.push({
-                i,
-                rule: step.rule,
-                path: step.path,
-                before: step.before,
-                after: step.after
-            });
-        } else {
-            // Primitive folding happened
-            trace.push({
-                i,
-                rule: "[primitive folding]",
-                path: [],
-                before: afterRules,
-                after: cur
-            });
-        }
-    }
-    throw new Error("normalizeWithTrace: exceeded maxSteps (possible non-termination)");
+export function normalizeWithTrace(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false) {
+    return normalizeIterative(expr, rules, maxSteps, skipPrims, foldPrimsFn, preserveUnboundPatterns, {
+        skipFrozen: false,
+        includeTrace: true
+    });
 }
 
 /* --------------------- Universe plumbing --------------------- */
@@ -951,11 +977,11 @@ export function dispatch(universe, rules, actionTerm, foldPrimsFn = null, traceF
 
     let newProg;
     if (traceFn) {
-        const {result, trace} = normalizeWithTrace(applied, rules, 10000, false, foldPrimsFn);
+        const {result, trace} = normalizeWithTrace(applied, rules, 10000, false, foldPrimsFn, false);
         traceFn(actionTerm, trace);
         newProg = result;
     } else {
-        newProg = normalize(applied, rules, 10000, false, foldPrimsFn);
+        newProg = normalize(applied, rules, 10000, false, foldPrimsFn, false);
     }
 
     // The result should be a Program node after normalization
