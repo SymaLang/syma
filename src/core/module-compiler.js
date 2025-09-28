@@ -479,6 +479,15 @@ export class ModuleCompilerPlatform {
   }
 
   /**
+   * Load a module's AST from a file path
+   * @param {string} filePath - File path
+   * @returns {Promise<Object>} - Parsed AST
+   */
+  async loadModuleFromPath(filePath) {
+    throw new Error('loadModuleFromPath must be implemented by platform');
+  }
+
+  /**
    * Resolve module dependencies
    * @param {string} importedName - Imported module name
    * @param {string} importingModule - Module doing the import
@@ -488,6 +497,16 @@ export class ModuleCompilerPlatform {
     // Default implementation - just return the imported name
     return importedName;
   }
+
+  /**
+   * Resolve a relative import path
+   * @param {string} relativePath - Relative path from import statement
+   * @param {string} importingModule - Module doing the import
+   * @returns {Promise<string>} - Resolved absolute path
+   */
+  async resolveImportPath(relativePath, importingModule) {
+    throw new Error('resolveImportPath must be implemented by platform');
+  }
 }
 
 /* ---------------- Module Compiler ---------------- */
@@ -495,6 +514,54 @@ export class ModuleCompiler {
   constructor(platform) {
     this.platform = platform;
     this.loadedModules = new Map(); // name -> Module
+  }
+
+  /**
+   * Load a module from a specific file path
+   */
+  async loadModuleFromPath(filePath, visited = new Set()) {
+    // Load the module AST from the file
+    const ast = await this.platform.loadModuleFromPath(filePath);
+
+    // Extract module name from AST
+    if (!isCall(ast) || !isSym(ast.h) || ast.h.v !== 'Module') {
+      throw new Error(`Invalid module format in ${filePath}`);
+    }
+    const nameNode = ast.a[0];
+    if (!isSym(nameNode)) {
+      throw new Error(`Module name must be a symbol in ${filePath}`);
+    }
+    const moduleName = nameNode.v;
+
+    // Now load it recursively with the extracted name
+    if (!visited.has(moduleName)) {
+      visited.add(moduleName);
+      const module = new Module(moduleName, ast);
+      this.loadedModules.set(moduleName, module);
+
+      // Load its dependencies
+      for (const imp of module.imports) {
+        if (imp.fromPath) {
+          try {
+            const resolvedPath = await this.platform.resolveImportPath(imp.fromPath, moduleName);
+            await this.loadModuleFromPath(resolvedPath, visited);
+          } catch (error) {
+            console.warn(`Warning: Could not load dependency ${imp.module} from ${imp.fromPath}: ${error.message}`);
+          }
+        } else {
+          const resolvedName = await this.platform.resolveImport(imp.module, moduleName);
+          try {
+            await this.loadModuleRecursive(resolvedName, visited);
+          } catch (error) {
+            console.warn(`Warning: Could not load dependency ${imp.module}: ${error.message}`);
+          }
+        }
+      }
+
+      return module;
+    }
+
+    return this.loadedModules.get(moduleName);
   }
 
   /**
@@ -517,11 +584,22 @@ export class ModuleCompiler {
 
     // Load dependencies
     for (const imp of module.imports) {
-      const resolvedName = await this.platform.resolveImport(imp.module, moduleName);
-      try {
-        await this.loadModuleRecursive(resolvedName, visited);
-      } catch (error) {
-        console.warn(`Warning: Could not load dependency ${imp.module}: ${error.message}`);
+      // If the import has a 'from' path, we need to load from that specific file
+      if (imp.fromPath) {
+        try {
+          const resolvedPath = await this.platform.resolveImportPath(imp.fromPath, moduleName);
+          await this.loadModuleFromPath(resolvedPath, visited);
+        } catch (error) {
+          console.warn(`Warning: Could not load dependency ${imp.module} from ${imp.fromPath}: ${error.message}`);
+        }
+      } else {
+        // Standard module import without 'from' clause
+        const resolvedName = await this.platform.resolveImport(imp.module, moduleName);
+        try {
+          await this.loadModuleRecursive(resolvedName, visited);
+        } catch (error) {
+          console.warn(`Warning: Could not load dependency ${imp.module}: ${error.message}`);
+        }
       }
     }
 

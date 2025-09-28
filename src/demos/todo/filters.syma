@@ -1,15 +1,9 @@
 {Module Todo/Filters
-  {Export FiltersView}
-
-  {Defs
-    {FiltersView
-      {Project RenderFilters}
-    }
-  }
+  {Export FiltersView SetFilter}
 
   {Rules
-    {R "RenderFilters"
-      {/@ RenderFilters {App {State ... {Filter f_}} _}}
+    {R "FiltersView"
+      {/@ FiltersView {App {State s... {Filter f_}} _}}
       {Div :class "flex gap-2 my-4"
         {Button 
           :class If(Eq(f_, All), "bg-blue-500 text-white px-2 py-1 rounded", "bg-gray-200 px-2 py-1 rounded") 

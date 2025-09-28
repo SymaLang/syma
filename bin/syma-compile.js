@@ -113,8 +113,9 @@ async function compile(options) {
       throw new Error(`Entry module ${entryModuleName} not found in provided files`);
     }
 
-    // Load entry module and dependencies recursively
-    await platform.loadModuleFromPath(entryFile);
+    // Load entry module and dependencies recursively using the compiler's method
+    // This ensures relative imports are properly resolved
+    await compiler.loadModuleFromPath(entryFile);
 
     // Try to load Core/Syntax/Global if it exists
     try {
@@ -159,8 +160,8 @@ async function compile(options) {
         });
         const compiler = new ModuleCompiler(platform);
 
-        // Load the module
-        await platform.loadModuleFromPath(files[0]);
+        // Load the module and its dependencies through the compiler
+        await compiler.loadModuleFromPath(files[0]);
 
         // Try to load Core/Syntax/Global if it exists
         try {

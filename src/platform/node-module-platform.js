@@ -161,4 +161,39 @@ export class NodeModulePlatform extends ModuleCompilerPlatform {
         // Could be enhanced to handle relative imports, aliases, etc.
         return importedName;
     }
+
+    /**
+     * Resolve a relative import path
+     */
+    async resolveImportPath(relativePath, importingModule) {
+        // Find the file path of the importing module
+        let importingPath = null;
+
+        // Check if we have a path for this module
+        if (this.moduleNameToPath.has(importingModule)) {
+            importingPath = this.moduleNameToPath.get(importingModule);
+        } else {
+            // Try to find it in loaded paths
+            for (const [filePath, ast] of this.loadedPaths.entries()) {
+                if (ast && ast.a && ast.a[0] && ast.a[0].v === importingModule) {
+                    importingPath = filePath;
+                    break;
+                }
+            }
+        }
+
+        if (!importingPath) {
+            throw new Error(`Cannot find path for importing module ${importingModule}`);
+        }
+
+        // Resolve the relative path
+        const currentDir = path.dirname(importingPath);
+        const resolvedPath = path.resolve(currentDir, relativePath);
+
+        if (!fs.existsSync(resolvedPath)) {
+            throw new Error(`Cannot find module at ${resolvedPath} (imported from ${importingModule})`);
+        }
+
+        return resolvedPath;
+    }
 }
