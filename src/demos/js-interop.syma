@@ -1,0 +1,44 @@
+{Module
+  Demo/JSInterop
+  {Export}
+  {Program
+    App(
+      State(Empty),
+      {UI
+        {Div
+          :class "card"
+          {H1 "JS Interop Demo"}
+          {Div :ref DatePickerRef}
+        }
+      }
+    )
+    {JSInterop
+      // {JSImport "std:global" "window"} ; Will be rewritten to {JSRef Obj "window" somehandle}
+      // {JSVar Let a 1}
+      // {JSCall {JSRef Obj "window"} "alert" "Hello from Syma!"}
+      // {JSSet {JSVar a} 42}
+      {window . alert "Hello from Syma!"}
+
+      {function add a b {
+        return a + b
+      }}
+    }
+  }
+  {Rules
+    R(
+      "LiftApplyThroughProgramAndApp",
+      Apply(act_, {Program App(st_, ui_) eff_}),
+      {Program App(Apply(act_, st_), ui_) eff_}
+    )
+    R(
+      "Inc",
+      Apply(Inc, State({Count n_})),
+      State({Count Add(n_, 1)})
+    )
+    R(
+      "ShowCount",
+      /@({Show Count}, App(State({Count n_}), _)),
+      n_
+    )
+  }
+}
