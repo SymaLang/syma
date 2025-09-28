@@ -519,7 +519,9 @@ function createMetaFoldPrimsFn(originalFoldPrimsFn) {
         'Splat',       // Splat
         'Replace',     // String replacement
         'ReplaceAll',  // String replacement
-        '...!'         // Splat
+        '...!',        // Splat
+        'Serialize',   // Expression serialization
+        'Deserialize'  // Expression deserialization
         // Note: Explicitly exclude:
         // - FreshId (side effects)
         // - Comparison ops (Gt, Lt, Eq, etc.) - needed at runtime for guards

@@ -143,6 +143,8 @@ function foldPrimitive(op, args, skipFolds) {
         case "CharFromCode": return foldCharFromCode(args);
         case "Splat": return foldSplat(args);
         case "...!": return foldSplat(args);
+        case "Serialize": return foldSerialize(args);
+        case "Deserialize": return foldDeserialize(args);
     }
 
     return null;
@@ -973,6 +975,127 @@ function foldSplat(args) {
     // Return Splice object - it will be expanded by context-specific processors
     // The display layer will handle showing it as Bundle[...] for clarity
     return Splice(args);
+}
+
+/**
+ * Serialize: Serialize[expr] -> Str(json)
+ * Converts any Syma expression into a JSON string that can be stored or transmitted.
+ * The serialized format preserves the complete AST structure and can be perfectly
+ * deserialized back to the original expression.
+ *
+ * This enables powerful patterns like:
+ * - Storing expressions in databases or files
+ * - Transmitting code over the network
+ * - Creating expression templates
+ * - Metaprogramming and code generation
+ */
+function foldSerialize(args) {
+    if (args.length !== 1) return null;
+
+    const expr = args[0];
+
+    try {
+        // Convert the expression to a serializable format
+        const serializable = exprToSerializable(expr);
+        // Convert to JSON string
+        const json = JSON.stringify(serializable);
+        return Str(json);
+    } catch (e) {
+        // If serialization fails, remain symbolic
+        return null;
+    }
+}
+
+/**
+ * Deserialize: Deserialize[Str] -> expr
+ * Parses a JSON string (created by Serialize) back into a Syma expression.
+ * This is the inverse of Serialize, allowing perfect round-trip conversion.
+ *
+ * Use cases:
+ * - Loading stored expressions
+ * - Receiving code over the network
+ * - Dynamic code evaluation
+ * - Template instantiation
+ */
+function foldDeserialize(args) {
+    if (args.length !== 1 || !isStr(args[0])) return null;
+
+    const jsonStr = args[0].v;
+
+    try {
+        // Parse the JSON string
+        const parsed = JSON.parse(jsonStr);
+        // Convert back to Syma expression
+        const expr = serializableToExpr(parsed);
+        return expr;
+    } catch (e) {
+        // If deserialization fails, remain symbolic
+        return null;
+    }
+}
+
+/**
+ * Convert a Syma expression to a serializable JavaScript object
+ * that can be safely converted to JSON
+ */
+function exprToSerializable(expr) {
+    // Handle Splice objects
+    if (isSplice(expr)) {
+        return {
+            k: "Splice",
+            items: expr.items.map(exprToSerializable)
+        };
+    }
+
+    // Handle atoms
+    if (isSym(expr)) {
+        return {k: "Sym", v: expr.v};
+    }
+    if (isNum(expr)) {
+        return {k: "Num", v: expr.v};
+    }
+    if (isStr(expr)) {
+        return {k: "Str", v: expr.v};
+    }
+
+    // Handle calls
+    if (isCall(expr)) {
+        return {
+            k: "Call",
+            h: exprToSerializable(expr.h),
+            a: expr.a.map(exprToSerializable)
+        };
+    }
+
+    // Unknown type - throw error
+    throw new Error(`Cannot serialize unknown expression type: ${JSON.stringify(expr)}`);
+}
+
+/**
+ * Convert a serialized JavaScript object back to a Syma expression
+ */
+function serializableToExpr(obj) {
+    if (!obj || typeof obj !== 'object' || !obj.k) {
+        throw new Error(`Invalid serialized format: ${JSON.stringify(obj)}`);
+    }
+
+    switch (obj.k) {
+        case "Sym":
+            return Sym(obj.v);
+        case "Num":
+            return Num(obj.v);
+        case "Str":
+            return Str(obj.v);
+        case "Call":
+            return Call(
+                serializableToExpr(obj.h),
+                ...obj.a.map(serializableToExpr)
+            );
+        case "Splice":
+            return Splice(obj.items.map(serializableToExpr));
+        default:
+            throw new Error(`Unknown serialized type: ${obj.k}`);
+    }
 }
 
 /**

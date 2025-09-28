@@ -6,7 +6,7 @@
  */
 
 import { BaseProjector } from './base.js';
-import { Sym, Call, isSym, isNum, isStr, isCall, show } from '../ast-helpers.js';
+import { Sym, Call, isSym, isNum, isStr, isCall, isSplice, show } from '../ast-helpers.js';
 import { createEventHandler, handleBinding } from '../events.js';
 import { logProjectionTrace, logProjectionFailure, explainProjectionFailure, getTraceState } from '../debug.js';
 
@@ -76,6 +76,13 @@ export class DOMProjector extends BaseProjector {
         const reduced = getTraceState()
             ? this.normalizeWithTrace(annotated, currentRules).result
             : this.normalizeFunc(annotated, currentRules);
+
+        // Check if projection failed (still has /@ at the root)
+        if (isCall(reduced) && isSym(reduced.h) && reduced.h.v === "/@") {
+            throw new Error(`No projection rule found for: ${show(node)}\n` +
+                          `Tried to match: ${show(annotated)}\n` +
+                          `Make sure you have a rule like: (R "ProjectionRule" (/@ ${show(node)} (App ...)) ...)`);
+        }
 
         return reduced;
     }
@@ -179,6 +186,22 @@ export class DOMProjector extends BaseProjector {
                 throw new Error("Project[...] expects exactly one child expression");
             }
             const rendered = this.project(node.a[0], state);
+
+            // Check if the result is a Splice (from Splat/...!)
+            if (isSplice(rendered)) {
+                // Create a DocumentFragment to hold multiple nodes
+                const fragment = document.createDocumentFragment();
+                for (const child of rendered.items) {
+                    if (isStr(child) || isNum(child) || isSym(child)) {
+                        const span = document.createElement("span");
+                        span.appendChild(this.renderTextPart(child, state));
+                        fragment.appendChild(span);
+                    } else {
+                        fragment.appendChild(this.renderUI(child, state, onDispatch));
+                    }
+                }
+                return fragment;
+            }
 
             // The result may be a Text-like atom or another UI call
             if (isStr(rendered) || isNum(rendered) || isSym(rendered)) {
@@ -296,6 +319,13 @@ export class DOMProjector extends BaseProjector {
                 ? this.normalizeWithTrace(annotated, currentRules).result
                 : this.normalizeFunc(annotated, currentRules);
 
+            // Check if Show projection failed (still has /@ at the root)
+            if (isCall(reduced) && isSym(reduced.h) && reduced.h.v === "/@") {
+                throw new Error(`No projection rule found for: ${show(part)}\n` +
+                              `Tried to match: ${show(annotated)}\n` +
+                              `Make sure you have a rule to handle this Show expression in the current context`);
+            }
+
             if (isStr(reduced)) return document.createTextNode(reduced.v);
             if (isNum(reduced)) return document.createTextNode(String(reduced.v));
 
@@ -309,8 +339,13 @@ export class DOMProjector extends BaseProjector {
             throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
         }
 
-        // If plain Sym leaks here, stringify it
-        if (isSym(part)) return document.createTextNode(part.v);
+        // If plain Sym leaks here, check if it's Empty (skip) or stringify it
+        if (isSym(part)) {
+            if (part.v === "Empty") {
+                return document.createTextNode(""); // Return empty text node to skip rendering
+            }
+            return document.createTextNode(part.v);
+        }
 
         throw new Error(`Unsupported Text part: ${show(part)}`);
     }

@@ -433,6 +433,39 @@ The runtime provides a comprehensive standard library of primitive operations th
 - `{Debug label? value}` → logs to console and returns value (for debugging)
 - `{Splat arg1 arg2 ...}` → creates a splice that expands in context (see Meta-Rules)
 - `{...! arg1 arg2 ...}` → alias for Splat, commonly used in RuleRules
+- `{Serialize expr}` → converts any Syma expression to JSON string for storage/transmission
+- `{Deserialize str}` → parses JSON string back to original Syma expression
+
+### Serialization and Deserialization
+
+The `Serialize` and `Deserialize` primitives enable powerful metaprogramming patterns:
+
+**Serialize** converts any Syma expression into a JSON string that preserves the complete AST structure:
+```lisp
+{Serialize {Add 1 2}}  → "{\"k\":\"Call\",\"h\":{\"k\":\"Sym\",\"v\":\"Add\"},\"a\":[{\"k\":\"Num\",\"v\":1},{\"k\":\"Num\",\"v\":2}]}"
+{Serialize CounterState} → serialized state string
+```
+
+**Deserialize** reconstructs the original expression from a serialized string:
+```lisp
+{Deserialize "{\"k\":\"Sym\",\"v\":\"Hello\"}"} → Hello
+{Deserialize storedExpr} → original expression
+```
+
+**Use Cases:**
+- **Persistence**: Store expressions in localStorage or databases
+- **Network transmission**: Send code over WebSocket or HTTP
+- **Code templates**: Create and instantiate expression templates
+- **Metaprogramming**: Generate, transform, and evaluate code dynamically
+- **Undo/Redo**: Serialize state history for time-travel debugging
+- **Cross-platform sharing**: Exchange expressions between browser and Node.js
+
+**Example - Dynamic Code Evaluation:**
+```lisp
+{R "EvalStored"
+  {Eval key_}
+  {Normalize {Deserialize {StorageGet key_}}}}
+```
 
 ### Note on Lists
 
