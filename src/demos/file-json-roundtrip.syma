@@ -1,5 +1,5 @@
 {Module
-  Demo/Isomorphic
+  Demo/FileJSONRoundtrip
 
   {Import Core/Main as C open}
   {Import Core/Plumb as CP open macro}

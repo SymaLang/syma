@@ -605,7 +605,7 @@ export class SymaREPL {
 
         const message = possibleShutdownMessages[Math.floor(Math.random() * possibleShutdownMessages.length)];
 
-        this.platform.print(`\n${message}\n`);
+        this.platform.print(`\n✨ ${message}\n`);
 
         // Clean up effects processor
         if (this.effectsProcessor) {

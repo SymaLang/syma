@@ -35,16 +35,4 @@
       n_
     )
   }
-  // {RuleRules
-  //   R("RewriteInc",
-  //     R("Inc",
-  //       Apply(Inc, State({Count n_})),
-  //       State({Count Add(n_, 1)})
-  //     ),
-  //     R("Inc",
-  //         Apply(Inc, State({Count n_})),
-  //         State({Count Add(n_, 2)})
-  //     )
-  //   )
-  // }
 }

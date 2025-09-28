@@ -195,6 +195,9 @@ export class NotebookCommands {
             const expr = this.repl.parser.parseString(exprText);
             const rules = engine.extractRules(this.repl.universe);
 
+            // Start timing
+            const startTime = performance.now();
+
             // Use normalizeWithTrace
             const { result, trace } = engine.normalizeWithTrace(
                 expr,
@@ -203,6 +206,10 @@ export class NotebookCommands {
                 false,
                 foldPrims
             );
+
+            // End timing
+            const endTime = performance.now();
+            const elapsedTime = endTime - startTime;
 
             // Check if we're in notebook mode
             const isNotebook = this.repl.platform.isNotebook === true;
@@ -316,6 +323,30 @@ export class NotebookCommands {
                     content: resultStr,
                     expanded: true,
                     persistedExpanded: true
+                });
+
+                // 4. Performance metrics section
+                const flatRules = rules.allRules || rules;
+                const totalRules = flatRules.length;
+                const totalSteps = trace.length;
+                let metricsContent = `Total execution time: ${elapsedTime.toFixed(2)}ms\n`;
+                metricsContent += `Total rules in system: ${totalRules} rules\n`;
+                metricsContent += `Total rewrite steps: ${totalSteps} steps\n`;
+
+                if (totalSteps > 0) {
+                    const avgTimePerStep = elapsedTime / totalSteps;
+                    metricsContent += `Average time per step: ${avgTimePerStep.toFixed(3)}ms\n`;
+
+                    // Estimate rules checked (with indexing optimization)
+                    const avgRulesCheckedPerStep = Math.ceil(totalRules * 0.15); // Assume 15% selectivity
+                    metricsContent += `Estimated avg rules checked per step: ~${avgRulesCheckedPerStep} (with indexing)`;
+                }
+
+                sections.push({
+                    title: '📈 Performance Metrics',
+                    content: metricsContent,
+                    expanded: false,
+                    persistedExpanded: false
                 });
 
                 // Output the accordion

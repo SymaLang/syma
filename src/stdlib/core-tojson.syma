@@ -1,41 +1,171 @@
 {Module Core/ToJSON
-  {Import Core/Rope as CR open}
   {Export ToJSON}
   {Rules
-    ; --- make JVal delegate structured values ---
-    {:rule J/val->arr {JVal {JSONArr xs...}} -> {JArr xs...}}
-    {:rule J/val->obj {JVal {JSONObj kvs...}} -> {JObj kvs...}}
-
-    ; atoms
-    {:rule J/true  {JVal True}  -> "true"}
-    {:rule J/false {JVal False} -> "false"}
-    {:rule J/null  {JVal Empty} -> "null"}
-    {:rule J/str   {JVal s_} -> {JQuote s_} :guard IsStr(s_)}
-    {:rule J/num   {JVal n_} -> ToString(n_) :guard IsNum(n_)}
-
-    ; strings (quoting)
-    {:rule J/quote {JQuote s_} -> {RopeCat3 "\"" {Escape s_} "\""}}
-
-    ; arrays
-    {:rule J/arr/empty {JArr} -> {RopeCat "[" "]"}}
-    {:rule J/arr/build {JArr items...} -> {RopeCat3 "[" {JArrJoin items...} "]"}}
-    {:rule J/arr/join1 {JArrJoin x_} -> {JVal x_}}
-    {:rule J/arr/joinN {JArrJoin x_ y_ rest...} -> {RopeCat3 {JVal x_} ", " {JArrJoin y_ rest...}}}
-
-    ; objects
-    {:rule J/obj/empty {JObj} -> {RopeCat "{" "}"}}
-    {:rule J/obj/build {JObj kvs...} -> {RopeCat3 "{" {JObjJoin kvs...} "}"}}
-    {:rule J/kv {JPair {JSONKV k_ v_}} -> {RopeCat3 {JQuote k_} ": " {JVal v_}}}
-    {:rule J/obj/join1 {JObjJoin kv_} -> {JPair kv_}}
-    {:rule J/obj/joinN {JObjJoin kv_ kv2_ rest...} -> {RopeCat3 {JPair kv_} ", " {JObjJoin kv2_ rest...}}}
-
     ; -------- Public entry --------
-    {R ToJSON/a {ToJSON x_} {RopeEmit {JVal x_} } {IsNum {Frozen x_}}}
-    {R ToJSON/b {ToJSON x_} {RopeEmit {JVal x_} } {IsStr {Frozen x_}}}
-    {R ToJSON/c {ToJSON x_} {RopeEmit {JVal x_} } {Eq Empty {Frozen x_}}}
-    {R ToJSON/d {ToJSON x_} {RopeEmit {JVal x_} } {Eq True {Frozen x_}}}
-    {R ToJSON/e {ToJSON x_} {RopeEmit {JVal x_} } {Eq False {Frozen x_}}}
-    {R ToJSON/f {ToJSON {head_ v...}} {RopeEmit {JVal {head_ v...}} } {Eq JSONArr {Frozen head_}}}
-    {R ToJSON/g {ToJSON {head_ v...}} {RopeEmit {JVal {head_ v...}} } {Eq JSONObj {Frozen head_}}}
+    {R ToJSON/a {ToJSON x_} {Stringifying End ToString(x_)} {IsNum {Frozen x_}}}
+    {R ToJSON/b {ToJSON x_} {Stringifying End x_} {IsStr {Frozen x_}}}
+    {R ToJSON/c {ToJSON x_} {Stringifying End "null"} {Eq Empty {Frozen x_}}}
+    {R ToJSON/d {ToJSON x_} {Stringifying End "true"} {Eq True {Frozen x_}}}
+    {R ToJSON/e {ToJSON x_} {Stringifying End "false"} {Eq False {Frozen x_}}}
+    {R ToJSON/f {ToJSON {head_ v...}} {Stringifying Processing {Stack} {Before } {Tree {head_ v...}}} :guard {Eq JSONArr {Frozen head_}}}
+    {R ToJSON/g {ToJSON {head_ v...}} {Stringifying Processing {Stack} {Before} {Tree {head_ v...}}} :guard {Eq JSONObj {Frozen head_}}}
+
+    ; Processing
+
+    ; Arr        
+    {R ToJSON/Stringifying/Processing/Arr 
+      {Stringifying Processing {Stack s...} {Before bef...} {Tree {JSONArr kvs...} rest...} }
+      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree kvs... EndArr rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Arr/Start
+      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree v_ rest...} }
+      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree {Stringify v_} rest...}}
+      :guard IsPrimitive(v_)
+    }
+
+    {R ToJSON/Stringifying/Processing/Arr/Start/Arr
+      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree {JSONArr v...} rest...} }
+      {Stringifying Processing {Stack s... Arr Obj} {Before bef... "[" "["} {Tree v... EndArr rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Arr/Start/Obj
+      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree {JSONObj v...} rest...} }
+      {Stringifying Processing {Stack s... Arr Obj} {Before bef... "[" "{"} {Tree v... EndObj rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Arr/V/Prim
+      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree v_ rest...}}
+      {Stringifying Processing {Stack s... Arr} {Before bef... ","} {Tree {Stringify v_} rest...}}
+      :guard IsPrimitive(v_)
+    }
+
+    {R ToJSON/Stringifying/Processing/Arr/V/Arr
+      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree {JSONArr v...} rest...} }
+      {Stringifying Processing {Stack s... Arr Arr} {Before bef... "," "["} {Tree v... EndArr rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Arr/V/Obj
+      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree {JSONObj v...} rest...} }
+      {Stringifying Processing {Stack s... Arr Obj} {Before bef... "," "{"} {Tree v... EndObj rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Arr/End
+      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree v_ rest...}}
+      {Stringifying Processing {Stack s...} {Before bef... "]"} {Tree rest...}}
+      :guard Eq({Frozen v_}, EndArr)
+    }
+
+    ; Obj
+
+    {R ToJSON/Stringifying/Processing/Obj 
+      {Stringifying Processing {Stack s...} {Before bef...} {Tree {JSONObj kvs...} rest...} }
+      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree kvs... EndObj rest...}}
+    }
+    
+    {R ToJSON/Stringifying/Processing/Obj/Start
+      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ v_} rest...} }
+      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":"} {Stringify v_} rest...}}
+      :guard IsPrimitive(v_)
+    }
+
+    {R ToJSON/Stringifying/Processing/Obj/Start/Arr
+      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ {JSONArr v...}} rest...} }
+      {Stringifying Processing {Stack s... Obj Arr} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":["} v... EndArr rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Obj/Start/Obj
+      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ {JSONObj v...}} rest...} }
+      {Stringifying Processing {Stack s... Obj Obj} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":{"} v... EndObj rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Obj/V/Prim
+      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ v_} rest...}}
+      {Stringifying Processing {Stack s... Obj} {Before bef... ","} {Tree {Stringify k_} {Stringified ":"} {Stringify v_} rest...}}
+      :guard IsPrimitive(v_)
+    }
+
+    {R ToJSON/Stringifying/Processing/Obj/V/Arr
+      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ {JSONArr v...}} rest...} }
+      {Stringifying Processing {Stack s... Obj Arr} {Before bef... ","} {Tree {Stringify k_} {Stringified ":["} v... EndArr rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Obj/V/Obj
+      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ {JSONObj v...}} rest...} }
+      {Stringifying Processing {Stack s... Obj Obj} {Before bef... ","} {Tree {Stringify k_} {Stringified ":{"} v... EndObj rest...}}
+    }
+
+    {R ToJSON/Stringifying/Processing/Obj/End
+      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree v_ rest...}}
+      {Stringifying Processing {Stack s...} {Before bef... "}"} {Tree rest...}}
+      :guard Eq(v_, EndObj)
+    }
+
+    ; Advance stringified value
+    {R ToJSON/Stringifying/Processing/Stringified
+      {Stringifying Processing {Stack s...} {Before bef...} {Tree Stringified(v_) rest...}}
+      {Stringifying Processing {Stack s...} {Before bef... v_} {Tree rest...}}
+      :guard IsStr({Frozen v_})
+    }
+
+    ; Helpers
+    {R ToJSON/Stringifying/Processing/Stringify/Num
+      {Stringify v_}
+      {Stringified ToString(v_)}
+      :guard IsNum({Frozen v_})
+    }
+
+    {R ToJSON/Stringifying/Processing/Stringify/Str
+      {Stringify v_}
+      {Stringify Concatenating Concat("\"", v_, "\"")}
+      :guard IsStr({Frozen v_})
+    }
+
+    {R ToJSON/Stringifying/Processing/Stringify/Str/Concatenating
+      {Stringify Concatenating v_}
+      {Stringified v_}
+      :guard IsStr({Frozen v_})
+    }
+
+    {R ToJSON/Stringifying/Processing/Stringify/True
+      {Stringify True} {Stringified "true"}
+    }
+
+    {R ToJSON/Stringifying/Processing/Stringify/False
+      {Stringify False} {Stringified "false"}
+    }
+
+    {R ToJSON/Stringifying/Processing/Stringify/Empty
+      {Stringify Empty} {Stringified "null"}
+    }
+
+    ; Guards
+    {R ToJSON/Stringifying/Processing/Guard/IsPrimitive/True
+      IsPrimitive(v_)
+      Or(
+        IsStr({Frozen v_}), 
+        IsNum({Frozen v_}), 
+        Eq({Frozen v_}, True), 
+        Eq({Frozen v_}, False), 
+        Eq({Frozen v_}, Empty)
+      )
+    }
+
+    {R ToJSON/Stringifying/Processing/Guard/IsPrimitive/False
+      IsPrimitive(head_, ...)
+      Or(Eq(head_, JSONArr), Eq(head_, JSONObj))
+    }
+
+    ; End
+    {R ToJSON/Stringifying/Processing/End
+      {Stringifying Processing {Stack} {Before bef...} {Tree}}
+      {Stringifying Concatenating Concat(bef...)}
+    }
+
+    {R ToJSON/Stringifying/Concatenating/End
+      {Stringifying Concatenating s_}
+      s_
+      :guard IsStr({Frozen s_})
+    }
   }
 }

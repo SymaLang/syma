@@ -1265,10 +1265,11 @@ Debugging:
                 return true;
             }
 
-            // Get current rules
-            const rules = this.repl.getRules();
+            // Get current rules (indexed structure for engine functions)
+            const rules = engine.extractRules(this.repl.universe);
+            const flatRules = rules.allRules || [];
 
-            if (rules.length === 0) {
+            if (flatRules.length === 0) {
                 this.repl.platform.printWithNewline("No rules to apply");
                 return true;
             }
@@ -1375,7 +1376,7 @@ Debugging:
                 // Output timing information
                 this.repl.platform.printWithNewline(`\n=== Performance Metrics ===`);
                 this.repl.platform.printWithNewline(`Total execution time: ${elapsedTime.toFixed(2)}ms`);
-                this.repl.platform.printWithNewline(`Total rules in system: ${rules.allRules.length} rules`);
+                this.repl.platform.printWithNewline(`Total rules in system: ${flatRules.length} rules`);
                 this.repl.platform.printWithNewline(`Total rewrite steps: ${totalSteps} steps`);
 
                 // Calculate average time per step if we have steps
@@ -1385,8 +1386,8 @@ Debugging:
 
                     // Estimate rules checked (with indexing optimization)
                     // This is an approximation based on average selectivity
-                    const avgRulesCheckedPerStep = Math.ceil(rules.allRules.length * 0.15); // Assume 15% selectivity with indexing
-                    this.repl.platform.printWithNewline(`Estimated avg rules checked per step: ~${avgRulesCheckedPerStep} (with indexing)`);
+                    // const avgRulesCheckedPerStep = Math.ceil(flatRules.length * 0.15); // Assume 15% selectivity with indexing
+                    // this.repl.platform.printWithNewline(`Estimated avg rules checked per step: ~${avgRulesCheckedPerStep} (with indexing)`);
                 }
                 this.repl.platform.printWithNewline(`===========================`);
             }
@@ -1803,7 +1804,7 @@ Debugging:
                     const targetExpr = this.repl.parser.parseString(targetText);
 
                     // Normalize the expression (but don't print yet - wait until after match)
-                    const rules = this.repl.getRules();
+                    const rules = engine.extractRules(this.repl.universe);
                     if (this.repl.trace) {
                         const { result: normalized, trace } = engine.normalizeWithTrace(
                             targetExpr,
@@ -2103,7 +2104,7 @@ Debugging:
                 const targetExpr = this.repl.parser.parseString(targetText);
 
                 // Normalize the target expression using current rules (but don't display yet)
-                const rules = this.repl.getRules();
+                const rules = engine.extractRules(this.repl.universe);
 
                 if (this.repl.trace) {
                     // If trace is on, show minimal normalization info

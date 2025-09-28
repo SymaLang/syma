@@ -158,7 +158,12 @@ export class NotebookEngine {
             // Normalize the expression with optional trace
             let result;
             let trace = null;
+            let elapsedTime = null;
+
             if (this.repl.trace) {
+                // Start timing
+                const startTime = performance.now();
+
                 const traceResult = engine.normalizeWithTrace(
                     expr,
                     rules,
@@ -168,6 +173,10 @@ export class NotebookEngine {
                 );
                 result = traceResult.result;
                 trace = traceResult.trace;
+
+                // End timing
+                const endTime = performance.now();
+                elapsedTime = endTime - startTime;
 
                 // Show trace if available
                 if (trace && trace.length > 0) {
@@ -292,6 +301,32 @@ export class NotebookEngine {
                                     persistedExpanded: false
                                 });
                             }
+                        }
+
+                        // 3. Performance metrics section
+                        if (elapsedTime !== null) {
+                            const flatRules = rules.allRules || rules;
+                            const totalRules = flatRules.length;
+                            const totalSteps = trace.length;
+                            let metricsContent = `Total execution time: ${elapsedTime.toFixed(2)}ms\n`;
+                            metricsContent += `Total rules in system: ${totalRules} rules\n`;
+                            metricsContent += `Total rewrite steps: ${totalSteps} steps\n`;
+
+                            if (totalSteps > 0) {
+                                const avgTimePerStep = elapsedTime / totalSteps;
+                                metricsContent += `Average time per step: ${avgTimePerStep.toFixed(3)}ms\n`;
+
+                                // Estimate rules checked (with indexing optimization)
+                                const avgRulesCheckedPerStep = Math.ceil(totalRules * 0.15); // Assume 15% selectivity
+                                metricsContent += `Estimated avg rules checked per step: ~${avgRulesCheckedPerStep} (with indexing)`;
+                            }
+
+                            sections.push({
+                                title: '📈 Performance Metrics',
+                                content: metricsContent,
+                                expanded: false,
+                                persistedExpanded: false
+                            });
                         }
 
                         // The result will be added later as a separate output
@@ -535,6 +570,9 @@ export class NotebookEngine {
                                         const expr = this.repl.parser.parseString(traceContent);
                                         const rules = engine.extractRules(this.repl.universe);
 
+                                        // Start timing
+                                        const startTime = performance.now();
+
                                         // Use normalizeWithTrace
                                         const { result, trace } = engine.normalizeWithTrace(
                                             expr,
@@ -543,6 +581,10 @@ export class NotebookEngine {
                                             false,
                                             foldPrims
                                         );
+
+                                        // End timing
+                                        const endTime = performance.now();
+                                        const elapsedTime = endTime - startTime;
 
                                         // Now format the trace output using accordion
                                         if (trace && trace.length > 0) {
@@ -592,6 +634,30 @@ export class NotebookEngine {
                                                 content: resultStr,
                                                 expanded: true,
                                                 persistedExpanded: true
+                                            });
+
+                                            // 4. Performance metrics section
+                                            const flatRules = rules.allRules || rules;
+                                            const totalRules = flatRules.length;
+                                            const totalSteps = trace.length;
+                                            let metricsContent = `Total execution time: ${elapsedTime.toFixed(2)}ms\n`;
+                                            metricsContent += `Total rules in system: ${totalRules} rules\n`;
+                                            metricsContent += `Total rewrite steps: ${totalSteps} steps\n`;
+
+                                            if (totalSteps > 0) {
+                                                const avgTimePerStep = elapsedTime / totalSteps;
+                                                metricsContent += `Average time per step: ${avgTimePerStep.toFixed(3)}ms\n`;
+
+                                                // Estimate rules checked (with indexing optimization)
+                                                const avgRulesCheckedPerStep = Math.ceil(totalRules * 0.15); // Assume 15% selectivity
+                                                metricsContent += `Estimated avg rules checked per step: ~${avgRulesCheckedPerStep} (with indexing)`;
+                                            }
+
+                                            sections.push({
+                                                title: '📈 Performance Metrics',
+                                                content: metricsContent,
+                                                expanded: false,
+                                                persistedExpanded: false
                                             });
 
                                             // Output the accordion

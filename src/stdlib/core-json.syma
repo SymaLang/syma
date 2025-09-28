@@ -3,7 +3,7 @@
   {Import Core/FromJSON as From}
   {Export FromJSON ToJSON}
   {Rules
-    {{FromJSON s_} -> {From/FromJSON s_} :guard IsStr({Frozen s_})}
-    {{ToJSON x_} -> {To/ToJSON x_}}
+    {R FromJSON {FromJSON s_} {From/FromJSON s_} :guard IsStr({Frozen s_})}
+    {R ToJSON {ToJSON x_} {To/ToJSON x_} :guard True}
   }
 }
