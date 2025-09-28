@@ -446,12 +446,24 @@ export class DOMProjector extends BaseProjector {
             }
         } else if (newVNode.type === 'element') {
             // Compare props
-            if (this.propsChanged(oldVNode.props, newVNode.props)) {
-                patches.push({ type: 'props', path, oldVNode, newVNode });
-            }
+            const propsHaveChanged = this.propsChanged(oldVNode.props, newVNode.props);
 
-            // Diff children with key-based reconciliation
-            this.diffChildren(oldVNode.children, newVNode.children, oldState, newState, patches, path);
+            // Check if children have dynamic content that might depend on state
+            const hasDynamicChildren = this.hasDynamicContent(newVNode.children);
+
+            if (propsHaveChanged) {
+                // When parent props change significantly, replace the entire element
+                // This ensures all children are re-rendered with the new parent context
+                patches.push({ type: 'replace', path, oldVNode, newVNode });
+            } else if (hasDynamicChildren && this.stateHasChanged(oldState, newState)) {
+                // If state changed meaningfully and children have dynamic content, replace to ensure proper re-evaluation
+                // This handles cases where Project/Show nodes need re-evaluation with new state
+                patches.push({ type: 'replace', path, oldVNode, newVNode });
+            } else {
+                // Props haven't changed and no dynamic children, so we can safely diff children
+                // Diff children with key-based reconciliation
+                this.diffChildren(oldVNode.children, newVNode.children, oldState, newState, patches, path);
+            }
         }
 
         return patches;
@@ -580,6 +592,50 @@ export class DOMProjector extends BaseProjector {
                 }
             }
         }
+    }
+
+    /**
+     * Check if state has meaningfully changed
+     */
+    stateHasChanged(oldState, newState) {
+        // If references are the same, no change
+        if (oldState === newState) return false;
+
+        // If one is null/undefined and other isn't, changed
+        if (!oldState || !newState) return true;
+
+        // Deep comparison using JSON stringify
+        // This is not the most efficient but works for our AST structures
+        return JSON.stringify(oldState) !== JSON.stringify(newState);
+    }
+
+    /**
+     * Check if virtual node tree contains dynamic content
+     */
+    hasDynamicContent(children) {
+        if (!children || children.length === 0) return false;
+
+        for (const child of children) {
+            // Check for dynamic node types
+            if (child.type === 'show' || child.type === 'project-splice') {
+                return true;
+            }
+
+            // Check if the original node was a Project node
+            if (child.node && isCall(child.node) && isSym(child.node.h) &&
+                (child.node.h.v === 'Project' || child.node.h.v === 'Show')) {
+                return true;
+            }
+
+            // Recursively check element children
+            if (child.type === 'element' && child.children && child.children.length > 0) {
+                if (this.hasDynamicContent(child.children)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -15,6 +15,7 @@
       {RenderList f_ {Todo {Id id_} {Text text_} {Done done_}} rest...}
       {...! 
         {Div 
+          // :key id_
           :class If(done_, "flex items-center gap-2 bg-green-100 p-2 rounded", "flex items-center gap-2 bg-yellow-100 p-2 rounded")
           {Button 
             :onClick ToggleDone(id_, done_) 
