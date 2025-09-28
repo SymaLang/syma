@@ -7,8 +7,8 @@
 
 import { BaseProjector } from './base.js';
 import { Sym, Call, isSym, isNum, isStr, isCall, isSplice, show } from '../ast-helpers.js';
-import { createEventHandler, handleBinding } from '../events.js';
-import { logProjectionTrace, logProjectionFailure, explainProjectionFailure, getTraceState } from '../debug.js';
+import { createEventHandler, handleBinding, removeBoundElement, cleanupAllBindings } from '../events.js';
+import { getTraceState } from '../debug.js';
 
 /**
  * DOM Projector implementation
@@ -24,6 +24,7 @@ export class DOMProjector extends BaseProjector {
         this.virtualState = null; // Track the state used for virtual tree
         this.rootElement = null; // Track the root DOM element
         this.domMap = new WeakMap(); // Maps virtual nodes to DOM elements
+        this.hashCache = new WeakMap(); // Cache for AST node hashes
     }
 
     /**
@@ -81,6 +82,11 @@ export class DOMProjector extends BaseProjector {
 
         this.virtualTree = newVirtualTree;
         this.virtualState = state; // Store the state for next diff
+
+        // Note: We intentionally DON'T clear hashCache here!
+        // The newState of this render becomes the oldState of the next render.
+        // Clearing would force us to rehash the same tree on every render.
+        // WeakMap automatically handles GC when nodes are no longer referenced.
     }
 
     /**
@@ -138,7 +144,7 @@ export class DOMProjector extends BaseProjector {
     splitPropsAndChildren(node) {
         if (!isCall(node)) return { props: null, children: [] };
 
-        // Check for new-style Props[KV[...], KV[...]] structure
+        // Check for old-style Props[KV[...], KV[...]] structure
         if (node.a.length && isCall(node.a[0]) && isSym(node.a[0].h) && node.a[0].h.v === "Props") {
             const propsNode = node.a[0];
             const children = node.a.slice(1);
@@ -154,7 +160,7 @@ export class DOMProjector extends BaseProjector {
             return { props, children };
         }
 
-        // Handle old-style attributes (symbols starting with ':' like :class, :onClick)
+        // Handle new-style attributes (symbols starting with ':' like :class, :onClick)
         const props = {};
         const children = [];
         let i = 0;
@@ -185,17 +191,63 @@ export class DOMProjector extends BaseProjector {
 
 
     /**
+     * Remove all event listeners from an element and its children
+     */
+    removeAllEventListeners(element) {
+        if (!element) return;
+
+        // Remove all tracked event listeners
+        if (element.__handlers) {
+            for (const [eventName, handler] of element.__handlers) {
+                element.removeEventListener(eventName, handler);
+            }
+            element.__handlers = [];
+        }
+
+        // Clean up from bound elements registry if it's a bound element
+        if (element.dataset?.bindTo) {
+            this.cleanupBoundElement(element);
+        }
+
+        // Recursively clean children
+        if (element.children) {
+            for (const child of element.children) {
+                this.removeAllEventListeners(child);
+            }
+        }
+    }
+
+    /**
+     * Clean up element from bound elements registry
+     */
+    cleanupBoundElement(element) {
+        if (!element.dataset?.bindTo) return;
+
+        // Remove from events module registry
+        removeBoundElement(element);
+
+        // Clear dataset
+        delete element.dataset.bindTo;
+        delete element.dataset.bindProperty;
+    }
+
+    /**
      * Apply props to DOM element
      */
     applyProps(el, props, onDispatch) {
+        // Initialize handlers array if not present
+        if (!el.__handlers) {
+            el.__handlers = [];
+        }
+
         for (const [k, v] of Object.entries(props)) {
             // Handle ALL events generically - any prop starting with "on"
             if (k.startsWith("on")) {
                 const eventName = k.slice(2).toLowerCase(); // onClick -> click
                 const handler = createEventHandler(v, onDispatch);
                 el.addEventListener(eventName, handler);
-                // Store handler reference for cleanup
-                el[`__${eventName}_handler`] = handler;
+                // Track the handler for cleanup
+                el.__handlers.push([eventName, handler]);
                 continue;
             }
 
@@ -203,6 +255,19 @@ export class DOMProjector extends BaseProjector {
             if (k.startsWith("bind-")) {
                 const bindingType = k.slice(5); // bind-value -> value
                 handleBinding(el, bindingType, v, onDispatch);
+                continue;
+            }
+
+            // Special handling for key prop - use it as syma-ref for focus restoration
+            if (k === 'key' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+                const keyValue = isStr(v) ? v.v : String(v.v);
+                el.setAttribute('data-syma-ref', keyValue);
+                // Don't set key as an HTML attribute
+                continue;
+            }
+
+            // Skip internal key prop (don't render as HTML attribute)
+            if (k === 'key') {
                 continue;
             }
 
@@ -221,81 +286,6 @@ export class DOMProjector extends BaseProjector {
                 }
             }
         }
-    }
-
-    /**
-     * Render text parts with Show projection
-     */
-    renderTextPart(part, state) {
-        // Two cases:
-        // 1) literal Str / Num / Sym
-        // 2) symbolic Show[...] that needs to normalize under (App[State, _])
-        if (isStr(part)) return document.createTextNode(part.v);
-        if (isNum(part)) return document.createTextNode(String(part.v));
-
-        // if (isCall(part) && isSym(part.h) && part.h.v === "Show") {
-        //     // Build a tiny projection context: Show[x] /@ App[State, _] -> Str[...]
-        //     const appCtx = Call(Sym("App"), state, Sym("_"));
-        //     const annotated = Call(Sym("/@"), part, appCtx);
-        //
-        //     // Let rules reduce it
-        //     const reduced = (() => {
-        //         const currentRules = this.extractRulesFunc(this.universe);
-        //         if (getTraceState()) {
-        //             const { result, trace } = this.normalizeWithTrace(annotated, currentRules);
-        //             logProjectionTrace(part, trace);
-        //             return result;
-        //         }
-        //         return this.normalizeFunc(annotated, currentRules);
-        //     })();
-        //
-        //     if (isStr(reduced)) return document.createTextNode(reduced.v);
-        //     if (isNum(reduced)) return document.createTextNode(String(reduced.v));
-        //
-        //     // If reduction failed, log error
-        //     const currentRules = this.extractRulesFunc(this.universe);
-        //     logProjectionFailure(part, annotated, reduced, currentRules);
-        //     throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
-        // }
-
-        if (isCall(part) && isSym(part.h) && part.h.v === "Show") {
-            const appCtx = Call(Sym("App"), state, Sym("_"));
-            const annotated = Call(Sym("/@"), part, appCtx);
-            const currentRules = this.extractRulesFunc(this.universe);
-
-            const reduced = getTraceState()
-                ? this.normalizeWithTrace(annotated, currentRules).result
-                : this.normalizeFunc(annotated, currentRules);
-
-            // Check if Show projection failed (still has /@ at the root)
-            if (isCall(reduced) && isSym(reduced.h) && reduced.h.v === "/@") {
-                throw new Error(`No projection rule found for: ${show(part)}\n` +
-                              `Tried to match: ${show(annotated)}\n` +
-                              `Make sure you have a rule to handle this Show expression in the current context`);
-            }
-
-            if (isStr(reduced)) return document.createTextNode(reduced.v);
-            if (isNum(reduced)) return document.createTextNode(String(reduced.v));
-
-            // 🔽 Fallback: stringify anything else
-            const coerced = this.normalizeFunc(Call(Sym("ToString"), reduced), currentRules);
-            if (isStr(coerced)) return document.createTextNode(coerced.v);
-            if (isNum(coerced)) return document.createTextNode(String(coerced.v));
-
-            // Still not displayable? Log and throw.
-            logProjectionFailure(part, annotated, reduced, currentRules);
-            throw new Error(`Show[...] did not reduce to Str/Num. Got: ${show(reduced)}`);
-        }
-
-        // If plain Sym leaks here, check if it's Empty (skip) or stringify it
-        if (isSym(part)) {
-            if (part.v === "Empty") {
-                return document.createTextNode(""); // Return empty text node to skip rendering
-            }
-            return document.createTextNode(part.v);
-        }
-
-        throw new Error(`Unsupported Text part: ${show(part)}`);
     }
 
     /**
@@ -595,6 +585,79 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
+     * Compute FNV-1a hash of an AST node
+     */
+    hashNode(node) {
+        // Check memoization cache
+        if (this.hashCache.has(node)) {
+            return this.hashCache.get(node);
+        }
+
+        // FNV-1a 64-bit offset basis
+        let hash = 14695981039346656037n;
+
+        // FNV-1a mixing function
+        const mix = (value) => {
+            hash = (hash ^ BigInt(value)) * 1099511628211n;
+        };
+
+        // Hash based on node type
+        if (!node || !node.k) {
+            mix(0); // null/undefined
+        } else if (node.k === 'Sym') {
+            mix(1); // Type tag
+            // Mix symbol string characteristics
+            const str = node.v || '';
+            mix(str.length);
+            // Mix first few chars for better distribution
+            for (let i = 0; i < Math.min(str.length, 4); i++) {
+                mix(str.charCodeAt(i));
+            }
+        } else if (node.k === 'Str') {
+            mix(2); // Type tag
+            const str = node.v || '';
+            mix(str.length);
+            // Mix first and last chars
+            if (str.length > 0) {
+                mix(str.charCodeAt(0));
+                mix(str.charCodeAt(str.length - 1));
+            }
+        } else if (node.k === 'Num') {
+            mix(3); // Type tag
+            // Mix number value directly
+            const num = node.v || 0;
+            mix(Math.floor(num * 1000)); // Keep some decimal precision
+        } else if (node.k === 'Call') {
+            mix(4); // Type tag
+            // Hash head
+            mix(this.hashNode(node.h));
+            // Hash arguments
+            mix(node.a ? node.a.length : 0);
+            if (node.a) {
+                for (const arg of node.a) {
+                    mix(this.hashNode(arg));
+                }
+            }
+        } else if (isSplice(node)) {
+            mix(5); // Type tag
+            mix(node.items ? node.items.length : 0);
+            if (node.items) {
+                for (const item of node.items) {
+                    mix(this.hashNode(item));
+                }
+            }
+        }
+
+        // Downcast to 53-bit safe integer for JS
+        const result = Number(hash & ((1n << 53n) - 1n));
+
+        // Cache the result
+        this.hashCache.set(node, result);
+
+        return result;
+    }
+
+    /**
      * Check if state has meaningfully changed
      */
     stateHasChanged(oldState, newState) {
@@ -604,9 +667,8 @@ export class DOMProjector extends BaseProjector {
         // If one is null/undefined and other isn't, changed
         if (!oldState || !newState) return true;
 
-        // Deep comparison using JSON stringify
-        // This is not the most efficient but works for our AST structures
-        return JSON.stringify(oldState) !== JSON.stringify(newState);
+        // Compare hashes for fast inequality check
+        return this.hashNode(oldState) !== this.hashNode(newState);
     }
 
     /**
@@ -728,6 +790,92 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
+     * Save focus state before DOM manipulation
+     */
+    saveFocusState(element) {
+        const activeEl = document.activeElement;
+        if (!activeEl || !element.contains(activeEl)) {
+            return null;
+        }
+
+        const focusState = {
+            id: activeEl.id,
+            symaRef: activeEl.dataset?.symaRef,
+            tagName: activeEl.tagName,
+            className: activeEl.className,
+            name: activeEl.name,
+            type: activeEl.type
+        };
+
+        // Save selection state for inputs/textareas
+        if (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') {
+            focusState.selectionStart = activeEl.selectionStart;
+            focusState.selectionEnd = activeEl.selectionEnd;
+            focusState.selectionDirection = activeEl.selectionDirection;
+            focusState.scrollTop = activeEl.scrollTop;
+            focusState.scrollLeft = activeEl.scrollLeft;
+        }
+
+        return focusState;
+    }
+
+    /**
+     * Restore focus state after DOM manipulation
+     */
+    restoreFocusState(element, focusState) {
+        if (!focusState) return;
+
+        let targetEl = null;
+
+        // Try to find element by id first (most reliable)
+        if (focusState.id) {
+            targetEl = element.querySelector(`#${CSS.escape(focusState.id)}`);
+        }
+
+        // Try data-syma-ref if no id
+        if (!targetEl && focusState.symaRef) {
+            targetEl = element.querySelector(`[data-syma-ref="${CSS.escape(focusState.symaRef)}"]`);
+        }
+
+        // Fallback: try to match by tag, name, and type
+        if (!targetEl && focusState.tagName) {
+            const candidates = element.querySelectorAll(focusState.tagName);
+            for (const el of candidates) {
+                if ((!focusState.name || el.name === focusState.name) &&
+                    (!focusState.type || el.type === focusState.type) &&
+                    (!focusState.className || el.className === focusState.className)) {
+                    targetEl = el;
+                    break;
+                }
+            }
+        }
+
+        if (targetEl) {
+            targetEl.focus();
+
+            // Restore selection for inputs/textareas
+            if ((targetEl.tagName === 'INPUT' || targetEl.tagName === 'TEXTAREA') &&
+                focusState.selectionStart !== undefined) {
+                try {
+                    targetEl.setSelectionRange(
+                        focusState.selectionStart,
+                        focusState.selectionEnd,
+                        focusState.selectionDirection
+                    );
+                    if (focusState.scrollTop !== undefined) {
+                        targetEl.scrollTop = focusState.scrollTop;
+                    }
+                    if (focusState.scrollLeft !== undefined) {
+                        targetEl.scrollLeft = focusState.scrollLeft;
+                    }
+                } catch (e) {
+                    // Some input types don't support selection
+                }
+            }
+        }
+    }
+
+    /**
      * Apply a single patch
      */
     applyPatch(patch, state, onDispatch) {
@@ -762,6 +910,11 @@ export class DOMProjector extends BaseProjector {
 
             case 'remove': {
                 const element = this.getElementByPath(patch.path);
+                if (element) {
+                    // Clean up all event listeners before removing
+                    this.removeAllEventListeners(element);
+                }
+
                 if (patch.path.length === 0) {
                     // Removing root - clear mount
                     if (this.rootElement) {
@@ -776,6 +929,15 @@ export class DOMProjector extends BaseProjector {
 
             case 'replace': {
                 const element = this.getElementByPath(patch.path);
+
+                // Save focus state before replacing
+                const focusState = element ? this.saveFocusState(element) : null;
+
+                // Clean up old element before replacing
+                if (element) {
+                    this.removeAllEventListeners(element);
+                }
+
                 if (patch.path.length === 0) {
                     // Replacing root
                     const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
@@ -786,10 +948,16 @@ export class DOMProjector extends BaseProjector {
                     }
                     this.rootElement = newEl;
                     this.domMap.set(patch.newVNode, newEl);
+
+                    // Restore focus after replacing root
+                    this.restoreFocusState(newEl, focusState);
                 } else if (element && element.parentNode) {
                     const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
                     element.parentNode.replaceChild(newEl, element);
                     this.domMap.set(patch.newVNode, newEl);
+
+                    // Restore focus after replacing element
+                    this.restoreFocusState(newEl, focusState);
                 }
                 break;
             }
@@ -805,21 +973,27 @@ export class DOMProjector extends BaseProjector {
             case 'props': {
                 const element = this.getElementByPath(patch.path);
                 if (element) {
-                    // Remove old event listeners and attributes
+                    // Remove ALL old event listeners (simpler and more reliable)
+                    if (element.__handlers) {
+                        for (const [eventName, handler] of element.__handlers) {
+                            element.removeEventListener(eventName, handler);
+                        }
+                        element.__handlers = [];
+                    }
+
+                    // Remove old attributes that are no longer in new props
                     for (const key of Object.keys(patch.oldVNode.props)) {
-                        if (key.startsWith('on')) {
-                            // Remove event listener (we'll re-add the new one)
-                            const eventName = key.slice(2).toLowerCase();
-                            const oldHandler = element[`__${eventName}_handler`];
-                            if (oldHandler) {
-                                element.removeEventListener(eventName, oldHandler);
-                                delete element[`__${eventName}_handler`];
-                            }
-                        } else if (!(key in patch.newVNode.props)) {
+                        if (!key.startsWith('on') && !key.startsWith('bind-') && !(key in patch.newVNode.props)) {
                             element.removeAttribute(key);
                         }
                     }
-                    // Apply new props
+
+                    // Clean up bound element if it was previously bound
+                    if (element.dataset?.bindTo) {
+                        this.cleanupBoundElement(element);
+                    }
+
+                    // Apply new props (will re-add listeners and bindings)
                     this.applyProps(element, patch.newVNode.props, onDispatch);
                 }
                 break;
@@ -901,6 +1075,14 @@ export class DOMProjector extends BaseProjector {
      * Clean up DOM
      */
     cleanup() {
+        // Clean up all event listeners before clearing DOM
+        if (this.rootElement) {
+            this.removeAllEventListeners(this.rootElement);
+        }
+
+        // Clean up all bindings from events module
+        cleanupAllBindings();
+
         if (this.mount) {
             this.mount.innerHTML = "";
         }
@@ -908,6 +1090,7 @@ export class DOMProjector extends BaseProjector {
         this.virtualState = null;
         this.rootElement = null;
         this.domMap = new WeakMap();
+        this.hashCache = new WeakMap(); // Clear hash cache on cleanup
         super.cleanup();
     }
 }

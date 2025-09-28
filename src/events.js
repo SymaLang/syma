@@ -84,14 +84,22 @@ export function handleBinding(element, property, bindingExpr, onDispatch) {
         // Set up two-way binding based on element type
         if (property === 'value') {
             // For text inputs, textareas, select
-            element.addEventListener('input', (e) => {
+            const handler = (e) => {
                 setInputValue(fieldName, e.target.value);
-            });
+            };
+            element.addEventListener('input', handler);
+            // Track handler in the unified registry
+            if (!element.__handlers) element.__handlers = [];
+            element.__handlers.push(['input', handler]);
         } else if (property === 'checked') {
             // For checkboxes and radio buttons
-            element.addEventListener('change', (e) => {
+            const handler = (e) => {
                 setInputValue(fieldName, e.target.checked);
-            });
+            };
+            element.addEventListener('change', handler);
+            // Track handler in the unified registry
+            if (!element.__handlers) element.__handlers = [];
+            element.__handlers.push(['change', handler]);
         }
 
         // Store binding info for reference
@@ -282,6 +290,24 @@ function isActionWithInput(term) {
 }
 
 /**
+ * Remove element from bound elements registry
+ */
+export function removeBoundElement(element) {
+    if (!element.dataset?.bindTo) return;
+
+    const fieldName = element.dataset.bindTo;
+    const elements = boundElements.get(fieldName);
+    if (elements) {
+        const filtered = elements.filter(item => item.element !== element);
+        if (filtered.length > 0) {
+            boundElements.set(fieldName, filtered);
+        } else {
+            boundElements.delete(fieldName);
+        }
+    }
+}
+
+/**
  * Clear all bound values
  */
 export function clearAllInputs() {
@@ -296,4 +322,12 @@ export function clearAllInputs() {
             }
         });
     });
+}
+
+/**
+ * Clean up all bindings (for cleanup/unmount)
+ */
+export function cleanupAllBindings() {
+    boundValues.clear();
+    boundElements.clear();
 }
