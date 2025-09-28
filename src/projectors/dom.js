@@ -20,6 +20,10 @@ export class DOMProjector extends BaseProjector {
         this.rules = null;
         this.normalizeFunc = null;
         this.extractRulesFunc = null;
+        this.virtualTree = null;
+        this.virtualState = null; // Track the state used for virtual tree
+        this.rootElement = null; // Track the root DOM element
+        this.domMap = new WeakMap(); // Maps virtual nodes to DOM elements
     }
 
     /**
@@ -46,12 +50,11 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
-     * Render universe to DOM
+     * Render universe to DOM with incremental updates
      * @param {Object} universe - The universe AST
      */
     render(universe) {
         this.universe = universe;
-        this.mount.innerHTML = ""; // Simple full replace (can optimize with keyed diff)
 
         const app = this.getProgramApp(universe);
         if (!isCall(app) || !isSym(app.h) || app.h.v !== "App") {
@@ -59,7 +62,25 @@ export class DOMProjector extends BaseProjector {
         }
 
         const [state, ui] = app.a;
-        this.mount.appendChild(this.renderUI(ui, state, this.onDispatch));
+
+        // Build new virtual tree
+        const newVirtualTree = this.buildVirtualTree(ui, state);
+
+        if (!this.virtualTree || !this.rootElement) {
+            // First render - create DOM from scratch
+            this.mount.innerHTML = "";
+            this.rootElement = this.createDOMFromVirtual(newVirtualTree, state, this.onDispatch);
+            this.mount.appendChild(this.rootElement);
+            this.domMap.set(newVirtualTree, this.rootElement);
+        } else {
+            // Incremental update - diff and patch
+            // Pass both old and new states for proper comparison
+            const patches = this.diff(this.virtualTree, newVirtualTree, this.virtualState, state);
+            this.applyPatches(patches, state, this.onDispatch);
+        }
+
+        this.virtualTree = newVirtualTree;
+        this.virtualState = state; // Store the state for next diff
     }
 
     /**
@@ -162,82 +183,6 @@ export class DOMProjector extends BaseProjector {
         return { props: Object.keys(props).length > 0 ? props : null, children };
     }
 
-    /**
-     * Render a UI node to DOM element
-     */
-    renderUI(node, state, onDispatch) {
-        if (!isCall(node) || !isSym(node.h)) {
-            throw new Error(`UI node must be Call; got ${show(node)}`);
-        }
-
-        const tag = node.h.v;
-
-        // Handle special cases
-        if (tag === "/@") {
-            const currentRules = this.extractRulesFunc(this.universe);
-            const reduced = getTraceState()
-                ? this.normalizeWithTrace(node, currentRules).result
-                : this.normalizeFunc(node, currentRules);
-            return this.renderUI(reduced, state, onDispatch);
-        }
-
-        if (tag === "Project") {
-            if (node.a.length !== 1) {
-                throw new Error("Project[...] expects exactly one child expression");
-            }
-            const rendered = this.project(node.a[0], state);
-
-            // Check if the result is a Splice (from Splat/...!)
-            if (isSplice(rendered)) {
-                // Create a DocumentFragment to hold multiple nodes
-                const fragment = document.createDocumentFragment();
-                for (const child of rendered.items) {
-                    if (isStr(child) || isNum(child) || isSym(child)) {
-                        const span = document.createElement("span");
-                        span.appendChild(this.renderTextPart(child, state));
-                        fragment.appendChild(span);
-                    } else {
-                        fragment.appendChild(this.renderUI(child, state, onDispatch));
-                    }
-                }
-                return fragment;
-            }
-
-            // The result may be a Text-like atom or another UI call
-            if (isStr(rendered) || isNum(rendered) || isSym(rendered)) {
-                const span = document.createElement("span");
-                span.appendChild(this.renderTextPart(rendered, state));
-                return span;
-            }
-            return this.renderUI(rendered, state, onDispatch);
-        }
-
-        if (tag === "UI") {
-            if (node.a.length !== 1) {
-                throw new Error("UI[...] must wrap exactly one subtree");
-            }
-            return this.renderUI(node.a[0], state, onDispatch);
-        }
-
-        // Regular DOM element
-        const { props, children } = this.splitPropsAndChildren(node);
-        const el = document.createElement(tag.toLowerCase());
-
-        if (props) {
-            this.applyProps(el, props, onDispatch);
-        }
-
-        for (const ch of children) {
-            // Strings/numbers/Show[...] become text; Calls recurse
-            if (isStr(ch) || isNum(ch) || (isCall(ch) && isSym(ch.h) && ch.h.v === "Show") || isSym(ch)) {
-                el.appendChild(this.renderTextPart(ch, state));
-            } else {
-                el.appendChild(this.renderUI(ch, state, onDispatch));
-            }
-        }
-
-        return el;
-    }
 
     /**
      * Apply props to DOM element
@@ -247,7 +192,10 @@ export class DOMProjector extends BaseProjector {
             // Handle ALL events generically - any prop starting with "on"
             if (k.startsWith("on")) {
                 const eventName = k.slice(2).toLowerCase(); // onClick -> click
-                el.addEventListener(eventName, createEventHandler(v, onDispatch));
+                const handler = createEventHandler(v, onDispatch);
+                el.addEventListener(eventName, handler);
+                // Store handler reference for cleanup
+                el[`__${eventName}_handler`] = handler;
                 continue;
             }
 
@@ -351,12 +299,559 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
+     * Build a virtual tree representation from Syma nodes
+     */
+    buildVirtualTree(node, state) {
+        // Handle special node types first
+        if (!isCall(node)) {
+            // Handle Empty symbols specially - they represent nothing
+            if (isSym(node) && node.v === "Empty") {
+                return { type: 'empty' };
+            }
+            return { type: 'text', value: node };
+        }
+
+        if (!isSym(node.h)) {
+            throw new Error(`UI node must be Call with Sym head; got ${show(node)}`);
+        }
+
+        const tag = node.h.v;
+
+        // Handle special cases
+        if (tag === "/@") {
+            const currentRules = this.extractRulesFunc(this.universe);
+            const reduced = getTraceState()
+                ? this.normalizeWithTrace(node, currentRules).result
+                : this.normalizeFunc(node, currentRules);
+            return this.buildVirtualTree(reduced, state);
+        }
+
+        if (tag === "Project") {
+            if (node.a.length !== 1) {
+                throw new Error("Project[...] expects exactly one child expression");
+            }
+            const rendered = this.project(node.a[0], state);
+
+            if (isSplice(rendered)) {
+                // For splices, we need to return multiple nodes
+                // Filter out Empty symbols as they shouldn't create DOM nodes
+                const items = rendered.items.filter(item =>
+                    !(isSym(item) && item.v === "Empty")
+                );
+                // Return a special marker that the parent will handle
+                return {
+                    type: 'project-splice',
+                    children: items.map(item => this.buildVirtualTree(item, state))
+                };
+            }
+
+            // Handle if rendered is Empty
+            if (isSym(rendered) && rendered.v === "Empty") {
+                return { type: 'empty' };
+            }
+            return this.buildVirtualTree(rendered, state);
+        }
+
+        if (tag === "UI") {
+            if (node.a.length !== 1) {
+                throw new Error("UI[...] must wrap exactly one subtree");
+            }
+            return this.buildVirtualTree(node.a[0], state);
+        }
+
+        // Regular DOM element
+        const { props, children } = this.splitPropsAndChildren(node);
+
+        // Only use explicit keys from props, no implicit key generation
+        const explicitKey = props?.key ? (isStr(props.key) ? props.key.v : String(props.key.v)) : undefined;
+
+        // Build children, flattening fragments and project-splices to match DOM behavior
+        const virtualChildren = [];
+        children.forEach(child => {
+            // Skip Empty symbols - they shouldn't create DOM nodes
+            if (isSym(child) && child.v === "Empty") {
+                return;
+            }
+
+            if (isStr(child) || isNum(child) || isSym(child)) {
+                virtualChildren.push({ type: 'text', value: child });
+            } else if (isCall(child) && isSym(child.h) && child.h.v === "Show") {
+                virtualChildren.push({ type: 'show', value: child });
+            } else {
+                const childVNode = this.buildVirtualTree(child, state);
+                // Skip empty nodes
+                if (childVNode.type === 'empty') {
+                    return;
+                }
+                // Flatten fragments and project-splices - their children become our direct children
+                if (childVNode.type === 'fragment' || childVNode.type === 'project-splice') {
+                    // Filter out any empty nodes from flattened children
+                    const nonEmptyChildren = childVNode.children.filter(c => c.type !== 'empty');
+                    virtualChildren.push(...nonEmptyChildren);
+                } else {
+                    virtualChildren.push(childVNode);
+                }
+            }
+        });
+
+        const vNode = {
+            type: 'element',
+            tag: tag.toLowerCase(),
+            props: props || {},
+            children: virtualChildren,
+            node // Keep reference to original AST node
+        };
+
+        // Only add key if explicitly provided
+        if (explicitKey !== undefined) {
+            vNode.key = explicitKey;
+        }
+
+        return vNode;
+    }
+
+    /**
+     * Diff two virtual trees and generate patches
+     */
+    diff(oldVNode, newVNode, oldState, newState, patches = [], path = []) {
+        if (!oldVNode && !newVNode) {
+            return patches;
+        }
+
+        if (!oldVNode) {
+            // Add new node
+            patches.push({ type: 'add', path, newVNode });
+            return patches;
+        }
+
+        if (!newVNode) {
+            // Remove old node
+            patches.push({ type: 'remove', path, oldVNode });
+            return patches;
+        }
+
+        // Different node types - replace
+        if (oldVNode.type !== newVNode.type || oldVNode.tag !== newVNode.tag) {
+            patches.push({ type: 'replace', path, oldVNode, newVNode });
+            return patches;
+        }
+
+        // Handle different node types
+        if (newVNode.type === 'text' || newVNode.type === 'show') {
+            // Compare text values using appropriate states
+            const oldText = this.getTextValue(oldVNode, oldState);
+            const newText = this.getTextValue(newVNode, newState);
+            if (oldText !== newText) {
+                patches.push({ type: 'text', path, oldVNode, newVNode });
+            }
+        } else if (newVNode.type === 'element') {
+            // Compare props
+            if (this.propsChanged(oldVNode.props, newVNode.props)) {
+                patches.push({ type: 'props', path, oldVNode, newVNode });
+            }
+
+            // Diff children with key-based reconciliation
+            this.diffChildren(oldVNode.children, newVNode.children, oldState, newState, patches, path);
+        }
+
+        return patches;
+    }
+
+    /**
+     * Diff children arrays with proper reconciliation
+     */
+    diffChildren(oldChildren, newChildren, oldState, newState, patches, parentPath) {
+        // Separate keyed and non-keyed children
+        const hasKeys = newChildren.some(c => c.key !== undefined) || oldChildren.some(c => c.key !== undefined);
+
+        if (hasKeys) {
+            // Key-based reconciliation
+            const oldKeyed = new Map();
+            const newKeyed = new Map();
+            const oldNonKeyed = [];
+            const newNonKeyed = [];
+
+            oldChildren.forEach((child, idx) => {
+                if (child.key !== undefined) {
+                    oldKeyed.set(child.key, { node: child, index: idx });
+                } else {
+                    oldNonKeyed.push({ node: child, index: idx });
+                }
+            });
+
+            newChildren.forEach((child, idx) => {
+                if (child.key !== undefined) {
+                    newKeyed.set(child.key, { node: child, index: idx });
+                } else {
+                    newNonKeyed.push({ node: child, index: idx });
+                }
+            });
+
+            // Process keyed children
+            const processedOldKeys = new Set();
+            newChildren.forEach((newChild, newIdx) => {
+                const path = [...parentPath, newIdx];
+
+                if (newChild.key !== undefined) {
+                    const oldData = oldKeyed.get(newChild.key);
+                    if (oldData) {
+                        processedOldKeys.add(newChild.key);
+                        // Recursively diff the matching keyed node
+                        this.diff(oldData.node, newChild, oldState, newState, patches, path);
+                    } else {
+                        // New keyed node
+                        patches.push({ type: 'add', path, newVNode: newChild });
+                    }
+                }
+            });
+
+            // Process non-keyed children by position
+            let nonKeyedIdx = 0;
+            newChildren.forEach((newChild, newIdx) => {
+                if (newChild.key === undefined) {
+                    const path = [...parentPath, newIdx];
+                    if (nonKeyedIdx < oldNonKeyed.length) {
+                        // Match by position for non-keyed items
+                        this.diff(oldNonKeyed[nonKeyedIdx].node, newChild, oldState, newState, patches, path);
+                        nonKeyedIdx++;
+                    } else {
+                        // New non-keyed node
+                        patches.push({ type: 'add', path, newVNode: newChild });
+                    }
+                }
+            });
+
+            // Remove unmatched old keyed children
+            oldKeyed.forEach((data, key) => {
+                if (!processedOldKeys.has(key)) {
+                    patches.push({ type: 'remove', path: [...parentPath, data.index], oldVNode: data.node });
+                }
+            });
+
+            // Remove excess old non-keyed children
+            for (let i = nonKeyedIdx; i < oldNonKeyed.length; i++) {
+                patches.push({ type: 'remove', path: [...parentPath, oldNonKeyed[i].index], oldVNode: oldNonKeyed[i].node });
+            }
+        } else {
+            // Pure position-based reconciliation (no keys at all)
+            // When list size changes significantly, replace all to avoid content mix-ups
+            if (oldChildren.length !== newChildren.length && oldChildren.length > 0 && newChildren.length > 0) {
+                // Replace strategy when filtering: replace all elements to ensure correctness
+                const minLen = Math.min(oldChildren.length, newChildren.length);
+
+                // Replace common positions
+                for (let i = 0; i < minLen; i++) {
+                    const path = [...parentPath, i];
+                    // Force replacement instead of update to avoid content mix-up
+                    patches.push({ type: 'replace', path, oldVNode: oldChildren[i], newVNode: newChildren[i] });
+                }
+
+                // Add new elements if list grew
+                for (let i = oldChildren.length; i < newChildren.length; i++) {
+                    const path = [...parentPath, i];
+                    patches.push({ type: 'add', path, newVNode: newChildren[i] });
+                }
+
+                // Remove excess if list shrank
+                for (let i = newChildren.length; i < oldChildren.length; i++) {
+                    const path = [...parentPath, i];
+                    patches.push({ type: 'remove', path, oldVNode: oldChildren[i] });
+                }
+            } else {
+                // Same length or one list is empty - use standard position-based diff
+                const minLen = Math.min(oldChildren.length, newChildren.length);
+
+                // Diff common elements by position
+                for (let i = 0; i < minLen; i++) {
+                    const path = [...parentPath, i];
+                    this.diff(oldChildren[i], newChildren[i], oldState, newState, patches, path);
+                }
+
+                // Add new elements
+                for (let i = oldChildren.length; i < newChildren.length; i++) {
+                    const path = [...parentPath, i];
+                    patches.push({ type: 'add', path, newVNode: newChildren[i] });
+                }
+
+                // Remove excess old elements
+                for (let i = newChildren.length; i < oldChildren.length; i++) {
+                    const path = [...parentPath, i];
+                    patches.push({ type: 'remove', path, oldVNode: oldChildren[i] });
+                }
+            }
+        }
+    }
+
+    /**
+     * Check if props have changed
+     */
+    propsChanged(oldProps, newProps) {
+        const oldKeys = Object.keys(oldProps);
+        const newKeys = Object.keys(newProps);
+
+        if (oldKeys.length !== newKeys.length) return true;
+
+        for (const key of newKeys) {
+            if (oldProps[key] !== newProps[key]) {
+                // Deep comparison for complex props
+                if (JSON.stringify(oldProps[key]) !== JSON.stringify(newProps[key])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get text value from a virtual node
+     */
+    getTextValue(vNode, state) {
+        if (vNode.type === 'text') {
+            const val = vNode.value;
+            if (isStr(val)) return val.v;
+            if (isNum(val)) return String(val.v);
+            if (isSym(val)) return val.v === "Empty" ? "" : val.v;
+        } else if (vNode.type === 'show') {
+            // Project Show node to get text
+            const appCtx = Call(Sym("App"), state, Sym("_"));
+            const annotated = Call(Sym("/@"), vNode.value, appCtx);
+            const currentRules = this.extractRulesFunc(this.universe);
+            const reduced = this.normalizeFunc(annotated, currentRules);
+
+            if (isStr(reduced)) return reduced.v;
+            if (isNum(reduced)) return String(reduced.v);
+
+            // Try ToString coercion
+            const coerced = this.normalizeFunc(Call(Sym("ToString"), reduced), currentRules);
+            if (isStr(coerced)) return coerced.v;
+            if (isNum(coerced)) return String(coerced.v);
+        }
+        return "";
+    }
+
+    /**
+     * Apply patches to the DOM
+     */
+    applyPatches(patches, state, onDispatch) {
+        // Group patches by type
+        const patchGroups = {
+            remove: [],
+            move: [],
+            replace: [],
+            add: [],
+            text: [],
+            props: []
+        };
+
+        patches.forEach(patch => {
+            if (patchGroups[patch.type]) {
+                patchGroups[patch.type].push(patch);
+            }
+        });
+
+        // Apply removals in reverse order to avoid index shifting issues
+        patchGroups.remove.sort((a, b) => {
+            // Sort by path depth first (deeper first), then by index (higher first)
+            if (a.path.length !== b.path.length) {
+                return b.path.length - a.path.length;
+            }
+            // Same depth, sort by last index (higher first)
+            const aLastIdx = a.path[a.path.length - 1] || 0;
+            const bLastIdx = b.path[b.path.length - 1] || 0;
+            return bLastIdx - aLastIdx;
+        });
+
+        // Apply patches in order: removals, moves, replacements, additions, text updates, prop updates
+        patchGroups.remove.forEach(patch => this.applyPatch(patch, state, onDispatch));
+        patchGroups.move.forEach(patch => this.applyPatch(patch, state, onDispatch));
+        patchGroups.replace.forEach(patch => this.applyPatch(patch, state, onDispatch));
+        patchGroups.add.forEach(patch => this.applyPatch(patch, state, onDispatch));
+        patchGroups.text.forEach(patch => this.applyPatch(patch, state, onDispatch));
+        patchGroups.props.forEach(patch => this.applyPatch(patch, state, onDispatch));
+    }
+
+    /**
+     * Apply a single patch
+     */
+    applyPatch(patch, state, onDispatch) {
+        switch (patch.type) {
+            case 'add': {
+                if (patch.path.length === 0) {
+                    // Root level add - should not happen in normal flow
+                    // but handle it by replacing root
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    if (this.rootElement) {
+                        this.mount.replaceChild(newEl, this.rootElement);
+                    } else {
+                        this.mount.appendChild(newEl);
+                    }
+                    this.rootElement = newEl;
+                    this.domMap.set(patch.newVNode, newEl);
+                } else {
+                    const parent = this.getElementByPath(patch.path.slice(0, -1));
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    const index = patch.path[patch.path.length - 1];
+
+                    // Insert at the correct position, accounting for current DOM state
+                    if (index < parent.children.length) {
+                        parent.insertBefore(newEl, parent.children[index]);
+                    } else {
+                        parent.appendChild(newEl);
+                    }
+                    this.domMap.set(patch.newVNode, newEl);
+                }
+                break;
+            }
+
+            case 'remove': {
+                const element = this.getElementByPath(patch.path);
+                if (patch.path.length === 0) {
+                    // Removing root - clear mount
+                    if (this.rootElement) {
+                        this.mount.removeChild(this.rootElement);
+                        this.rootElement = null;
+                    }
+                } else if (element && element.parentNode) {
+                    element.parentNode.removeChild(element);
+                }
+                break;
+            }
+
+            case 'replace': {
+                const element = this.getElementByPath(patch.path);
+                if (patch.path.length === 0) {
+                    // Replacing root
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    if (this.rootElement) {
+                        this.mount.replaceChild(newEl, this.rootElement);
+                    } else {
+                        this.mount.appendChild(newEl);
+                    }
+                    this.rootElement = newEl;
+                    this.domMap.set(patch.newVNode, newEl);
+                } else if (element && element.parentNode) {
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    element.parentNode.replaceChild(newEl, element);
+                    this.domMap.set(patch.newVNode, newEl);
+                }
+                break;
+            }
+
+            case 'text': {
+                const element = this.getElementByPath(patch.path);
+                if (element) {
+                    element.textContent = this.getTextValue(patch.newVNode, state);
+                }
+                break;
+            }
+
+            case 'props': {
+                const element = this.getElementByPath(patch.path);
+                if (element) {
+                    // Remove old event listeners and attributes
+                    for (const key of Object.keys(patch.oldVNode.props)) {
+                        if (key.startsWith('on')) {
+                            // Remove event listener (we'll re-add the new one)
+                            const eventName = key.slice(2).toLowerCase();
+                            const oldHandler = element[`__${eventName}_handler`];
+                            if (oldHandler) {
+                                element.removeEventListener(eventName, oldHandler);
+                                delete element[`__${eventName}_handler`];
+                            }
+                        } else if (!(key in patch.newVNode.props)) {
+                            element.removeAttribute(key);
+                        }
+                    }
+                    // Apply new props
+                    this.applyProps(element, patch.newVNode.props, onDispatch);
+                }
+                break;
+            }
+
+            case 'move': {
+                const parent = this.getElementByPath(patch.path.slice(0, -1));
+                const child = parent.children[patch.from];
+                const refNode = parent.children[patch.to];
+                if (child && parent) {
+                    if (patch.to < patch.from) {
+                        parent.insertBefore(child, refNode);
+                    } else {
+                        parent.insertBefore(child, refNode ? refNode.nextSibling : null);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Get DOM element by path
+     */
+    getElementByPath(path) {
+        if (path.length === 0) {
+            return this.rootElement;
+        }
+
+        let element = this.rootElement;
+        for (const index of path) {
+            if (!element) return null;
+            element = element.children ? element.children[index] : null;
+        }
+        return element;
+    }
+
+    /**
+     * Create DOM element from virtual node
+     */
+    createDOMFromVirtual(vNode, state, onDispatch) {
+        if (vNode.type === 'text' || vNode.type === 'show') {
+            return document.createTextNode(this.getTextValue(vNode, state));
+        }
+
+        // Note: fragments should be flattened during buildVirtualTree,
+        // so this case should rarely be hit. But handle it just in case.
+        if (vNode.type === 'fragment') {
+            const fragment = document.createDocumentFragment();
+            for (const child of vNode.children) {
+                fragment.appendChild(this.createDOMFromVirtual(child, state, onDispatch));
+            }
+            return fragment;
+        }
+
+        if (vNode.type === 'element') {
+            const el = document.createElement(vNode.tag);
+
+            // Apply props
+            if (vNode.props) {
+                this.applyProps(el, vNode.props, onDispatch);
+            }
+
+            // Add children
+            for (const child of vNode.children) {
+                el.appendChild(this.createDOMFromVirtual(child, state, onDispatch));
+            }
+
+            // Store mapping
+            this.domMap.set(vNode, el);
+
+            return el;
+        }
+
+        throw new Error(`Unknown virtual node type: ${vNode.type}`);
+    }
+
+    /**
      * Clean up DOM
      */
     cleanup() {
         if (this.mount) {
             this.mount.innerHTML = "";
         }
+        this.virtualTree = null;
+        this.virtualState = null;
+        this.rootElement = null;
+        this.domMap = new WeakMap();
         super.cleanup();
     }
 }
