@@ -233,8 +233,14 @@ function foldToString(args) {
 }
 
 /**
- * ToNormalString: Like ToString but waits for full normalization first
- * Returns null if the argument contains rule-based constructs that need reduction
+ * ToNormalString: Converts a fully normalized expression to a string
+ * NOTE: The normalizer must ensure the argument is fully normalized before
+ * calling this primitive. This function itself cannot determine if something
+ * is normalized - it relies on the normalizer to handle this correctly.
+ *
+ * For now, we return null for Call expressions as a conservative default,
+ * but the real solution requires the normalizer to track normalization state
+ * and only fold ToNormalString when its argument is in normal form.
  */
 function foldToNormalString(args) {
     if (args.length !== 1) return null;
@@ -248,49 +254,15 @@ function foldToNormalString(args) {
     } else if (isSym(arg)) {
         return Str(arg.v);
     } else if (isCall(arg)) {
-        // Check if the expression contains constructs that need rule-based normalization
-        // If so, return null to defer stringification until after normalization
-        if (containsRuleBasedConstructs(arg)) {
-            return null; // Can't stringify yet - needs more normalization
-        }
-        // Convert complex expressions to S-expression string format
-        return Str(exprToString(arg));
+        // TODO: This should actually stringify once the normalizer confirms
+        // the expression is in normal form. For now, returning null forces
+        // the normalizer to keep trying, which is conservative but incomplete.
+        return null;
     }
 
     return null;
 }
 
-/**
- * Check if an expression contains constructs that need rule-based normalization
- * rather than just primitive folding (like If, Apply, etc.)
- */
-function containsRuleBasedConstructs(expr) {
-    if (isSym(expr) || isNum(expr) || isStr(expr)) {
-        return false;
-    }
-
-    if (isCall(expr)) {
-        // These constructs need rules to reduce, not just primitive folding
-        if (isSym(expr.h)) {
-            const ruleBasedOps = ['If', 'Apply', 'Match', 'Let', 'Case'];
-            if (ruleBasedOps.includes(expr.h.v)) {
-                return true;
-            }
-        }
-
-        // Recursively check arguments
-        if (isCall(expr.h) && containsRuleBasedConstructs(expr.h)) {
-            return true;
-        }
-        for (const arg of expr.a) {
-            if (containsRuleBasedConstructs(arg)) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
 
 /**
  * Helper to convert expressions to S-expression string format

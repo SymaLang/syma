@@ -1,0 +1,76 @@
+{Module Core/FromJsonLex/Test
+  {Import Core/FromJSON/Lex as F open}
+  {Import Core/Plumb as P open macro}
+  {Import Core/Test as CT}
+
+  {Program
+    {CT/Suite "Core/FromJsonLex/Test"
+      {CT/Test "FromJsonLex/Null" 
+        {CT/Expect {JSONLex "null"} Ok(Tokens({TOKNULL}))}
+      }
+      {CT/Test "FromJsonLex/True" 
+        {CT/Expect {JSONLex "true"} Ok(Tokens({TOKTRUE}))}
+      }
+      {CT/Test "FromJsonLex/False" 
+        {CT/Expect {JSONLex "false"} Ok(Tokens({TOKFALSE}))}
+      }
+      {CT/Test "FromJsonLex/Number/Int" 
+        {CT/Expect {JSONLex "123"} Ok(Tokens({TOKNUM "123"}))}
+      }
+      {CT/Test "FromJsonLex/Number" 
+        {CT/Expect {JSONLex "1"} Ok(Tokens({TOKNUM "1"}))}
+      }
+      {CT/Test "FromJsonLex/Number/Neg" 
+        {CT/Expect {JSONLex "-123"} Ok(Tokens({TOKNUM "-123"}))}
+      }
+      {CT/Test "FromJsonLex/Number/NegZero" 
+        {CT/Expect {JSONLex "-0"} Ok(Tokens({TOKNUM "-0"}))}
+      }
+      {CT/Test "FromJsonLex/Number/Float" 
+        {CT/Expect {JSONLex "-123.456"} Ok(Tokens({TOKNUM "-123.456"}))}
+      }
+      {CT/Test "FromJsonLex/Number/Float/Exp" 
+        {CT/Expect {JSONLex "-123.456e7"} Ok(Tokens({TOKNUM "-123.456e7"}))}
+      }
+      {CT/Test "FromJsonLex/String/Simple" 
+        {CT/Expect {JSONLex "\"hello\""} Ok(Tokens({TOKSTR "hello"}))}
+      }
+      {CT/Test "FromJsonLex/String/EscapedQuote" 
+        {CT/Expect {JSONLex "\"he\\\"llo\""} Ok(Tokens({TOKSTR "he\"llo"}))}
+      }
+      {CT/Test "FromJsonLex/Arr/Empty" 
+        {CT/Expect {JSONLex "[]"} Ok(Tokens({TOKLBRACK}, {TOKRBRACK}))}
+      }
+      {CT/Test "FromJsonLex/Arr/Nums" 
+        {CT/Expect {JSONLex "[1, 2, 3]"} Ok(Tokens({TOKLBRACK}, {TOKNUM "1"}, {TOKCOMMA}, {TOKNUM "2"}, {TOKCOMMA}, {TOKNUM "3"}, {TOKRBRACK}))}
+      }
+      {CT/Test "FromJsonLex/Arr/Mixed" 
+        {CT/Expect {JSONLex "[1, \"two\", null, true, false]"} Ok(Tokens({TOKLBRACK}, {TOKNUM "1"}, {TOKCOMMA}, {TOKSTR "two"}, {TOKCOMMA}, {TOKNULL}, {TOKCOMMA}, {TOKTRUE}, {TOKCOMMA}, {TOKFALSE}, {TOKRBRACK}))}
+      }
+      {CT/Test "FromJsonLex/Arr/Nested" 
+        {CT/Expect {JSONLex "[1, [2, 3], {\"four\": 4} ]"} Ok(Tokens({TOKLBRACK}, {TOKNUM "1"}, {TOKCOMMA}, {TOKLBRACK}, {TOKNUM "2"}, {TOKCOMMA}, {TOKNUM "3"}, {TOKRBRACK}, {TOKCOMMA}, {TOKLCURLY}, {TOKSTR "four"}, {TOKCOLON}, {TOKNUM "4"}, {TOKRCURLY}, {TOKRBRACK}))} 
+      }
+      {CT/Test "FromJsonLex/Obj/Empty" 
+        {CT/Expect {JSONLex "{}"} Ok(Tokens({TOKLCURLY}, {TOKRCURLY}))} 
+      }
+      {CT/Test "FromJsonLex/Obj/Simple" 
+        {CT/Expect {JSONLex "{\"key\": \"value\"}"} Ok(Tokens({TOKLCURLY}, {TOKSTR "key"}, {TOKCOLON}, {TOKSTR "value"}, {TOKRCURLY}))} 
+      }
+      {CT/Test "FromJsonLex/Obj/Mixed" 
+        {CT/Expect {JSONLex "{\"num\": 1, \"str\": \"two\", \"bool\": true, \"null\": null}"} Ok(Tokens({TOKLCURLY}, {TOKSTR "num"}, {TOKCOLON}, {TOKNUM "1"}, {TOKCOMMA}, {TOKSTR "str"}, {TOKCOLON}, {TOKSTR "two"}, {TOKCOMMA}, {TOKSTR "bool"}, {TOKCOLON}, {TOKTRUE}, {TOKCOMMA}, {TOKSTR "null"}, {TOKCOLON}, {TOKNULL}, {TOKRCURLY}))} 
+      }
+      {CT/Test "FromJsonLex/Obj/Nested" 
+        {CT/Expect {JSONLex "{\"arr\": [1, 2], \"obj\": {\"key\": \"value\"}}"} Ok(Tokens({TOKLCURLY}, {TOKSTR "arr"}, {TOKCOLON}, {TOKLBRACK}, {TOKNUM "1"}, {TOKCOMMA}, {TOKNUM "2"}, {TOKRBRACK}, {TOKCOMMA}, {TOKSTR "obj"}, {TOKCOLON}, {TOKLCURLY}, {TOKSTR "key"}, {TOKCOLON}, {TOKSTR "value"}, {TOKRCURLY}, {TOKRCURLY}))} 
+      }
+      {CT/Test "FromJsonLex/Complex" 
+        {CT/Expect {JSONLex "{\"menu\": {\"id\": \"file\", \"value\": \"File\", \"popup\": {\"menuitem\": [ {\"value\": \"New\", \"onclick\": \"CreateNewDoc()\"}, {\"value\": \"Open\", \"onclick\": \"OpenDoc()\"}, {\"value\": \"Close\", \"onclick\": \"CloseDoc()\"} ]}}}"} 
+          Ok(Tokens({TOKLCURLY}, {TOKSTR "menu"}, {TOKCOLON}, {TOKLCURLY}, {TOKSTR "id"}, {TOKCOLON}, {TOKSTR "file"}, {TOKCOMMA}, {TOKSTR "value"}, {TOKCOLON}, {TOKSTR "File"}, {TOKCOMMA}, {TOKSTR "popup"}, {TOKCOLON}, {TOKLCURLY}, {TOKSTR "menuitem"}, {TOKCOLON}, {TOKLBRACK}, 
+            {TOKLCURLY}, {TOKSTR "value"}, {TOKCOLON}, {TOKSTR "New"}, {TOKCOMMA}, {TOKSTR "onclick"}, {TOKCOLON}, {TOKSTR "CreateNewDoc()"}, {TOKRCURLY}, {TOKCOMMA}, 
+            {TOKLCURLY}, {TOKSTR "value"}, {TOKCOLON}, {TOKSTR "Open"}, {TOKCOMMA}, {TOKSTR "onclick"}, {TOKCOLON}, {TOKSTR "OpenDoc()"}, {TOKRCURLY}, {TOKCOMMA}, 
+            {TOKLCURLY}, {TOKSTR "value"}, {TOKCOLON}, {TOKSTR "Close"}, {TOKCOMMA}, {TOKSTR "onclick"}, {TOKCOLON}, {TOKSTR "CloseDoc()"}, {TOKRCURLY}, 
+            {TOKRBRACK}, 
+          {TOKRCURLY}, {TOKRCURLY}, {TOKRCURLY}))} 
+        }
+    }
+  }
+}

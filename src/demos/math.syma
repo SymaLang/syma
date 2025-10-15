@@ -6,7 +6,7 @@
     {App
 
       State(Expr(
-        Add(Mul(2, c), Mul(-3, c)))
+        Add(Mul(2, c), Mul(3, c)))
       )
 
       {UI

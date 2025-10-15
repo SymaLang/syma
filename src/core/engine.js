@@ -224,9 +224,90 @@ export function extractRulesFromNode(rulesNode) {
     return indexRules(rs);
 }
 
+/**
+ * Check if a node tree contains Var or VarRest patterns
+ */
+function containsPatternNodes(node, path = []) {
+    const issues = [];
+
+    function traverse(n, currentPath) {
+        if (isVar(n)) {
+            issues.push({
+                type: 'Var',
+                name: n.a[0]?.v || '?',
+                path: currentPath.join('/')
+            });
+        } else if (isVarRest(n)) {
+            issues.push({
+                type: 'VarRest',
+                name: n.a[0]?.v || '?',
+                path: currentPath.join('/')
+            });
+        } else if (isCall(n)) {
+            // Traverse head
+            traverse(n.h, [...currentPath, `${n.h.v || 'Call'}`]);
+            // Traverse arguments
+            n.a.forEach((arg, i) => {
+                traverse(arg, [...currentPath, `${n.h.v || 'Call'}[${i}]`]);
+            });
+        }
+    }
+
+    traverse(node, path);
+    return issues;
+}
+
+/**
+ * Validate that Var/VarRest only appear in Rules/RuleRules sections
+ */
+export function validateUniverse(universe) {
+    const warnings = [];
+
+    if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe") {
+        return warnings;
+    }
+
+    for (const section of universe.a) {
+        if (!isCall(section) || !isSym(section.h)) continue;
+
+        const sectionName = section.h.v;
+
+        // Skip Rules and RuleRules - these are allowed to have patterns
+        if (sectionName === "Rules" || sectionName === "RuleRules") {
+            continue;
+        }
+
+        // Check for pattern nodes in other sections
+        const issues = containsPatternNodes(section, [sectionName]);
+
+        if (issues.length > 0) {
+            warnings.push({
+                section: sectionName,
+                message: `Found pattern matching constructs (Var/VarRest) outside of Rules/RuleRules sections`,
+                details: issues
+            });
+        }
+    }
+
+    return warnings;
+}
+
 export function extractRules(universe) {
     if (!isCall(universe) || !isSym(universe.h) || universe.h.v !== "Universe")
         throw new Error("Expected root Universe[...]");
+
+    // Validate universe structure
+    const warnings = validateUniverse(universe);
+    if (warnings.length > 0) {
+        console.warn("⚠️  Universe validation warnings:");
+        for (const warning of warnings) {
+            console.warn(`  ${warning.section}: ${warning.message}`);
+            for (const detail of warning.details) {
+                console.warn(`    - ${detail.type} "${detail.name}" at ${detail.path}`);
+            }
+        }
+    }
+
     const baseRulesNode = findSection(universe, "Rules");
     if (!baseRulesNode) throw new Error("Universe missing Rules[...]");
 

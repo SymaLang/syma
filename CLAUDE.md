@@ -35,7 +35,7 @@ This is a symbolic programming language runtime and frontend application built w
    - `{k:"Sym", v:string}` for symbols
    - `{k:"Num", v:number}` for numbers
    - `{k:"Str", v:string}` for strings
-   - `{k:"Call", h:Expr, a:Expr[]}` for function calls
+   - `{k:"Call", h:Expr, a:Expr[]}` for compound terms
 
 4. **Entry Point (`src/main-syma.js`)**: Bootstraps the runtime with `boot(universe, '#app')`
 

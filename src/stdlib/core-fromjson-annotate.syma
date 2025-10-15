@@ -24,12 +24,12 @@
     }
     {R FromJSON/Parsing/Annotate/Out/End
       {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at...}}}
-      {Parsing {AnnotatedTokens at...}}
+      {Parsing Ok({AnnotatedTokens at...})}
       :guard Eq(depth_, 0)
     }
     {R FromJSON/Parsing/Annotate/Out/Err
       {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at...}}}
-      {Parsing {Error "Not balanced [] or {}"} {AnnotatedTokens at...}}
+      {Parsing {Error "Not balanced [] or {}" {AnnotatedTokens at...}}}
       :guard Neq(depth_, 0)
     }
   }

@@ -2,11 +2,11 @@
   {Export ToJSON}
   {Rules
     ; -------- Public entry --------
-    {R ToJSON/a {ToJSON x_} {Stringifying End ToString(x_)} {IsNum {Frozen x_}}}
-    {R ToJSON/b {ToJSON x_} {Stringifying End x_} {IsStr {Frozen x_}}}
-    {R ToJSON/c {ToJSON x_} {Stringifying End "null"} {Eq Empty {Frozen x_}}}
-    {R ToJSON/d {ToJSON x_} {Stringifying End "true"} {Eq True {Frozen x_}}}
-    {R ToJSON/e {ToJSON x_} {Stringifying End "false"} {Eq False {Frozen x_}}}
+    {R ToJSON/a {ToJSON x_} Ok(ToString(x_)) :guard {IsNum {Frozen x_}}}
+    {R ToJSON/b {ToJSON x_} Ok(x_) :guard {IsStr {Frozen x_}}}
+    {R ToJSON/c {ToJSON x_} Ok("null") :guard {Eq Empty {Frozen x_}}}
+    {R ToJSON/d {ToJSON x_} Ok("true") :guard {Eq True {Frozen x_}}}
+    {R ToJSON/e {ToJSON x_} Ok("false") :guard {Eq False {Frozen x_}}}
     {R ToJSON/f {ToJSON {head_ v...}} {Stringifying Processing {Stack} {Before } {Tree {head_ v...}}} :guard {Eq JSONArr {Frozen head_}}}
     {R ToJSON/g {ToJSON {head_ v...}} {Stringifying Processing {Stack} {Before} {Tree {head_ v...}}} :guard {Eq JSONObj {Frozen head_}}}
 
@@ -71,12 +71,12 @@
 
     {R ToJSON/Stringifying/Processing/Obj/Start/Arr
       {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ {JSONArr v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Arr} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":["} v... EndArr rest...}}
+      {Stringifying Processing {Stack s... Obj Arr} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":"} {Stringified "["} v... EndArr rest...}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/Start/Obj
       {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ {JSONObj v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Obj} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":{"} v... EndObj rest...}}
+      {Stringifying Processing {Stack s... Obj Obj} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":"} {Stringified "{"} v... EndObj rest...}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/V/Prim
@@ -87,12 +87,12 @@
 
     {R ToJSON/Stringifying/Processing/Obj/V/Arr
       {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ {JSONArr v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Arr} {Before bef... ","} {Tree {Stringify k_} {Stringified ":["} v... EndArr rest...}}
+      {Stringifying Processing {Stack s... Obj Arr} {Before bef... ","} {Tree {Stringify k_} {Stringified ":"} {Stringified "["} v... EndArr rest...}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/V/Obj
       {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ {JSONObj v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Obj} {Before bef... ","} {Tree {Stringify k_} {Stringified ":{"} v... EndObj rest...}}
+      {Stringifying Processing {Stack s... Obj Obj} {Before bef... ","} {Tree {Stringify k_} {Stringified ":"} {Stringified "{"} v... EndObj rest...}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/End
@@ -164,7 +164,7 @@
 
     {R ToJSON/Stringifying/Concatenating/End
       {Stringifying Concatenating s_}
-      s_
+      Ok(s_)
       :guard IsStr({Frozen s_})
     }
   }

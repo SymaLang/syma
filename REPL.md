@@ -757,7 +757,7 @@ Checking why expression is stuck...
 Rule "MyRule" partially matches:
   Pattern:
     {MyRule {Var n}}
-  Issue: Expected Call node but found Num
+  Issue: Expected Compound node but found Num
 
 No other rules come close to matching this expression
 ```

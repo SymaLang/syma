@@ -96,7 +96,7 @@ Consider this example:
 ```
 
 This isn't just syntax for calling an Add function. It's a data structure:
-- A Call node with head `Add`
+- A Compound node with head `Add`
 - Two arguments: numbers `2` and `3`
 
 Your entire program is a tree of these structures. And here's the magic: **your program can examine and transform itself**.

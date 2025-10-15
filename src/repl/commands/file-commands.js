@@ -200,6 +200,19 @@ export class FileCommands {
             // Apply RuleRules to transform the Universe permanently
             this.repl.universe = engine.applyRuleRules(this.repl.universe, foldPrims);
 
+            // Validate the bundled universe
+            const warnings = engine.validateUniverse(this.repl.universe);
+            if (warnings.length > 0) {
+                this.repl.platform.printWithNewline(`\n⚠️  Warning: Found pattern matching constructs in non-rule sections:`);
+                for (const warning of warnings) {
+                    for (const detail of warning.details) {
+                        this.repl.platform.printWithNewline(`  ${detail.type} "${detail.name}" in ${detail.path}`);
+                    }
+                }
+                this.repl.platform.printWithNewline(`\nPattern matching constructs (Var/VarRest) should only be used in Rules and RuleRules sections.`);
+                this.repl.platform.printWithNewline(`These will cause errors during normalization.\n`);
+            }
+
             this.repl.platform.printWithNewline(`Module ${moduleName} bundled and loaded successfully\n`);
 
             // Save for :reload (including args if present)

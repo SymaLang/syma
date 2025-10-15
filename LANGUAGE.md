@@ -1,11 +1,11 @@
-# Syma Symbolic S-Expression Language Documentation
+# Syma Symbolic Language Documentation
 
 ## 1. Introduction
 
 This document describes Syma — a symbolic programming language and runtime based on S-expressions. The language uses symbolic expressions (S-expressions) as its core syntax and compiles these expressions into a JSON Abstract Syntax Tree (AST) representation. It is designed to express programs, rules, and transformations in a concise and symbolic manner.
 
 Syma is unique in that it's both a language and a multiplatform runtime:
-- **As a language**: Supports atoms, function calls, pattern matching, modules, and rewrite rules
+- **As a language**: Supports atoms, compound terms, pattern matching, modules, and rewrite rules
 - **As a runtime**: Executes directly on Node.js (`syma program.syma`) and in browsers
 - **Platform-agnostic**: The same code runs in browsers, Node.js, and future platforms
 - **Purely functional effects**: All I/O is symbolic, handled by platform adapters
@@ -24,9 +24,9 @@ Atoms represent constant values or symbolic identifiers in the language.
 
 ---
 
-## 3. Calls
+## 3. Compounds
 
-A **Call** is an expression where the first element is the head (function or operator) and the rest are arguments. The language supports two equivalent syntaxes:
+A **Compound** is a term structure where the first element is the head (function or operator) and the rest are arguments. Syma supports two equivalent syntaxes:
 
 ### Brace Syntax (Original)
 
@@ -80,7 +80,7 @@ This flexibility allows you to use whichever syntax is clearer for each specific
 
 ### Basic Variables
 
-The language uses pattern variables for matching and binding values in rules. There are two syntaxes available:
+Syma uses pattern variables for matching and binding values in rules. There are two syntaxes available:
 
 **Explicit syntax:**
 ```lisp
@@ -154,7 +154,7 @@ Pattern matching with mixed syntax:
 
 ### Module Structure
 
-The language supports a module system for organizing code into reusable, composable units. Modules can be written in either syntax:
+Syma supports a module system for organizing code into reusable, composable units. Modules can be written in either syntax:
 
 **Brace Syntax:**
 ```lisp
@@ -268,12 +268,13 @@ Rules define pattern-based transformations:
 ```lisp
 {R "Name" pattern replacement guard? priority?}
 R("Name", pattern, replacement, guard?, priority?)
+{R "Name" pattern replacement :guard guard}
 ```
 
 - `"Name"`: A string identifier for the rule
 - `pattern`: An expression pattern to match
 - `replacement`: The expression that replaces matches
-- `guard`: Optional condition that must evaluate to `True` (4th argument)
+- `guard`: Optional condition that must evaluate to `True` (4th argument, or `:guard` syntax)
 - `priority`: Optional numeric priority (higher values apply first)
   - If 4th argument is a number, it's treated as priority
   - If 4th argument is an expression and 5th is a number, they're guard and priority respectively
@@ -334,8 +335,6 @@ The `Frozen` wrapper prevents normalization of its contents during guard evaluat
 **Important Notes:**
 - Guards are fully normalized with all rules (allows user-defined predicates)
 - Use `Frozen` wrapper to prevent normalization of specific values in guards
-- The named syntax (`:guard`, `:prio`) shown in some examples does NOT currently work
-- Use positional arguments (4th for guard/priority, 5th for priority if guard present)
 
 ### Pattern Matching
 
@@ -360,7 +359,7 @@ The runtime uses an outermost-first strategy with integrated primitive folding:
 - **Outermost-first is critical for determinism** - rules at higher levels take precedence
 - **Primitives fold after each step** - expressions like `Eq(6, -1)` become `False` immediately
 - **The loop continues if either rules OR primitives change the expression** - this ensures complete normalization
-- **Guards are evaluated with primitive folding** - allowing rules like `R("name", pattern, replacement, :guard IsNum(x_))` to work correctly
+- **Guards are fully normalized** - allowing rules like `R("name", pattern, replacement, :guard IsNumericOrSpaceOrLetterX(x_))` to work correctly
 
 **Example Normalization Sequence:**
 ```lisp
@@ -469,7 +468,7 @@ The `Serialize` and `Deserialize` primitives enable powerful metaprogramming pat
 
 ### Note on Lists
 
-Lists in this language are not a primitive type. Instead, they are represented as sequences of arguments within calls. List operations like counting, filtering, and mapping are handled through symbolic rules and pattern matching with rest variables `{Var rest...}`. This keeps the core language minimal while providing full list manipulation power through the rewrite system.
+Lists in Syma are not a primitive type. Instead, they are represented as sequences of arguments within calls. List operations like counting, filtering, and mapping are handled through symbolic rules and pattern matching with rest variables `{Var rest...}`. This keeps the core language minimal while providing full list manipulation power through the rewrite system.
 
 ---
 
@@ -477,7 +476,7 @@ Lists in this language are not a primitive type. Instead, they are represented a
 
 ### UI Elements
 
-The language includes a DSL for defining user interfaces:
+Syma includes a DSL for defining user interfaces:
 
 ```lisp
 {Div :class "card"
@@ -549,7 +548,7 @@ Lifting rules propagate `Apply` through state containers:
 
 ## 11. Symbolic Effects System
 
-The language supports a purely symbolic effects system where all I/O operations are represented as terms in the AST. The host runtime acts as a minimal bridge between symbolic effect requests and actual I/O operations.
+Syma supports a purely symbolic effects system where all I/O operations are represented as terms in the AST. The host runtime acts as a minimal bridge between symbolic effect requests and actual I/O operations.
 
 ### Effects Structure
 
@@ -826,7 +825,7 @@ For a comprehensive guide, see the [RuleRules Tutorial](RULERULES-TUTORIAL.md).
 
 ## 13. Event Action Combinators
 
-The language provides composable action primitives for handling UI events:
+Syma provides composable action primitives for handling UI events:
 
 ### Basic Actions
 
@@ -1067,7 +1066,7 @@ Module definitions become rules with high priority (1000):
 
 ## 17. Key Concepts Summary
 
-1. **S-expressions** as universal syntax
+1. **Symbolic expressions** as universal syntax
 2. **Module system** for code organization and namespacing
 3. **Pattern matching** with variables and wildcards
 4. **Rewrite rules** for computation and transformation
@@ -1080,4 +1079,4 @@ Module definitions become rules with high priority (1000):
 11. **Meta-programming** with rule-rewriting rules
 12. **Priority system** for controlling rule application order
 
-This language provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.
+Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.

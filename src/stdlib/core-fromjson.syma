@@ -5,15 +5,18 @@
   {Rules
     {R FromJSON FromJSON(s_) ParseJSONTokens({JSONLex s_})}
     ;; Just rewrite early if obvious
-    {R FromJSON/Start/Str {ParseJSONTokens {Tokens {TOKSTR s_}}} s_}
-    {R FromJSON/Start/Num {ParseJSONTokens {Tokens {TOKNUM n_}}} {ParseNum n_}}
-    {R FromJSON/Start/True {ParseJSONTokens {Tokens {TOKTRUE}}} True}
-    {R FromJSON/Start/False {ParseJSONTokens {Tokens {TOKFALSE}}} False}
-    {R FromJSON/Start/Null {ParseJSONTokens {Tokens {TOKNULL}}} Empty}
+    {R FromJSON/Start/Str {ParseJSONTokens Ok({Tokens {TOKSTR s_}})} s_}
+    {R FromJSON/Start/Num {ParseJSONTokens Ok({Tokens {TOKNUM n_}})} {ParseNum n_}}
+    {R FromJSON/Start/True {ParseJSONTokens Ok({Tokens {TOKTRUE}})} True}
+    {R FromJSON/Start/False {ParseJSONTokens Ok({Tokens {TOKFALSE}})} False}
+    {R FromJSON/Start/Null {ParseJSONTokens Ok({Tokens {TOKNULL}})} Empty}
+
+    ;; Handle possible errors early
+    {R FromJSON/Start/Err {ParseJSONTokens Err(e...)} Err(e...)}
 
     ;; ------- Real start -----
     {R FromJSON/Start 
-      {ParseJSONTokens {Tokens f_ t...}}
+      {ParseJSONTokens Ok({Tokens f_ t...})}
       {AnnotateJSONTokens {Tokens f_ t...}}
     }
 
@@ -24,13 +27,18 @@
     
     ;; ---------- Parsing -----------
     {R FromJSON/Parsing/Parse/Start
-      {Parsing {AnnotatedTokens at...}}
+      {Parsing Ok({AnnotatedTokens at...})}
       {Parsing Parse {CurrentFrameType Empty} {NestIdStack} {Frames} {AnnotatedTokens at...}}
     }
 
     {R FromJSON/Parsing/Parse/End
       {Parsing End json_}
-      json_
+      Ok(json_)
+    }
+
+    {R FromJSON/Parsing/Parse/End/Err
+      {Parsing Error err_}
+      Err(err_)
     }
 
     ; Eat commas

@@ -70,19 +70,19 @@
 
     R(
       "Flow/WaitForParsedContent",
-      {Plumb {App {State {Vars b... {KV Scratch {JSONObj s...}} a...}}} {Flow Busy flow...} {EffQueue}},
-      {PlumbEnd {App {State {Vars b... {KV Scratch {JSONObj s...}} a...}}} {Flow Idle flow...} {EffQueue}}
+      {Plumb {App {State {Vars b... {KV Scratch Ok(json_)} a...}}} {Flow Busy flow...} {EffQueue}},
+      {PlumbEnd {App {State {Vars b... {KV Scratch json_} a...}}} {Flow Idle flow...} {EffQueue}}
     )
 
     R(
       "Flow/StringifyContent",
-      {Plumb {App {State {Vars b... {KV Scratch v_} a...}}} {Flow Busy {StringifyContent} flow...} {EffQueue}},
+      {Plumb {App {State {Vars b... {KV Scratch v_} a...}}} {Flow Idle {StringifyContent} flow...} {EffQueue}},
       {PlumbEnd {App {State {Vars b... {KV Scratch {CJ/ToJSON v_}} a...}}} {Flow Busy flow...} {EffQueue}}
     )
 
     R(
       "Flow/WaitForStringifyContent",
-      {Plumb {App {State {Vars b... {KV Scratch v_} a...}}} {Flow Busy flow...} {EffQueue}},
+      {Plumb {App {State {Vars b... {KV Scratch Ok(v_)} a...}}} {Flow Busy flow...} {EffQueue}},
       {PlumbEnd {App {State {Vars b... {KV Scratch v_} a...}}} {Flow Idle flow...} {EffQueue}},
         :guard, IsStr({Frozen v_})
     )
