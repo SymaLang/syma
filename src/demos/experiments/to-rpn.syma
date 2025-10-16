@@ -1,0 +1,110 @@
+{Module ToPolish
+  {Rules
+    {R Compute/Entry {ToPolish s_} {Compute Start s_}}
+    {R Compute/Start {Compute Start s_} {Compute Parsing Split(" ", s_)}}
+    {R Compute/Parsed {Compute Parsing {Strings s...}} {Compute Interpreting {Queue} {Stack} {Current} {Strings s...}}}
+
+    {R Compute/Interpreting/Take
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current} {Strings op_ s...}}
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current ParseNum(op_)} {Strings s...}}
+    }
+
+    {R Compute/Interpreting/Num
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current num_} {Strings s...}}
+        {Compute Interpreting {Queue q... num_} {Stack ops...} {Current} {Strings s...}}
+        :guard IsNum(num_)
+    }
+
+    {R Compute/Interpreting/LeftParen
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current op_} {Strings s...}}
+        {Compute Interpreting {Queue q...} {Stack ops... "("} {Current} {Strings s...}}
+        :guard Eq("(", op_)
+    }
+
+    {R Compute/Interpreting/RightParen
+        {Compute Interpreting {Queue q...} {Stack prev... "(" next...} {Current op_} {Strings s...}}
+        {Compute Interpreting {Queue q... Reverse(next...)} {Stack prev...} {Current} {Strings s...}}
+        :guard Eq(")", op_)
+    }
+
+    {R Compute/Interpreting/Space
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current op_} {Strings s...}}
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current} {Strings s...}}
+        :guard Eq(" ", op_)
+    }
+
+    {R Compute/Interpreting/Op
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current op_} {Strings s...}}
+        {Compute Interpreting {Queue q...} {Stack ops...} {DecideOn op_} {Current} {Strings s...}}
+        :guard IsValidOp(op_)
+    }
+
+    {R Compute/Interpreting/Invalid
+        {Compute Interpreting {Queue q...} {Stack ops...} {Current op_} {Strings s...}}
+        {Err Concat("Invalid Operator: ", op_)}
+    }
+
+    {R Compute/Interpreting/DecideOn/EmptyStack
+        {Compute Interpreting {Queue q...} {Stack} {DecideOn op_} {Current} {Strings s...}}
+        {Compute Interpreting {Queue q...} {Stack op_} {Current} {Strings s...}}
+    }
+
+    {R Compute/Interpreting/DecideOn/Precedence
+        {Compute Interpreting {Queue q...} {Stack st... stackop_} {DecideOn op_} {Current} {Strings s...}}
+        {Compute Interpreting {Queue q...} {Stack st...} {DecideOn ToPrec(stackop_) ToPrec(op_)} {Current} {Strings s...}}
+    }
+
+    {R Compute/Interpreting/DecideOn/Precedence/ToPrec/0
+        ToPrec(op_)
+        {op_ 0}
+        :guard Neq({IndexOf "(" op_}, -1)
+    }
+
+    {R Compute/Interpreting/DecideOn/Precedence/ToPrec/1
+        ToPrec(op_)
+        {op_ 1}
+        :guard Neq({IndexOf "+-" op_}, -1)
+    }
+
+    {R Compute/Interpreting/DecideOn/Precedence/ToPrec/2
+        ToPrec(op_)
+        {op_ 2}
+        :guard Neq({IndexOf "*/" op_}, -1)
+    }
+
+    {R Compute/Interpreting/DecideOn/Precedence/Calc
+        {Compute Interpreting {Queue q...} {Stack st...} {DecideOn {stackop_ prec_} {op_ opprec_}} {Current} {Strings s...}}
+        {Compute Interpreting {Queue q...} {Stack st...} {DecideOn Compare {stackop_ prec_} {op_ opprec_}} {Current} {Strings s...}}
+    }
+
+    {R Compute/Interpreting/DecideOn/Precedence/Compare/Pop
+        {Compute Interpreting {Queue q...} {Stack st...} {DecideOn Compare {stackop_ prec_} {op_ opprec_}} {Current} {Strings s...}}
+        {Compute Interpreting {Queue q... stackop_} {Stack st...} {Current op_} {Strings s...}}
+        :guard Gte(prec_, opprec_)
+    }
+
+    {R Compute/Interpreting/DecideOn/Precedence/Compare/Push
+        {Compute Interpreting {Queue q...} {Stack st...} {DecideOn Compare {stackop_ prec_} {op_ opprec_}} {Current} {Strings s...}}
+        {Compute Interpreting {Queue q...} {Stack st... stackop_ op_} {Current} {Strings s...}}
+        :guard Lt(prec_, opprec_)
+    }
+
+    {R Compute/Interpreting/End
+        {Compute Interpreting {Queue q...} {Stack} {Current} {Strings}}
+        {Compute Concatting Join(" ", q...)}
+    }
+
+    {R Compute/Concatting/End
+        {Compute Concatting s_}
+        Ok(s_)
+        :guard IsStr(Frozen(s_))
+    }
+
+    {R Compute/Interpreting/Finalizing
+        {Compute Interpreting {Queue q...} {Stack st...} {Current} {Strings}}
+        {Compute Interpreting {Queue q... Reverse(st...)} {Stack} {Current} {Strings}}
+    }
+
+    {R IsValidOp {IsValidOp op_} Neq({IndexOf "+-*/" op_}, -1)}
+  }
+}

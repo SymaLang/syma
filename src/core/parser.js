@@ -50,7 +50,7 @@ export class SymaParser {
 
         const isWS = c => c === ' ' || c === '\t' || c === '\n' || c === '\r';
         const isDigit = c => c >= '0' && c <= '9';
-        const isDelim = c => c === '{' || c === '}' || c === '(' || c === ')' || c === ',' || c === '"' || c === ';';
+        const isDelim = c => c === '{' || c === '}' || c === '(' || c === ')' || c === ',' || c === '"' || c === "'" || c === ';';
 
         const pos = () => ({ line, col, index: i, file: filename });
 
@@ -118,12 +118,13 @@ export class SymaParser {
                 continue;
             }
 
-            // Strings
-            if (c === '"') {
+            // Strings (both double and single quotes)
+            if (c === '"' || c === "'") {
+                const quoteChar = c;
                 advance();
                 let s = '';
                 while (i < len) {
-                    if (src[i] === '"') {
+                    if (src[i] === quoteChar) {
                         advance();
                         break;
                     }
@@ -137,6 +138,7 @@ export class SymaParser {
                             case 'r': s += '\r'; break;
                             case 't': s += '\t'; break;
                             case '"': s += '"';  break;
+                            case "'": s += "'";  break;
                             case '\\': s += '\\'; break;
                             default: s += esc; break;
                         }
@@ -145,7 +147,7 @@ export class SymaParser {
                         advance();
                     }
                 }
-                if (i > len || src[i-1] !== '"') {
+                if (i > len || src[i-1] !== quoteChar) {
                     this.die('Unterminated string', startPos);
                 }
                 tokens.push({ t: 'str', v: s, pos: startPos });
@@ -209,25 +211,29 @@ export class SymaParser {
             if (!tok) {
                 if (braceStack.length > 0) {
                     const innermost = braceStack[braceStack.length - 1];
-                    this.die(`Unexpected EOF - unclosed '{' from line ${innermost.pos.line}`, innermost.pos);
+                    const opener = innermost.t === '(' ? '(' : '{';
+                    this.die(`Unexpected EOF - unclosed '${opener}' from line ${innermost.pos.line}`, innermost.pos);
                 }
                 this.die('Unexpected EOF');
             }
 
+            let expr;
+            let startPos = tok.pos;
+
             // Numbers
             if (tok.t === 'num') {
                 eat();
-                return Num(tok.v);
+                expr = Num(tok.v);
             }
 
             // Strings
-            if (tok.t === 'str') {
+            else if (tok.t === 'str') {
                 eat();
-                return Str(tok.v);
+                expr = Str(tok.v);
             }
 
-            // Symbols (may start function call)
-            if (tok.t === 'sym') {
+            // Symbols (may have shorthands)
+            else if (tok.t === 'sym') {
                 const sym = eat();
 
                 // Handle VarRest shorthand FIRST: name... or name___
@@ -238,114 +244,161 @@ export class SymaParser {
 
                     if (name === '') {
                         // Just ... or ___ is wildcard rest
-                        return Call(Sym('VarRest'), Str('_'));
+                        expr = Call(Sym('VarRest'), Str('_'));
                     } else if (name.endsWith('_')) {
                         // Remove trailing underscore from name (e.g., xs_... → VarRest "xs")
-                        return Call(Sym('VarRest'), Str(name.slice(0, -1)));
+                        expr = Call(Sym('VarRest'), Str(name.slice(0, -1)));
                     } else {
-                        return Call(Sym('VarRest'), Str(name));
+                        expr = Call(Sym('VarRest'), Str(name));
                     }
                 }
 
                 // Handle Var shorthand: name_ → {Var "name"}
                 // Check this AFTER VarRest to avoid incorrectly catching ___
-                if (sym.v.endsWith('_')) {
+                else if (sym.v.endsWith('_')) {
                     const name = sym.v.slice(0, -1);
                     if (name === '') {
                         // Just _ is wildcard
-                        return Call(Sym('Var'), Str('_'));
+                        expr = Call(Sym('Var'), Str('_'));
                     } else {
-                        return Call(Sym('Var'), Str(name));
+                        expr = Call(Sym('Var'), Str(name));
                     }
+                } else {
+                    expr = Sym(sym.v);
                 }
-
-                // Check if followed by '(' for function call syntax
-                if (peek() && peek().t === '(') {
-                    eat(); // consume '('
-                    const args = [];
-
-                    // Handle empty parens
-                    if (peek() && peek().t === ')') {
-                        eat();
-                        return Call(Sym(sym.v));
-                    }
-
-                    // Parse comma-separated arguments
-                    while (true) {
-                        args.push(parseExpr());
-                        const next = peek();
-                        if (!next) this.die('Unterminated function call', sym.pos);
-                        if (next.t === ',') {
-                            eat(); // consume comma
-                            continue;
-                        }
-                        if (next.t === ')') {
-                            eat(); // consume closing paren
-                            break;
-                        }
-                        this.die(`Expected ',' or ')' in function call`, next.pos);
-                    }
-
-                    return Call(Sym(sym.v), ...args);
-                }
-
-                return Sym(sym.v);
             }
 
             // Unexpected closing delimiters
-            if (tok.t === '}') {
+            else if (tok.t === '}') {
                 if (braceStack.length === 0) {
                     this.die('Unexpected closing brace - no matching opening brace', tok.pos);
                 }
                 this.die('Unexpected closing brace', tok.pos);
             }
 
-            if (tok.t === ')') {
+            else if (tok.t === ')') {
                 this.die('Unexpected closing parenthesis', tok.pos);
             }
 
-            if (tok.t === '(') {
-                this.die('Unexpected opening parenthesis - function calls must have a name', tok.pos);
+            // Parenthesis syntax (Head arg1 arg2 ...) - like brace syntax or () for empty call
+            else if (tok.t === '(') {
+                const openParen = eat();
+                braceStack.push(openParen);
+
+                // Handle empty parens - create empty Call
+                if (peek() && peek().t === ')') {
+                    eat();
+                    braceStack.pop();
+                    expr = Call(); // Empty call with no head
+                } else {
+                    const head = parseExpr();
+                    const args = [];
+
+                    // Parse space-separated arguments (commas are allowed but treated as separators)
+                    while (true) {
+                        const next = peek();
+                        if (!next) {
+                            const innermost = braceStack[braceStack.length - 1];
+                            this.die(`Unterminated parenthesis expression - unclosed '(' from line ${innermost.pos.line}`, innermost.pos);
+                        }
+                        if (next.t === ')') {
+                            eat();
+                            braceStack.pop();
+                            break;
+                        }
+                        if (next.t === ',') {
+                            eat(); // Skip commas in parenthesis syntax
+                            continue;
+                        }
+                        args.push(parseExpr());
+                    }
+
+                    expr = Call(head, ...args);
+                }
             }
 
-            if (tok.t === ',') {
-                this.die('Unexpected comma outside of function call', tok.pos);
+            else if (tok.t === ',') {
+                eat();
+                expr = Sym(',');
             }
 
-            // Brace syntax {Head arg1 arg2 ...}
-            if (tok.t === '{') {
+            // Brace syntax {Head arg1 arg2 ...} or {} for empty call
+            else if (tok.t === '{') {
                 const openBrace = eat();
                 braceStack.push(openBrace);
 
-                // Handle empty braces
+                // Handle empty braces - create empty Call
                 if (peek() && peek().t === '}') {
                     eat();
                     braceStack.pop();
-                    this.die('Empty brace expression', openBrace.pos);
-                }
+                    expr = Call(); // Empty call with no head
+                } else {
+                    const head = parseExpr();
+                    const args = [];
 
-                const head = parseExpr();
-                const args = [];
-
-                // Parse space-separated arguments
-                while (true) {
-                    const next = peek();
-                    if (!next) {
-                        const innermost = braceStack[braceStack.length - 1];
-                        this.die(`Unterminated brace expression - unclosed '{' from line ${innermost.pos.line}`, innermost.pos);
+                    // Parse space-separated arguments
+                    while (true) {
+                        const next = peek();
+                        if (!next) {
+                            const innermost = braceStack[braceStack.length - 1];
+                            this.die(`Unterminated brace expression - unclosed '{' from line ${innermost.pos.line}`, innermost.pos);
+                        }
+                        if (next.t === '}') {
+                            eat();
+                            braceStack.pop();
+                            break;
+                        }
+                        args.push(parseExpr());
                     }
-                    if (next.t === '}') {
-                        eat();
-                        braceStack.pop();
-                        break;
-                    }
-                    args.push(parseExpr());
-                }
 
-                return Call(head, ...args);
+                    expr = Call(head, ...args);
+                }
             }
 
-            this.die(`Unexpected token: ${tok.t}`, tok.pos);
+            else {
+                this.die(`Unexpected token: ${tok.t}`, tok.pos);
+            }
+
+            // Check for function call suffix: expr()
+            if (peek() && peek().t === '(') {
+                eat(); // consume '('
+                const args = [];
+
+                // Handle empty parens
+                if (peek() && peek().t === ')') {
+                    eat();
+                    return Call(expr);
+                }
+
+                // Parse arguments (commas are optional)
+                while (true) {
+                    args.push(parseExpr());
+                    const next = peek();
+                    if (!next) this.die('Unterminated function call', startPos);
+                    if (next.t === ')') {
+                        eat(); // consume closing paren
+                        break;
+                    }
+                    if (next.t === ',') {
+                        eat(); // consume optional comma
+                        // Check for trailing comma
+                        if (peek() && peek().t === ')') {
+                            eat(); // consume closing paren
+                            break;
+                        }
+                        continue;
+                    }
+                    // If next token can start an expression, continue without comma
+                    if (next.t === 'num' || next.t === 'str' || next.t === 'sym' || next.t === '{' || next.t === '(') {
+                        continue;
+                    }
+                    this.die(`Expected ',' or ')' in function call`, next.pos);
+                }
+
+                return Call(expr, ...args);
+            }
+
+            return expr;
         };
 
         // Parse expressions until EOF
@@ -356,7 +409,8 @@ export class SymaParser {
 
         if (braceStack.length > 0) {
             const innermost = braceStack[braceStack.length - 1];
-            this.die(`Unclosed brace from line ${innermost.pos.line}`, innermost.pos);
+            const opener = innermost.t === '(' ? '(' : '{';
+            this.die(`Unclosed '${opener}' from line ${innermost.pos.line}`, innermost.pos);
         }
 
         if (exprs.length === 0) {
@@ -469,6 +523,13 @@ export class SymaParser {
         if (isSym(node)) return node.v;
 
         if (isCall(node)) {
+            // Handle empty call: {} or ()
+            if (node.h === null) {
+                if (node.a.length === 0) return '{}';
+                const args = node.a.map(a => this.nodeToString(a, indent));
+                return `{${args.join(' ')}}`;
+            }
+
             // Handle VarRest shorthand FIRST: {VarRest "name"} → name...
             // Must check this before Var to generate correct output
             if (isSym(node.h) && node.h.v === 'VarRest' &&
@@ -554,6 +615,14 @@ export class SymaParser {
 
         // Calls
         if (isCall(node)) {
+            // Handle empty call: {} or ()
+            if (node.h === null) {
+                if (node.a.length === 0) return '{}';
+                const args = node.a.map(a => this.prettyPrint(a, indent, opts));
+                // For empty calls with args, just show them inline
+                return `{${args.join(' ')}}`;
+            }
+
             // Handle VarRest shorthand FIRST: {VarRest "name"} → name...
             // Must check this before Var to generate correct output
             if (isSym(node.h) && node.h.v === 'VarRest' &&

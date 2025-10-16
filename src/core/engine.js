@@ -40,6 +40,12 @@ function analyzePattern(pattern) {
 
     if (isCall(pattern)) {
         // For Call patterns, index by head
+        // Handle empty calls (null head) - they match only empty calls
+        if (pattern.h === null) {
+            // Empty call pattern - index as a special atom
+            return { type: "atom", key: "emptycall", arity: null };
+        }
+
         // Head could be a symbol or a Var
         if (isVar(pattern.h)) {
             // Call with Var head matches any call
@@ -125,24 +131,32 @@ function getApplicableRules(expr, ruleIndex) {
         if (ruleIndex.byAtom[key]) {
             applicable.push(...ruleIndex.byAtom[key]);
         }
-    } else if (isCall(expr) && isSym(expr.h)) {
-        const headSymbol = expr.h.v;
-        const arity = expr.a.length;
-
-        if (ruleIndex.byHead[headSymbol]) {
-            // Add rules with exact arity match
-            if (ruleIndex.byHead[headSymbol][arity]) {
-                applicable.push(...ruleIndex.byHead[headSymbol][arity]);
-            }
-            // Add rules with variable arity (VarRest)
-            if (ruleIndex.byHead[headSymbol]["*"]) {
-                applicable.push(...ruleIndex.byHead[headSymbol]["*"]);
+    } else if (isCall(expr)) {
+        // Handle empty calls (null head)
+        if (expr.h === null) {
+            const key = "emptycall";
+            if (ruleIndex.byAtom[key]) {
+                applicable.push(...ruleIndex.byAtom[key]);
             }
         }
-    }
+        // Handle calls with symbol heads
+        else if (isSym(expr.h)) {
+            const headSymbol = expr.h.v;
+            const arity = expr.a.length;
 
-    // If no specific rules found and expr is a Call with non-symbol head,
-    // we already included universal rules above
+            if (ruleIndex.byHead[headSymbol]) {
+                // Add rules with exact arity match
+                if (ruleIndex.byHead[headSymbol][arity]) {
+                    applicable.push(...ruleIndex.byHead[headSymbol][arity]);
+                }
+                // Add rules with variable arity (VarRest)
+                if (ruleIndex.byHead[headSymbol]["*"]) {
+                    applicable.push(...ruleIndex.byHead[headSymbol]["*"]);
+                }
+            }
+        }
+        // If expr is a Call with non-symbol/non-null head, we already included universal rules above
+    }
 
     return applicable;
 }
@@ -708,6 +722,17 @@ export function match(pat, subj, env = {}) {
     // Calls
     if (isCall(pat)) {
         if (!isCall(subj)) return null;
+
+        // Handle empty calls (null heads)
+        if (pat.h === null && subj.h === null) {
+            // Both are empty calls, just match args
+            return matchArgsWithRest(pat.a, subj.a, env);
+        }
+        if (pat.h === null || subj.h === null) {
+            // Only one is empty, no match
+            return null;
+        }
+
         const env1 = match(pat.h, subj.h, env);
         if (!env1) return null;
         return matchArgsWithRest(pat.a, subj.a, env1);
@@ -734,7 +759,8 @@ export function substWithFrozen(expr, env, preserveUnboundPatterns = false) {
 
     // For other Call nodes, recursively handle any Frozen children
     if (isCall(expr)) {
-        const h = substWithFrozen(expr.h, env, preserveUnboundPatterns);
+        // Handle empty calls (null head)
+        const h = expr.h === null ? null : substWithFrozen(expr.h, env, preserveUnboundPatterns);
         const mapped = expr.a.map(arg => substWithFrozen(arg, env, preserveUnboundPatterns));
 
         // Handle splices from VarRest substitutions
@@ -880,7 +906,8 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
     }
     if (isSym(expr) || isNum(expr) || isStr(expr)) return expr;
     if (isCall(expr)) {
-        const h = subst(expr.h, env, preserveUnboundPatterns);
+        // Handle empty calls (null head)
+        const h = expr.h === null ? null : subst(expr.h, env, preserveUnboundPatterns);
         const mapped = expr.a.map(a => subst(a, env, preserveUnboundPatterns));
         const flat = [];
         for (const m of mapped) {

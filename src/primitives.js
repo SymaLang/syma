@@ -15,6 +15,13 @@ import { freshId } from './effects/processor.js';
  */
 export function foldPrims(node, skipFolds = []) {
     if (isCall(node)) {
+        // Handle empty calls (node.h === null)
+        if (node.h === null) {
+            // Fold arguments but keep the empty call structure
+            const a = node.a.map((a) => foldPrims(a, skipFolds));
+            return {k: K.Call, h: null, a};
+        }
+
         const h = foldPrims(node.h, skipFolds);
         const a = node.a.map((a) => foldPrims(a, skipFolds));
 
@@ -95,6 +102,7 @@ function foldPrimitive(op, args, skipFolds) {
         case "Split": return foldSplit(args);
         case "SplitToChars": return foldSplitToChars(args);
         case "SplitBy": return foldSplitBy(args);
+        case "Join": return foldJoin(args);
         case "Escape": return foldEscape(args);
         case "Unescape": return foldUnescape(args);
     }
@@ -143,6 +151,7 @@ function foldPrimitive(op, args, skipFolds) {
         case "CharFromCode": return foldCharFromCode(args);
         case "Splat": return foldSplat(args);
         case "...!": return foldSplat(args);
+        case "Reverse": return foldReverse(args);
         case "Serialize": return foldSerialize(args);
         case "Deserialize": return foldDeserialize(args);
     }
@@ -502,9 +511,7 @@ function foldReplaceAll(args) {
  * Note: Returns null as we can't represent lists as primitives yet
  */
 function foldSplit(args) {
-    // This would need proper list support to be useful
-    // For now, returning null keeps it symbolic
-    return null;
+    return foldSplitBy(args);
 }
 
 /**
@@ -541,6 +548,29 @@ function foldSplitBy(args) {
         }
 
         return Call(Sym('Strings'), ...parts);
+    }
+    return null;
+}
+
+/**
+ * Join strings: Join[separator, ...items] -> Str(joined)
+ * Joins multiple strings/numbers with a separator
+ * Works with splatted arguments from VarRest patterns
+ */
+function foldJoin(args) {
+    if (args.length >= 1 && isStr(args[0])) {
+        const separator = args[0].v;
+        const items = args.slice(1);
+
+        // All items must be stringifiable (Str or Num)
+        const allStringifiable = items.every(item => isStr(item) || isNum(item));
+
+        if (allStringifiable) {
+            const joined = items.map(item =>
+                isStr(item) ? item.v : String(item.v)
+            ).join(separator);
+            return Str(joined);
+        }
     }
     return null;
 }
@@ -888,6 +918,8 @@ function foldParseNum(args) {
         const parsed = parseFloat(args[0].v);
         if (!isNaN(parsed)) {
             return Num(parsed);
+        } else {
+            return args[0]; // Remain symbolic if not a valid number
         }
     }
     return null;
@@ -947,6 +979,17 @@ function foldSplat(args) {
     // Return Splice object - it will be expanded by context-specific processors
     // The display layer will handle showing it as Bundle[...] for clarity
     return Splice(args);
+}
+
+/**
+ * Reverse: Reverse[arg1, arg2, ...] -> Splice([..., arg2, arg1])
+ * Reverses the order of arguments
+ * Returns a Splice object so it can be used with rest arguments
+ * Useful for processing sequences in reverse order
+ */
+function foldReverse(args) {
+    // Return Splice with reversed args
+    return Splice([...args].reverse());
 }
 
 /**

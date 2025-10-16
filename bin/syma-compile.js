@@ -23,8 +23,7 @@ const __dirname = path.dirname(__filename);
 async function compile(options) {
   const { files, bundle, entry, output, pretty, format, stdlibPath, library } = options;
 
-  // Use tree-sitter parser by default, fallback to original if it fails
-  const parser = await createParser({ useTreeSitter: true });
+  const parser = await createParser({ useTreeSitter: false });
 
   // Format mode - pretty print .syma files
   if (format) {
