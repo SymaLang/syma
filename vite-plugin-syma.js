@@ -12,6 +12,7 @@ export default function symaPlugin(options = {}) {
     const {
         // Module configuration
         entryModule = 'App/Main',
+        entryFile = null,  // Path to entry .syma file (overrides entryModule)
         modulesDir = 'src/modules',
 
         // Compiler configuration
@@ -27,6 +28,17 @@ export default function symaPlugin(options = {}) {
     let rootDir;
     let moduleMap = new Map();
     let compiledCache = null;
+    let resolvedEntryModule = entryModule;
+    let resolvedEntryFile = entryFile;
+    let entryParseError = null;
+
+    // ANSI color codes for console output
+    const colors = {
+        red: '\x1b[31m',
+        yellow: '\x1b[33m',
+        green: '\x1b[32m',
+        reset: '\x1b[0m'
+    };
 
     // Parse module to extract dependencies
     async function parseModuleInfo(filePath) {
@@ -38,7 +50,18 @@ export default function symaPlugin(options = {}) {
             moduleMatch = content.match(/Module\s*\(\s*([A-Za-z0-9/_-]+)/);
         }
         if (!moduleMatch) {
-            throw new Error(`${filePath} is not a valid module file`);
+            throw new Error(
+                `${filePath} is not a valid module file.\n\n` +
+                `File must start with a Module declaration:\n` +
+                `  {Module Module/Name ...}  or  Module(Module/Name, ...)\n\n` +
+                `Examples:\n` +
+                `  {Module Demo/Counter\n` +
+                `    {Export InitialState Inc Dec}\n` +
+                `    {Rules ...}}\n\n` +
+                `  Module(Demo/VM,\n` +
+                `    Export(Run, Step),\n` +
+                `    Rules(...))`
+            );
         }
 
         const moduleName = moduleMatch[1];
@@ -97,7 +120,7 @@ export default function symaPlugin(options = {}) {
 
         const module = moduleMap.get(entryName);
         if (!module) {
-            console.warn(`[syma] Module ${entryName} not found`);
+            console.warn(`${colors.yellow}[syma] ⚠ Module ${entryName} not found${colors.reset}`);
             return [];
         }
 
@@ -121,7 +144,7 @@ export default function symaPlugin(options = {}) {
                 if (foundModule) {
                     deps = deps.concat(getModuleDependencies(foundModule, visited));
                 } else {
-                    console.warn(`[syma] File import ${imp.fromPath} not found in module map`);
+                    console.warn(`${colors.yellow}[syma] ⚠ File import ${imp.fromPath} not found in module map${colors.reset}`);
                 }
             } else {
                 // Standard module import by name
@@ -137,7 +160,18 @@ export default function symaPlugin(options = {}) {
         const moduleFiles = getModuleDependencies(entryName);
 
         if (moduleFiles.length === 0) {
-            throw new Error(`No modules found for entry ${entryName}`);
+            const availableModules = Array.from(moduleMap.keys()).sort();
+            const suggestion = availableModules.length > 0
+                ? `\n\nAvailable modules:\n  - ${availableModules.join('\n  - ')}`
+                : '\n\nNo modules found in the module map. Make sure your .syma files are in the correct directory.';
+            throw new Error(
+                `No modules found for entry "${entryName}".\n` +
+                `The module "${entryName}" was not found in the scanned modules.${suggestion}\n\n` +
+                `Make sure:\n` +
+                `  1. The module file exists and is properly formatted\n` +
+                `  2. The module name in the file matches "${entryName}"\n` +
+                `  3. The file is in a location that gets scanned (src/modules/ or entry file directory)`
+            );
         }
 
         return new Promise((resolve, reject) => {
@@ -193,7 +227,55 @@ export default function symaPlugin(options = {}) {
 
         async configResolved(config) {
             rootDir = config.root;
+
+            // Check for VITE_SYMA_ENTRY environment variable
+            const envEntry = config.env.VITE_SYMA_ENTRY || process.env.VITE_SYMA_ENTRY;
+            if (envEntry) {
+                resolvedEntryFile = path.resolve(rootDir, envEntry);
+                console.log(`[syma] Using entry file from env: ${resolvedEntryFile}`);
+            } else if (entryFile) {
+                resolvedEntryFile = path.resolve(rootDir, entryFile);
+            }
+
             await scanModules();
+
+            // If entryFile is specified, resolve it to a module name and ensure it's in the map
+            if (resolvedEntryFile) {
+                try {
+                    const entryInfo = await parseModuleInfo(resolvedEntryFile);
+                    resolvedEntryModule = entryInfo.moduleName;
+
+                    // Add the entry file and its directory to the module map if not already there
+                    if (!moduleMap.has(resolvedEntryModule)) {
+                        moduleMap.set(resolvedEntryModule, entryInfo);
+
+                        // Also scan the entry file's directory for related modules
+                        const entryDir = path.dirname(resolvedEntryFile);
+                        const pattern = path.join(entryDir, '**/*.syma');
+                        const files = await glob(pattern);
+
+                        for (const file of files) {
+                            if (file !== resolvedEntryFile) {
+                                try {
+                                    const info = await parseModuleInfo(file);
+                                    if (!moduleMap.has(info.moduleName)) {
+                                        moduleMap.set(info.moduleName, info);
+                                    }
+                                } catch (error) {
+                                    console.warn(`${colors.yellow}[syma] Skipping ${file}: ${error.message}${colors.reset}`);
+                                }
+                            }
+                        }
+                    }
+
+                    entryParseError = null;
+                    console.log(`[syma] Resolved entry file to module: ${resolvedEntryModule}`);
+                } catch (error) {
+                    entryParseError = error;
+                    console.error(`${colors.red}[syma] ✗ Error parsing entry file: ${error.message}${colors.reset}`);
+                    // Don't set resolvedEntryModule - will show error in browser
+                }
+            }
         },
 
         resolveId(id) {
@@ -205,21 +287,31 @@ export default function symaPlugin(options = {}) {
 
         async load(id) {
             if (id === resolvedVirtualModuleId) {
+                // Check if there was a parse error for the entry file
+                if (entryParseError) {
+                    const errorMessage = entryParseError.message.replace(/'/g, "\\'");
+                    console.error(`${colors.red}[syma] ✗ Cannot load: ${entryParseError.message}${colors.reset}`);
+                    return {
+                        code: `throw new Error('Failed to parse entry file: ${errorMessage}');`,
+                        map: null
+                    };
+                }
+
                 try {
                     if (!compiledCache) {
-                        const jsonString = await compileModules(entryModule);
+                        const jsonString = await compileModules(resolvedEntryModule);
                         compiledCache = jsonString;
                     }
 
                     const ast = JSON.parse(compiledCache);
-                    console.log(`[syma] ✓ Bundled universe for ${entryModule}`);
+                    console.log(`${colors.green}[syma] ✓ Bundled universe for ${resolvedEntryModule}${colors.reset}`);
 
                     return {
                         code: `export default ${compiledCache};`,
                         map: null
                     };
                 } catch (error) {
-                    console.error(`[syma] ✗ Failed to bundle:`, error.message);
+                    console.error(`${colors.red}[syma] ✗ Failed to bundle: ${error.message}${colors.reset}`);
                     const errorMessage = error.message.replace(/'/g, "\\'");
                     return {
                         code: `throw new Error('Failed to bundle Syma modules: ${errorMessage}');`,
@@ -236,7 +328,45 @@ export default function symaPlugin(options = {}) {
 
                 // Clear cache and rescan
                 compiledCache = null;
+                entryParseError = null;
                 await scanModules();
+
+                // Re-resolve entry file if it was the changed file or if we're using an entry file
+                if (resolvedEntryFile) {
+                    try {
+                        const entryInfo = await parseModuleInfo(resolvedEntryFile);
+                        resolvedEntryModule = entryInfo.moduleName;
+
+                        // Add the entry file and its directory to the module map if not already there
+                        if (!moduleMap.has(resolvedEntryModule)) {
+                            moduleMap.set(resolvedEntryModule, entryInfo);
+
+                            // Also scan the entry file's directory for related modules
+                            const entryDir = path.dirname(resolvedEntryFile);
+                            const pattern = path.join(entryDir, '**/*.syma');
+                            const files = await glob(pattern);
+
+                            for (const file of files) {
+                                if (file !== resolvedEntryFile) {
+                                    try {
+                                        const info = await parseModuleInfo(file);
+                                        if (!moduleMap.has(info.moduleName)) {
+                                            moduleMap.set(info.moduleName, info);
+                                        }
+                                    } catch (error) {
+                                        console.warn(`${colors.yellow}[syma] Skipping ${file}: ${error.message}${colors.reset}`);
+                                    }
+                                }
+                            }
+                        }
+
+                        entryParseError = null;
+                    } catch (error) {
+                        entryParseError = error;
+                        console.error(`${colors.red}[syma] ✗ Error parsing entry file: ${error.message}${colors.reset}`);
+                        // Continue with reload to show error in browser
+                    }
+                }
 
                 // Invalidate virtual module
                 const module = server.moduleGraph.getModuleById(resolvedVirtualModuleId);

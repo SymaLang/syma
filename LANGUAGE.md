@@ -388,6 +388,15 @@ The runtime provides a comprehensive standard library of primitive operations th
 - `{Ceil n}` → round up to integer
 - `{Round n}` → round to nearest integer
 
+**Bitwise Operations:**
+- `{BitAnd n1 n2}` (alias `&`) → bitwise AND of two 32-bit integers
+- `{BitOr n1 n2}` (alias `|`) → bitwise OR of two 32-bit integers
+- `{BitXor n1 n2}` → bitwise XOR of two 32-bit integers
+- `{BitNot n}` (alias `~`) → bitwise NOT of 32-bit integer
+- `{BitShiftLeft n shift}` (alias `<<`) → left shift by specified bits
+- `{BitShiftRight n shift}` (alias `>>`) → arithmetic right shift (sign-preserving)
+- `{BitShiftRightUnsigned n shift}` (alias `>>>`) → logical right shift (zero-fill)
+
 **String Operations:**
 - `{Concat s1 s2 ...}` → concatenates strings/numbers into a string
 - `{ToString value}` → converts value to string representation immediately

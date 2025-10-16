@@ -258,11 +258,17 @@ function containsPatternNodes(node, path = []) {
                 path: currentPath.join('/')
             });
         } else if (isCall(n)) {
-            // Traverse head
-            traverse(n.h, [...currentPath, `${n.h.v || 'Call'}`]);
+            // Handle null heads (empty calls like {})
+            const headName = (n.h && isSym(n.h)) ? n.h.v : 'Call';
+
+            // Traverse head if it exists
+            if (n.h !== null) {
+                traverse(n.h, [...currentPath, headName]);
+            }
+
             // Traverse arguments
             n.a.forEach((arg, i) => {
-                traverse(arg, [...currentPath, `${n.h.v || 'Call'}[${i}]`]);
+                traverse(arg, [...currentPath, `${headName}[${i}]`]);
             });
         }
     }

@@ -16,6 +16,8 @@ import {
     logDispatchTrace
 } from './debug.js';
 import { ProjectorFactory } from './projectors/index.js';
+import { SymaParser } from './core/parser.js';
+import { DebugOverlay } from './debug/index.js';
 
 // Import platform-independent core
 import {
@@ -60,9 +62,11 @@ let GLOBAL_RULES = null;
 let GLOBAL_PROJECTOR = null;
 let GLOBAL_PLATFORM = null;
 let GLOBAL_EFFECTS_PROCESSOR = null;
+let GLOBAL_DEBUG_OVERLAY = null;
 
-async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom") {
+async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom", options = {}) {
     let uni;
+    const { debug = false } = options;
 
     // Initialize browser platform
     GLOBAL_PLATFORM = new BrowserPlatform();
@@ -88,6 +92,13 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
 
     GLOBAL_UNIVERSE = uni;
     GLOBAL_RULES = extractRules(uni);
+
+    // Normalize the Program on initial load to apply any startup rules
+    const initialProgram = getProgram(GLOBAL_UNIVERSE);
+    if (initialProgram) {
+        const normalized = normalize(initialProgram, GLOBAL_RULES, 10000, false, foldPrims);
+        GLOBAL_UNIVERSE = setProgram(GLOBAL_UNIVERSE, normalized);
+    }
 
     const mount = document.querySelector(mountSelector);
     if (!mount) throw new Error(`Mount not found: ${mountSelector}`);
@@ -118,6 +129,11 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
         GLOBAL_UNIVERSE = dispatch(GLOBAL_UNIVERSE, GLOBAL_RULES, action);
         GLOBAL_PROJECTOR.universe = GLOBAL_UNIVERSE;
         GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
+
+        // Notify debug overlay of universe change
+        if (GLOBAL_DEBUG_OVERLAY) {
+            GLOBAL_DEBUG_OVERLAY.onUniverseUpdate();
+        }
     };
 
     // Set the dispatch handler
@@ -139,14 +155,32 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
             // Re-render after effects update
             GLOBAL_PROJECTOR.universe = GLOBAL_UNIVERSE;
             GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
+
+            // Notify debug overlay of universe change
+            if (GLOBAL_DEBUG_OVERLAY) {
+                GLOBAL_DEBUG_OVERLAY.onUniverseUpdate();
+            }
         }
     );
+
+    // Initialize debug overlay if requested
+    if (debug) {
+        const parser = new SymaParser();
+        GLOBAL_DEBUG_OVERLAY = new DebugOverlay({
+            parser,
+            getUniverse: () => GLOBAL_UNIVERSE
+        });
+        console.log('[Syma Debug] Debug overlay initialized. Press Ctrl+D (or Cmd+D) to toggle.');
+    } else {
+        GLOBAL_DEBUG_OVERLAY = null;
+    }
 
     // Return a handle for HMR and testing
     return {
         universe: GLOBAL_UNIVERSE,
         projector: GLOBAL_PROJECTOR,
         platform: GLOBAL_PLATFORM,
+        debugOverlay: GLOBAL_DEBUG_OVERLAY,
         reload: () => {
             // Re-enrich in case the reloaded version doesn't have Effects
             uni = enrichProgramWithEffects(uni);
@@ -154,6 +188,11 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
             GLOBAL_RULES = extractRules(uni);
             GLOBAL_PROJECTOR.universe = GLOBAL_UNIVERSE;
             GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
+
+            // Notify debug overlay of universe change
+            if (GLOBAL_DEBUG_OVERLAY) {
+                GLOBAL_DEBUG_OVERLAY.onUniverseUpdate();
+            }
         },
         effectsProcessor: GLOBAL_EFFECTS_PROCESSOR
     };
@@ -192,6 +231,9 @@ Object.defineProperty(window, "GLOBAL_PROJECTOR", {
 });
 Object.defineProperty(window, "GLOBAL_PLATFORM", {
     get: () => GLOBAL_PLATFORM
+});
+Object.defineProperty(window, "GLOBAL_DEBUG_OVERLAY", {
+    get: () => GLOBAL_DEBUG_OVERLAY
 });
 
 // Dynamic toggle for trace in console: SymbolicHost.setTrace(true/false)

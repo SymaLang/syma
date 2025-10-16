@@ -24,12 +24,44 @@ export class Module {
 
   parseModule() {
     if (!isCall(this.ast) || !isSym(this.ast.h) || this.ast.h.v !== 'Module') {
-      throw new Error('Invalid module format');
+      throw new Error(
+        'Invalid module format. File must contain a Module declaration.\n\n' +
+        'Valid syntax:\n' +
+        '  Brace:    {Module Module/Name ...sections...}\n' +
+        '  Function: Module(Module/Name, ...sections...)\n\n' +
+        'Example:\n' +
+        '  {Module App/Counter\n' +
+        '    {Export InitialState View Inc Dec}\n' +
+        '    {Import Core/KV as KV open}\n' +
+        '    {Defs {InitialState {CounterState {KV Count 0}}}}\n' +
+        '    {Program {App {State InitialState} {UI {Project View}}}}\n' +
+        '    {Rules ...}}'
+      );
     }
 
     const [nameNode, ...sections] = this.ast.a;
-    if (!isSym(nameNode)) throw new Error('Module name must be a symbol');
-    if (nameNode.v !== this.name) throw new Error(`Module name mismatch: ${nameNode.v} vs ${this.name}`);
+    if (!isSym(nameNode)) {
+      throw new Error(
+        'Module name must be a symbol.\n\n' +
+        'Valid syntax:\n' +
+        '  {Module Module/Name ...}  or  Module(Module/Name, ...)\n\n' +
+        'Examples:\n' +
+        '  {Module App/Counter ...}\n' +
+        '  {Module Core/List ...}\n' +
+        '  {Module Demo/VM ...}'
+      );
+    }
+    if (nameNode.v !== this.name) {
+      throw new Error(
+        `Module name mismatch!\n` +
+        `  Declared in file: ${nameNode.v}\n` +
+        `  Expected by compiler: ${this.name}\n\n` +
+        `The module name in your file must match the module name expected by the system.\n` +
+        `Either:\n` +
+        `  1. Rename the module in your file to: {Module ${this.name} ...}\n` +
+        `  2. Or ensure the file is imported/loaded with the correct module name.`
+      );
+    }
 
     for (const section of sections) {
       if (!isCall(section)) continue;
@@ -72,15 +104,45 @@ export class Module {
     let i = 0;
     while (i < nodes.length) {
       const moduleNode = nodes[i++];
-      if (!isSym(moduleNode)) throw new Error('Import module must be a symbol');
+      if (!isSym(moduleNode)) {
+        throw new Error(
+          'Import module must be a symbol.\n' +
+          'Valid syntax:\n' +
+          '  {Import Module/Name as Alias}  or  Import(Module/Name, as, Alias)\n' +
+          'Examples:\n' +
+          '  {Import Core/KV as KV}\n' +
+          '  {Import Core/KV as KV open}\n' +
+          '  {Import Core/Rules/Sugar as CRS macro}'
+        );
+      }
 
       if (i >= nodes.length || !isSym(nodes[i]) || nodes[i].v !== 'as') {
-        throw new Error('Import must have "as" clause');
+        throw new Error(
+          `Import must have "as" clause after module name.\n` +
+          `Found: Import ${moduleNode.v} ...\n` +
+          `Expected: Import ${moduleNode.v} as Alias\n\n` +
+          'Valid syntax:\n' +
+          '  Brace:    {Import Module/Name as Alias [open] [macro]}\n' +
+          '  Function: Import(Module/Name, as, Alias, [open], [macro])\n\n' +
+          'Examples:\n' +
+          '  {Import Core/KV as KV}               - Qualified import\n' +
+          '  {Import Core/KV as KV open}          - Open import (unqualified symbols)\n' +
+          '  {Import Core/Rules/Sugar as CRS macro} - Import RuleRules\n' +
+          '  {Import Core/Set as CS open macro}   - Both open and macro'
+        );
       }
       i++; // skip 'as'
 
       if (i >= nodes.length || !isSym(nodes[i])) {
-        throw new Error('Import must have alias after "as"');
+        throw new Error(
+          `Import must have an alias after "as".\n` +
+          `Found: Import ${moduleNode.v} as ...\n` +
+          `Expected: Import ${moduleNode.v} as AliasName\n\n` +
+          'The alias is how you reference the imported module\'s symbols.\n' +
+          'Examples:\n' +
+          '  {Import Core/KV as KV}    - Use as KV/Get, KV/Set\n' +
+          '  Import(Core/List, as, L)  - Use as L/Map, L/Filter'
+        );
       }
       const alias = nodes[i++].v;
 
@@ -92,7 +154,15 @@ export class Module {
       if (i < nodes.length && isSym(nodes[i]) && nodes[i].v === 'from') {
         i++; // skip 'from'
         if (i >= nodes.length || !isStr(nodes[i])) {
-          throw new Error('Import "from" must be followed by a string path');
+          throw new Error(
+            'Import "from" must be followed by a string path.\n' +
+            'Valid syntax:\n' +
+            '  {Import Module/Name as Alias from "./relative/path.syma"}\n' +
+            '  Import(Module/Name, as, Alias, from, "../other.syma")\n\n' +
+            'Examples:\n' +
+            '  {Import Utils as U from "./utils.syma"}\n' +
+            '  {Import Helper as H from "../shared/helper.syma"}'
+          );
         }
         fromPath = nodes[i++].v;
       }

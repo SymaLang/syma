@@ -142,6 +142,23 @@ function foldPrimitive(op, args, skipFolds) {
         case "AreSyms": return foldAreSyms(args);
     }
 
+    // Bitwise operations
+    switch (op) {
+        case "BitAnd": return foldBitAnd(args);
+        case "&": return foldBitAnd(args); // Alias
+        case "BitOr": return foldBitOr(args);
+        case "|": return foldBitOr(args); // Alias
+        case "BitXor": return foldBitXor(args);
+        case "BitNot": return foldBitNot(args);
+        case "~": return foldBitNot(args); // Alias
+        case "BitShiftLeft": return foldBitShiftLeft(args);
+        case "<<": return foldBitShiftLeft(args); // Alias
+        case "BitShiftRight": return foldBitShiftRight(args);
+        case ">>": return foldBitShiftRight(args); // Alias
+        case "BitShiftRightUnsigned": return foldBitShiftRightUnsigned(args);
+        case ">>>": return foldBitShiftRightUnsigned(args); // Alias
+    }
+
     // Utilities
     switch (op) {
         case "FreshId": return foldFreshId(args);
@@ -398,6 +415,85 @@ function foldCeil(args) {
 function foldRound(args) {
     if (args.length === 1 && isNum(args[0])) {
         return Num(Math.round(args[0].v));
+    }
+    return null;
+}
+
+// ============= Bitwise Operations =============
+
+/**
+ * Bitwise AND: BitAnd[Num, Num] -> Num(result)
+ * Converts to 32-bit integers, performs bitwise AND
+ */
+function foldBitAnd(args) {
+    if (args.length === 2 && isNum(args[0]) && isNum(args[1])) {
+        return Num((args[0].v | 0) & (args[1].v | 0));
+    }
+    return null;
+}
+
+/**
+ * Bitwise OR: BitOr[Num, Num] -> Num(result)
+ * Converts to 32-bit integers, performs bitwise OR
+ */
+function foldBitOr(args) {
+    if (args.length === 2 && isNum(args[0]) && isNum(args[1])) {
+        return Num((args[0].v | 0) | (args[1].v | 0));
+    }
+    return null;
+}
+
+/**
+ * Bitwise XOR: BitXor[Num, Num] -> Num(result)
+ * Converts to 32-bit integers, performs bitwise XOR
+ */
+function foldBitXor(args) {
+    if (args.length === 2 && isNum(args[0]) && isNum(args[1])) {
+        return Num((args[0].v | 0) ^ (args[1].v | 0));
+    }
+    return null;
+}
+
+/**
+ * Bitwise NOT: BitNot[Num] -> Num(result)
+ * Converts to 32-bit integer, performs bitwise NOT
+ */
+function foldBitNot(args) {
+    if (args.length === 1 && isNum(args[0])) {
+        return Num(~(args[0].v | 0));
+    }
+    return null;
+}
+
+/**
+ * Bitwise left shift: BitShiftLeft[Num, Num] -> Num(result)
+ * Shifts left by specified number of bits
+ */
+function foldBitShiftLeft(args) {
+    if (args.length === 2 && isNum(args[0]) && isNum(args[1])) {
+        return Num((args[0].v | 0) << (args[1].v | 0));
+    }
+    return null;
+}
+
+/**
+ * Bitwise arithmetic right shift: BitShiftRight[Num, Num] -> Num(result)
+ * Shifts right by specified number of bits, preserving sign
+ */
+function foldBitShiftRight(args) {
+    if (args.length === 2 && isNum(args[0]) && isNum(args[1])) {
+        return Num((args[0].v | 0) >> (args[1].v | 0));
+    }
+    return null;
+}
+
+/**
+ * Bitwise unsigned right shift: BitShiftRightUnsigned[Num, Num] -> Num(result)
+ * Shifts right by specified number of bits, zero-fill
+ */
+function foldBitShiftRightUnsigned(args) {
+    if (args.length === 2 && isNum(args[0]) && isNum(args[1])) {
+        return Num((args[0].v | 0) >>> (args[1].v | 0));
     }
     return null;
 }

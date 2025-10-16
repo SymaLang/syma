@@ -20,6 +20,18 @@ This document lists all available primitive operations in the Syma language runt
 | `Ceil` | - | `[Num]` | `Num` | Round up to nearest integer |
 | `Round` | - | `[Num]` | `Num` | Round to nearest integer |
 
+## Bitwise Operations
+
+| Primitive | Aliases | Signature | Returns | Description |
+|-----------|---------|-----------|---------|-------------|
+| `BitAnd` | `&` | `[Num, Num]` | `Num` | Bitwise AND of two 32-bit integers |
+| `BitOr` | `\|` | `[Num, Num]` | `Num` | Bitwise OR of two 32-bit integers |
+| `BitXor` | - | `[Num, Num]` | `Num` | Bitwise XOR of two 32-bit integers |
+| `BitNot` | `~` | `[Num]` | `Num` | Bitwise NOT of 32-bit integer |
+| `BitShiftLeft` | `<<` | `[Num, Num]` | `Num` | Left shift by specified number of bits |
+| `BitShiftRight` | `>>` | `[Num, Num]` | `Num` | Arithmetic right shift (sign-preserving) |
+| `BitShiftRightUnsigned` | `>>>` | `[Num, Num]` | `Num` | Logical right shift (zero-fill) |
+
 ## String Operations
 
 | Primitive | Signature | Returns | Description |
@@ -108,6 +120,21 @@ This document lists all available primitive operations in the Syma language runt
 {+ 2 3}                ; → 5
 {Pow 2 8}              ; → 256
 {Max 3 7 2 9 1}        ; → 9
+
+; Bitwise
+{BitAnd 12 10}         ; → 8  (0b1100 & 0b1010 = 0b1000)
+{& 12 10}              ; → 8
+{BitOr 12 10}          ; → 14 (0b1100 | 0b1010 = 0b1110)
+{| 12 10}              ; → 14
+{BitXor 12 10}         ; → 6  (0b1100 ^ 0b1010 = 0b0110)
+{BitNot 5}             ; → -6 (~5 in 32-bit two's complement)
+{~ 5}                  ; → -6
+{BitShiftLeft 1 3}     ; → 8  (1 << 3)
+{<< 1 3}               ; → 8
+{BitShiftRight -8 2}   ; → -2 (-8 >> 2, sign-preserving)
+{>> -8 2}              ; → -2
+{BitShiftRightUnsigned -8 2}  ; → 1073741822 (-8 >>> 2, zero-fill)
+{>>> -8 2}             ; → 1073741822
 
 ; Strings
 {Concat "Hello" " " "World"}  ; → "Hello World"
