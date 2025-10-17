@@ -26,7 +26,16 @@ Atoms represent constant values or symbolic identifiers in the language.
 
 ## 3. Compounds
 
-A **Compound** is a term structure where the first element is the head (function or operator) and the rest are arguments. Syma supports two equivalent syntaxes:
+A **Compound** is a flat sequence of expressions, where the first element typically serves as the head (function or operator) and the rest are arguments. Syma supports two equivalent syntaxes:
+
+### Flat Sequence Semantics
+
+Internally, compounds are represented with a head/args distinction for optimization (fast rule indexing by head symbol), but **semantically they are treated as flat sequences** during pattern matching. This means:
+
+- `{Foo a b c}` is the sequence `[Foo, a, b, c]`
+- The first element `Foo` is stored as the "head" for indexing
+- Pattern matching treats it as a flat list, not head+args separately
+- This allows VarRest patterns to match across the head boundary
 
 ### Brace Syntax (Original)
 
@@ -147,6 +156,41 @@ xs..         ; Also equivalent (shorter form)
 
 **Note:** Both `..` and `...` suffixes work for both named and wildcard rest patterns. The output will always display using `..` (the shorter canonical form).
 
+**VarRest Matching Across Boundaries:**
+
+Because compounds are treated as flat sequences during pattern matching, VarRest can match zero or more elements from anywhere in the sequence, including what appears syntactically as the "head" position:
+
+```lisp
+; Match any sequence starting with zero or more elements, then Deep, then more elements
+{.. Deep rest..}    ; Matches {Deep 1 2}, {Moo Deep 1}, {Moo Boo Deep}, etc.
+                    ; First .. binds to prefix ([], [Moo], [Moo, Boo], etc.)
+                    ; rest.. binds to suffix
+
+; Match calls with Err anywhere in the sequence
+{.. {Err err..} ..} ; Matches {Moo moo Err(4 5 6) moo}
+                    ; First .. matches [Moo, moo]
+                    ; {Err err..} matches Err(4 5 6) with err=[4, 5, 6]
+                    ; Last .. matches [moo]
+
+; Extract a specific error from any compound
+{R "BubbleErr"
+   {prefix.. {Err err..} suffix..}
+   {Err err..}}      ; Extracts just the error, discarding prefix/suffix
+```
+
+When VarRest appears in the first position:
+- It matches zero or more elements from the beginning of the flat sequence
+- `{..}` alone matches any compound (all elements go into the wildcard)
+- `{.. x}` matches compounds ending with x, with .. capturing all but the last element
+- `{h.. rest..}` captures the first element(s) as h and remaining as rest
+
+**Reconstruction After Substitution:**
+
+When substituting in replacements, the flat sequence is reconstructed as a compound:
+- The first element becomes the head
+- Remaining elements become the arguments
+- VarRest splices are flattened into the sequence at their position
+
 **Indexed Rest Wildcards:**
 
 Like single wildcards, rest wildcards (`...` or `..`) are matched by position when they appear in both pattern and replacement:
@@ -195,6 +239,24 @@ Pattern matching with mixed syntax:
 {Pair _ _}                        ; Match any pair (no binding)
 {Triple _ x_ _}                   ; Match triple, extract middle value
 {Process .. result_}              ; Match sequence ending with result
+
+;; VarRest patterns matching across the entire flat sequence:
+{.. Deep ..}                      ; Match any compound containing Deep anywhere
+{prefix.. {Err e..} suffix..}    ; Match compound with Err somewhere in the middle
+{first.. last_}                   ; Match compound, capturing all but last element
+
+;; Practical examples using flat sequence semantics:
+{R "BubbleError"
+   {.. {Err msg..} ..}            ; Match any compound containing an error
+   {Err msg..}}                   ; Return just the error
+
+{R "ExtractMiddle"
+   {.. middle_ ..}                ; Match compound with at least one element
+   middle_}                       ; Return the middle element (first match)
+
+{R "PrependOp"
+   {args..}                       ; Match any compound
+   {NewOp args..}}                ; Prepend NewOp to the flat sequence
 ```
 
 ---

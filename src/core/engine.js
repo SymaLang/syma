@@ -46,9 +46,14 @@ function analyzePattern(pattern) {
             return { type: "atom", key: "emptycall", arity: null };
         }
 
-        // Head could be a symbol or a Var
+        // Head could be a symbol, Var, or VarRest
         if (isVar(pattern.h)) {
             // Call with Var head matches any call
+            return { type: "universal", key: null, arity: null };
+        }
+
+        if (isVarRest(pattern.h)) {
+            // Call with VarRest head matches any call
             return { type: "universal", key: null, arity: null };
         }
 
@@ -75,14 +80,17 @@ function analyzePattern(pattern) {
  * Returns { byHead, byAtom, universal, allRules }
  */
 export function indexRules(rules) {
+    // Sort rules by priority (highest first), preserving declaration order for equal priorities
+    const sortedRules = [...rules].sort((a, b) => b.prio - a.prio);
+
     const index = {
         byHead: {},      // { headSymbol: { arity: [rules] } }
         byAtom: {},      // { "type:value": [rules] }
         universal: [],   // rules that match anything
-        allRules: rules  // keep original array for fallback
+        allRules: sortedRules  // keep sorted array
     };
 
-    for (const rule of rules) {
+    for (const rule of sortedRules) {
         const analysis = analyzePattern(rule.lhs);
 
         if (analysis.type === "universal") {
@@ -107,58 +115,52 @@ export function indexRules(rules) {
 }
 
 /**
- * Get applicable rules for an expression using the index.
- * Returns an array of rules that could potentially match.
+ * Check if a rule could potentially match an expression based on pattern analysis.
+ * This is a fast pre-filter before attempting full pattern matching.
  */
-function getApplicableRules(expr, ruleIndex) {
-    const applicable = [];
+function isRuleApplicable(rule, expr) {
+    const analysis = analyzePattern(rule.lhs);
 
-    // Always include universal rules
-    applicable.push(...ruleIndex.universal);
-
-    if (isSym(expr)) {
-        const key = `sym:${expr.v}`;
-        if (ruleIndex.byAtom[key]) {
-            applicable.push(...ruleIndex.byAtom[key]);
-        }
-    } else if (isNum(expr)) {
-        const key = `num:${expr.v}`;
-        if (ruleIndex.byAtom[key]) {
-            applicable.push(...ruleIndex.byAtom[key]);
-        }
-    } else if (isStr(expr)) {
-        const key = `str:${expr.v}`;
-        if (ruleIndex.byAtom[key]) {
-            applicable.push(...ruleIndex.byAtom[key]);
-        }
-    } else if (isCall(expr)) {
-        // Handle empty calls (null head)
-        if (expr.h === null) {
-            const key = "emptycall";
-            if (ruleIndex.byAtom[key]) {
-                applicable.push(...ruleIndex.byAtom[key]);
-            }
-        }
-        // Handle calls with symbol heads
-        else if (isSym(expr.h)) {
-            const headSymbol = expr.h.v;
-            const arity = expr.a.length;
-
-            if (ruleIndex.byHead[headSymbol]) {
-                // Add rules with exact arity match
-                if (ruleIndex.byHead[headSymbol][arity]) {
-                    applicable.push(...ruleIndex.byHead[headSymbol][arity]);
-                }
-                // Add rules with variable arity (VarRest)
-                if (ruleIndex.byHead[headSymbol]["*"]) {
-                    applicable.push(...ruleIndex.byHead[headSymbol]["*"]);
-                }
-            }
-        }
-        // If expr is a Call with non-symbol/non-null head, we already included universal rules above
+    // Universal patterns match everything
+    if (analysis.type === "universal") {
+        return true;
     }
 
-    return applicable;
+    // Atom patterns
+    if (analysis.type === "atom") {
+        if (isSym(expr) && analysis.key === `sym:${expr.v}`) return true;
+        if (isNum(expr) && analysis.key === `num:${expr.v}`) return true;
+        if (isStr(expr) && analysis.key === `str:${expr.v}`) return true;
+        if (isCall(expr) && expr.h === null && analysis.key === "emptycall") return true;
+        return false;
+    }
+
+    // Call patterns
+    if (analysis.type === "call" && isCall(expr) && isSym(expr.h)) {
+        const headSymbol = expr.h.v;
+        const arity = expr.a.length;
+
+        // Check if head matches
+        if (analysis.key !== headSymbol) return false;
+
+        // Check if arity matches (either exact or variable with *)
+        if (analysis.arity === "*" || analysis.arity === arity) return true;
+
+        return false;
+    }
+
+    return false;
+}
+
+/**
+ * Get applicable rules for an expression, preserving declaration/priority order.
+ * Returns an array of rules that could potentially match, in priority order.
+ */
+function getApplicableRules(expr, ruleIndex) {
+    // Iterate through all rules in priority order and filter to applicable ones
+    // This preserves declaration order while still benefiting from the fast
+    // applicability check
+    return ruleIndex.allRules.filter(rule => isRuleApplicable(rule, expr));
 }
 
 // --- Meta-rule helpers ---
@@ -725,11 +727,11 @@ export function match(pat, subj, env = {}) {
     if (isSym(pat) || isNum(pat) || isStr(pat)) {
         return deq(pat, subj) ? env : null;
     }
-    // Calls
+    // Calls - treat as flat sequences [head, ...args] for matching
     if (isCall(pat)) {
         if (!isCall(subj)) return null;
 
-        // Handle empty calls (null heads)
+        // Handle empty calls (null heads) - they have no head element
         if (pat.h === null && subj.h === null) {
             // Both are empty calls, just match args
             return matchArgsWithRest(pat.a, subj.a, env);
@@ -739,9 +741,13 @@ export function match(pat, subj, env = {}) {
             return null;
         }
 
-        const env1 = match(pat.h, subj.h, env);
-        if (!env1) return null;
-        return matchArgsWithRest(pat.a, subj.a, env1);
+        // Flatten both pattern and subject into sequences [head, ...args]
+        // This treats Calls as flat sequences semantically
+        const patSeq = [pat.h, ...pat.a];
+        const subjSeq = [subj.h, ...subj.a];
+
+        // Match as flat sequences
+        return matchArgsWithRest(patSeq, subjSeq, env);
     }
     throw new Error("match: unknown pattern node");
 }
@@ -766,16 +772,43 @@ export function substWithFrozen(expr, env, preserveUnboundPatterns = false) {
     // For other Call nodes, recursively handle any Frozen children
     if (isCall(expr)) {
         // Handle empty calls (null head)
-        const h = expr.h === null ? null : substWithFrozen(expr.h, env, preserveUnboundPatterns);
+        if (expr.h === null) {
+            const mapped = expr.a.map(arg => substWithFrozen(arg, env, preserveUnboundPatterns));
+            const flat = [];
+            for (const m of mapped) {
+                if (isSplice(m)) flat.push(...m.items);
+                else flat.push(m);
+            }
+            return Call(null, ...flat);
+        }
+
+        // Substitute head - may produce a Splice for VarRest patterns
+        const hSubst = substWithFrozen(expr.h, env, preserveUnboundPatterns);
         const mapped = expr.a.map(arg => substWithFrozen(arg, env, preserveUnboundPatterns));
 
-        // Handle splices from VarRest substitutions
-        const flat = [];
-        for (const m of mapped) {
-            if (isSplice(m)) flat.push(...m.items);
-            else flat.push(m);
+        // Reconstruct Call from flat sequence semantics:
+        // If head is a Splice, treat it as prefix elements in the flat sequence
+        let flatSeq = [];
+        if (isSplice(hSubst)) {
+            // Head was a VarRest - its items become prefix of flat sequence
+            flatSeq.push(...hSubst.items);
+        } else {
+            // Normal head
+            flatSeq.push(hSubst);
         }
-        return Call(h, ...flat);
+
+        // Add args, flattening any splices
+        for (const m of mapped) {
+            if (isSplice(m)) flatSeq.push(...m.items);
+            else flatSeq.push(m);
+        }
+
+        // Reconstruct Call: first element is head, rest are args
+        if (flatSeq.length === 0) {
+            // Empty sequence - return empty call
+            return Call(null);
+        }
+        return Call(flatSeq[0], ...flatSeq.slice(1));
     }
 
     // For atoms (Sym, Num, Str), return as-is
@@ -913,14 +946,43 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
     if (isSym(expr) || isNum(expr) || isStr(expr)) return expr;
     if (isCall(expr)) {
         // Handle empty calls (null head)
-        const h = expr.h === null ? null : subst(expr.h, env, preserveUnboundPatterns);
-        const mapped = expr.a.map(a => subst(a, env, preserveUnboundPatterns));
-        const flat = [];
-        for (const m of mapped) {
-            if (isSplice(m)) flat.push(...m.items);
-            else flat.push(m);
+        if (expr.h === null) {
+            const mapped = expr.a.map(a => subst(a, env, preserveUnboundPatterns));
+            const flat = [];
+            for (const m of mapped) {
+                if (isSplice(m)) flat.push(...m.items);
+                else flat.push(m);
+            }
+            return Call(null, ...flat);
         }
-        return Call(h, ...flat);
+
+        // Substitute head - may produce a Splice for VarRest patterns
+        const hSubst = subst(expr.h, env, preserveUnboundPatterns);
+        const mapped = expr.a.map(a => subst(a, env, preserveUnboundPatterns));
+
+        // Reconstruct Call from flat sequence semantics:
+        // If head is a Splice, treat it as prefix elements in the flat sequence
+        let flatSeq = [];
+        if (isSplice(hSubst)) {
+            // Head was a VarRest - its items become prefix of flat sequence
+            flatSeq.push(...hSubst.items);
+        } else {
+            // Normal head
+            flatSeq.push(hSubst);
+        }
+
+        // Add args, flattening any splices
+        for (const m of mapped) {
+            if (isSplice(m)) flatSeq.push(...m.items);
+            else flatSeq.push(m);
+        }
+
+        // Reconstruct Call: first element is head, rest are args
+        if (flatSeq.length === 0) {
+            // Empty sequence - return empty call
+            return Call(null);
+        }
+        return Call(flatSeq[0], ...flatSeq.slice(1));
     }
     throw new Error("subst: unknown expr node");
 }
