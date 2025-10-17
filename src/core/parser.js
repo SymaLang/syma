@@ -438,7 +438,7 @@ export class SymaParser {
     // =============== REPL-specific parsing ===============
 
     parseInlineRule(name, ruleText) {
-        // Parse inline rule syntax: pattern → replacement [:guard condition] [priority]
+        // Parse inline rule syntax: pattern → replacement [:guard condition] [:scope Parent] [priority]
         const arrow = ruleText.includes('→') ? '→' : '->';
         const parts = ruleText.split(arrow);
         if (parts.length !== 2) {
@@ -446,55 +446,100 @@ export class SymaParser {
         }
 
         const pattern = this.parseString(parts[0].trim());
-        let replacementPart = parts[1].trim();
+        let remaining = parts[1].trim();
 
-        // Check for :guard clause
+        // Extract modifiers: :guard, :scope, and priority
         let guard = null;
+        let scope = null;
         let priority = null;
 
-        // Look for :guard in the replacement part
-        const guardIndex = replacementPart.indexOf(':guard');
-        if (guardIndex !== -1) {
-            // Extract the replacement before the guard
-            const beforeGuard = replacementPart.substring(0, guardIndex).trim();
-            const afterGuard = replacementPart.substring(guardIndex + 6).trim(); // 6 = length of ':guard'
+        // Helper to extract a :keyword value from text
+        const extractKeyword = (text, keyword) => {
+            const index = text.indexOf(keyword);
+            if (index === -1) return { found: false, before: text, after: '' };
 
-            // Check if there's a priority at the very end
-            const tokens = afterGuard.split(/\s+/);
-            const lastToken = tokens[tokens.length - 1];
+            const before = text.substring(0, index).trim();
+            const after = text.substring(index + keyword.length).trim();
+            return { found: true, before, after };
+        };
 
-            if (/^\d+$/.test(lastToken) && tokens.length > 1) {
-                // Last token is a priority
-                priority = parseInt(lastToken);
-                // Everything before the priority is the guard
-                const guardExpr = tokens.slice(0, -1).join(' ');
-                guard = this.parseString(guardExpr);
-            } else {
-                // No priority, everything is the guard
-                guard = this.parseString(afterGuard);
+        // Try to extract :guard
+        const guardExtract = extractKeyword(remaining, ':guard');
+        if (guardExtract.found) {
+            // Parse everything after :guard up to :scope or priority
+            let guardText = guardExtract.after;
+            remaining = guardExtract.before;
+
+            // Check if there's a :scope after the guard
+            const scopeExtract = extractKeyword(guardText, ':scope');
+            if (scopeExtract.found) {
+                guard = this.parseString(scopeExtract.before.trim());
+                guardText = scopeExtract.after;
+
+                // Extract scope value (next token)
+                const scopeTokens = guardText.trim().split(/\s+/);
+                if (scopeTokens.length > 0 && scopeTokens[0] !== '') {
+                    scope = scopeTokens[0];
+                    // Rest might be priority
+                    guardText = scopeTokens.slice(1).join(' ');
+                }
             }
 
-            replacementPart = beforeGuard;
-        } else {
-            // No guard, check for priority at the end
-            const lastSpace = replacementPart.lastIndexOf(' ');
-            if (lastSpace !== -1) {
-                const lastPart = replacementPart.slice(lastSpace + 1);
-                if (/^\d+$/.test(lastPart)) {
-                    priority = parseInt(lastPart);
-                    replacementPart = replacementPart.slice(0, lastSpace);
+            // Check for priority at the end
+            const tokens = guardText.trim().split(/\s+/);
+            if (tokens.length > 0 && /^\d+$/.test(tokens[tokens.length - 1])) {
+                priority = parseInt(tokens[tokens.length - 1]);
+                if (guard === null) {
+                    // Guard is everything except the priority
+                    guard = this.parseString(tokens.slice(0, -1).join(' '));
+                }
+            } else if (guard === null && guardText.trim()) {
+                guard = this.parseString(guardText.trim());
+            }
+        }
+
+        // Try to extract :scope (if not already found)
+        if (scope === null) {
+            const scopeExtract = extractKeyword(remaining, ':scope');
+            if (scopeExtract.found) {
+                remaining = scopeExtract.before;
+                const scopeTokens = scopeExtract.after.trim().split(/\s+/);
+                if (scopeTokens.length > 0 && scopeTokens[0] !== '') {
+                    scope = scopeTokens[0];
+                    // Rest might be priority
+                    const rest = scopeTokens.slice(1).join(' ').trim();
+                    if (rest && /^\d+$/.test(rest)) {
+                        priority = parseInt(rest);
+                    }
                 }
             }
         }
 
-        const replacement = this.parseString(replacementPart);
+        // Check for standalone priority at the end (if not already found)
+        if (priority === null) {
+            const lastSpace = remaining.lastIndexOf(' ');
+            if (lastSpace !== -1) {
+                const lastPart = remaining.slice(lastSpace + 1);
+                if (/^\d+$/.test(lastPart)) {
+                    priority = parseInt(lastPart);
+                    remaining = remaining.slice(0, lastSpace);
+                }
+            }
+        }
 
-        // Build R[name, pattern, replacement, :guard?, guard?, priority?]
+        const replacement = this.parseString(remaining.trim());
+
+        // Build R[name, pattern, replacement, :guard?, guard?, :scope?, scope?, priority?]
         const ruleArgs = [Str(name), pattern, replacement];
 
         if (guard !== null) {
             ruleArgs.push(Sym(':guard'));
             ruleArgs.push(guard);
+        }
+
+        if (scope !== null) {
+            ruleArgs.push(Sym(':scope'));
+            ruleArgs.push(Sym(scope));
         }
 
         if (priority !== null) {

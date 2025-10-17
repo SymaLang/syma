@@ -202,8 +202,9 @@ export function extractRulesFromNode(rulesNode) {
 
         let prio = 0;
         let guard = null;
+        let scope = null;
 
-        // Parse named arguments (:guard, :prio) or legacy positional args
+        // Parse named arguments (:guard, :prio, :scope) or legacy positional args
         let i = 0;
         while (i < rest.length) {
             const arg = rest[i];
@@ -216,6 +217,14 @@ export function extractRulesFromNode(rulesNode) {
                 const prioArg = rest[i + 1];
                 if (isNum(prioArg)) {
                     prio = prioArg.v;
+                }
+                i += 2;
+            } else if (isSym(arg) && arg.v === ":scope" && i + 1 < rest.length) {
+                const scopeArg = rest[i + 1];
+                if (isSym(scopeArg)) {
+                    scope = scopeArg.v;
+                } else if (isStr(scopeArg)) {
+                    scope = scopeArg.v;
                 }
                 i += 2;
             } else {
@@ -234,7 +243,7 @@ export function extractRulesFromNode(rulesNode) {
             }
         }
 
-        rs.push({ name: nm.v, lhs, rhs, guard, prio });
+        rs.push({ name: nm.v, lhs, rhs, guard, prio, scope });
     }
     rs.sort((a, b) => b.prio - a.prio);
     return indexRules(rs);
@@ -530,6 +539,7 @@ function extractRuleFromRNode(rNode) {
 
     let prio = 0;
     let guard = null;
+    let scope = null;
 
     // Parse optional arguments
     let i = 0;
@@ -542,6 +552,14 @@ function extractRuleFromRNode(rNode) {
             const prioArg = rest[i + 1];
             if (isNum(prioArg)) {
                 prio = prioArg.v;
+            }
+            i += 2;
+        } else if (isSym(arg) && arg.v === ":scope" && i + 1 < rest.length) {
+            const scopeArg = rest[i + 1];
+            if (isSym(scopeArg)) {
+                scope = scopeArg.v;
+            } else if (isStr(scopeArg)) {
+                scope = scopeArg.v;
             }
             i += 2;
         } else {
@@ -559,7 +577,7 @@ function extractRuleFromRNode(rNode) {
         }
     }
 
-    return { name: ruleName, lhs, rhs, guard, prio };
+    return { name: ruleName, lhs, rhs, guard, prio, scope };
 }
 
 /**
@@ -1036,12 +1054,27 @@ function indexWildcards(expr) {
  * or {matched: false} if no rule matches.
  * @param {*} expr - Expression to match
  * @param {Object} ruleIndex - Indexed rule structure
+ * @param {Array} parents - Array of ancestor nodes from root to immediate parent
  */
-function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatterns = false) {
+function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatterns = false, parents = []) {
     // Get only the applicable rules for this expression
     const rulesToCheck = getApplicableRules(expr, ruleIndex);
 
     for (const r of rulesToCheck) {
+        // Check scope restriction if present
+        if (r.scope) {
+            // Rule has a scope restriction - check if any parent matches
+            let scopeMatched = false;
+            for (const parent of parents) {
+                if (isCall(parent) && isSym(parent.h) && parent.h.v === r.scope) {
+                    scopeMatched = true;
+                    break;
+                }
+            }
+            if (!scopeMatched) {
+                continue; // Scope requirement not met, skip this rule
+            }
+        }
         // Only index wildcards for normal rules, not for RuleRules
         // In RuleRules context, wildcards are preserved as pattern constructs
         let lhsToMatch = r.lhs;
@@ -1099,11 +1132,11 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
 function applyOnceIterative(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false, options = {}) {
     const {skipFrozen = false, includeDebugInfo = false} = options;
 
-    // Always track path internally (it's cheap and simplifies the algorithm)
-    const work = [{parent: null, node: expr, path: []}];
+    // Track path and parent chain for scope checking
+    const work = [{parent: null, node: expr, path: [], parents: []}];
 
     while (work.length) {
-        const {parent, node, path} = work.shift();
+        const {parent, node, path, parents} = work.shift();
 
         // Skip Frozen nodes if requested
         if (skipFrozen && isCall(node) && isSym(node.h) && node.h.v === "Frozen") {
@@ -1112,7 +1145,7 @@ function applyOnceIterative(expr, rules, foldPrimsFn = null, preserveUnboundPatt
         }
 
         // Try to match and apply a rule at this node
-        const matchResult = tryMatchRule(node, rules, foldPrimsFn, preserveUnboundPatterns);
+        const matchResult = tryMatchRule(node, rules, foldPrimsFn, preserveUnboundPatterns, parents);
         if (matchResult.matched) {
             const out = matchResult.result;
 
@@ -1163,12 +1196,16 @@ function applyOnceIterative(expr, rules, foldPrimsFn = null, preserveUnboundPatt
 
         // Enqueue children for traversal (pre-order: head first, then args)
         if (isCall(node)) {
+            // Build new parent chain by appending current node
+            const newParents = [...parents, node];
+
             // Add head to work queue (unless it's Frozen and we're skipping)
             if (!(skipFrozen && isSym(node.h) && node.h.v === "Frozen")) {
                 work.push({
                     parent: node,
                     node: node.h,
-                    path: path.concat('h')
+                    path: path.concat('h'),
+                    parents: newParents
                 });
             }
 
@@ -1182,7 +1219,8 @@ function applyOnceIterative(expr, rules, foldPrimsFn = null, preserveUnboundPatt
                 work.push({
                     parent: node,
                     node: child,
-                    path: path.concat(i)
+                    path: path.concat(i),
+                    parents: newParents
                 });
             }
         }

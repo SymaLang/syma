@@ -447,6 +447,60 @@ The `Frozen` wrapper prevents normalization of its contents during guard evaluat
 - Guards are fully normalized with all rules (allows user-defined predicates)
 - Use `Frozen` wrapper to prevent normalization of specific values in guards
 
+### Scope Restrictions with `:scope`
+
+Rules can be restricted to only match expressions nested within specific parent compounds using the `:scope` modifier:
+
+```lisp
+{R "Name" pattern replacement :scope ParentSymbol}
+```
+
+**How it works:**
+- Without `:scope`, a rule can match at any level in the expression tree
+- With `:scope Foo`, the rule only matches if the expression is nested inside a compound with head `Foo`
+- The scope check looks at all ancestors, not just the immediate parent
+
+**Examples:**
+
+```lisp
+; Without scope - matches everywhere
+:rule General {..} -> oops
+
+; Expression: {Foo {Some moo}}
+; Result: oops (matches the top-level Foo)
+
+; With scope - only matches inside Foo
+:rule Specific {Some ..} -> {Match}
+:rule General {..} -> oops :scope Foo
+
+; Expression: {Foo {Some moo}}
+; Step 1: {Some moo} matches Specific -> {Match}
+; Step 2: {Match} is inside Foo, so General can match -> oops
+; Result: {Foo oops}
+```
+
+**Common use cases:**
+- Preventing overly general rules from matching at the wrong level
+- Creating context-sensitive transformations
+- Bubbling errors or special values up from nested expressions
+
+```lisp
+; Bubble errors to top level, but only within Error-handling contexts
+:rule BubbleError {.. {Err msg..} ..} -> {Err msg..} :scope ErrorContext
+
+; Type-specific operations only within type constructors
+:rule Normalize {..} -> normalized :scope TypeDef
+```
+
+**Combining with other modifiers:**
+
+```lisp
+; All modifiers together
+{R "Name" pattern replacement :guard condition :scope Parent :prio 100}
+```
+
+The order of `:guard`, `:scope`, and `:prio` doesn't matter - they can appear in any order after the replacement expression.
+
 ### Pattern Matching
 
 Patterns can include:
