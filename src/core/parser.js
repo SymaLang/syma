@@ -236,14 +236,15 @@ export class SymaParser {
             else if (tok.t === 'sym') {
                 const sym = eat();
 
-                // Handle VarRest shorthand FIRST: name... or name___
+                // Handle VarRest shorthand FIRST: name... or name.. or name___
                 // Must check this before Var to avoid catching ___ as Var
-                if (sym.v.endsWith('...') || sym.v.endsWith('___')) {
-                    const suffix = sym.v.endsWith('...') ? '...' : '___';
+                if (sym.v.endsWith('...') || sym.v.endsWith('..') || sym.v.endsWith('___')) {
+                    const suffix = sym.v.endsWith('...') ? '...' :
+                                   sym.v.endsWith('___') ? '___' : '..';
                     const name = sym.v.slice(0, -suffix.length);
 
                     if (name === '') {
-                        // Just ... or ___ is wildcard rest
+                        // Just ... or .. or ___ is wildcard rest
                         expr = Call(Sym('VarRest'), Str('_'));
                     } else if (name.endsWith('_')) {
                         // Remove trailing underscore from name (e.g., xs_... → VarRest "xs")
@@ -530,15 +531,15 @@ export class SymaParser {
                 return `{${args.join(' ')}}`;
             }
 
-            // Handle VarRest shorthand FIRST: {VarRest "name"} → name...
+            // Handle VarRest shorthand FIRST: {VarRest "name"} → name..
             // Must check this before Var to generate correct output
             if (isSym(node.h) && node.h.v === 'VarRest' &&
                 node.a.length === 1 && isStr(node.a[0])) {
                 const name = node.a[0].v;
                 if (name === '_') {
-                    return '...';  // Wildcard rest
+                    return '..';  // Wildcard rest
                 } else {
-                    return `${name}...`;
+                    return `${name}..`;
                 }
             }
 
@@ -623,15 +624,15 @@ export class SymaParser {
                 return `{${args.join(' ')}}`;
             }
 
-            // Handle VarRest shorthand FIRST: {VarRest "name"} → name...
+            // Handle VarRest shorthand FIRST: {VarRest "name"} → name..
             // Must check this before Var to generate correct output
             if (isSym(node.h) && node.h.v === 'VarRest' &&
                 node.a.length === 1 && isStr(node.a[0])) {
                 const name = node.a[0].v;
                 if (name === '_') {
-                    return '...';  // Wildcard rest
+                    return '..';  // Wildcard rest
                 } else {
-                    return `${name}...`;
+                    return `${name}..`;
                 }
             }
 

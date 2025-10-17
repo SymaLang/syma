@@ -96,16 +96,21 @@ export default function symaPlugin(options = {}) {
 
     // Scan all modules
     async function scanModules() {
-        const pattern = path.join(rootDir, modulesDir, '**/*.syma');
-        const files = await glob(pattern);
+        const patterns = [
+            path.join(rootDir, modulesDir, '**/*.syma'),
+            path.join(rootDir, 'src/stdlib', '**/*.syma')  // Also scan stdlib
+        ];
 
         moduleMap.clear();
-        for (const file of files) {
-            try {
-                const info = await parseModuleInfo(file);
-                moduleMap.set(info.moduleName, info);
-            } catch (error) {
-                console.warn(`[syma] Skipping ${file}: ${error.message}`);
+        for (const pattern of patterns) {
+            const files = await glob(pattern);
+            for (const file of files) {
+                try {
+                    const info = await parseModuleInfo(file);
+                    moduleMap.set(info.moduleName, info);
+                } catch (error) {
+                    console.warn(`[syma] Skipping ${file}: ${error.message}`);
+                }
             }
         }
 

@@ -4,17 +4,17 @@
   
   {Rules
     {R InitRAM
-      {Plumb {State b... {InitRam} a...}}
-      {PlumbEnd {State b... {InitRam 0} a...}}
+      {State .. {InitRam}   ..}
+      {State .. {InitRam 0} ..}
     }
     {R InitRam/Repeat
-      {Plumb {State b... {InitRam n_ ram...} a...}}
-      {PlumbEnd {State b... {InitRam Add(n_, 1) ram... {0 n_ 0}} a...}}
+      {State b.. {InitRam     n_     ..}          ..}
+      {State b.. {InitRam Add(n_, 1) .. {0 n_ 0}} ..}
       :guard Lt(n_, 1023)  // Limit RAM size to 1024 cells
     }
     {R InitRam/Done
-      {Plumb {State b... {InitRam n_ ram...} a...}}
-      {PlumbEnd {State b... {RAM ram...} a...}}
+      {State .. {InitRam n_ ..} ..}
+      {State .. {RAM        ..} ..}
       :guard Not(Lt(n_, 1023))
     }
   }

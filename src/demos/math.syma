@@ -6,19 +6,24 @@
     {App
 
       State(Expr(
-        Add(Mul(2, c), Mul(3, c)))
+        Add(Mul(2, c), Mul(3, c), Mul(4, c)))
       )
 
       {UI
-        {Div :class "card"
-          {H1 "Expression"}
-          {P "Value: " {Show Expr}}}}}
+        {Div :class "text-white"
+          {H1 "Expression: " {Show Orig}}
+          {P "Simplified: " {Show Expr}}}}}
   }
 
   {Rules
     R("LiftApplyThroughProgramAndApp",
       Apply(act_, Program(App(st_, ui_), eff_)),
       Program(App(Apply(act_, st_), ui_), eff_)
+    )
+
+    R("ShowOrig",
+      /@(Show(Orig), App(State(Expr(e_)), _)),
+      e_
     )
 
     R("ShowExpr",

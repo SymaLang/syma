@@ -68,30 +68,30 @@
   {Rules
 
     {R Start
-      {Plumb {State Starting s... {RAM r...} other...}}
-      {PlumbEnd {State Running s... {RAM r...} other...}}
+      {State Starting .. {RAM ..} ..}
+      {State Running .. {RAM ..} ..}
     }
 
     {R Running->Fetch
-      {Plumb {State Running s...}}
-      {PlumbEnd {State Fetch s...}}
+      {State Running ..}
+      {State Fetch ..}
     }
 
     {R Fetch->Decode
-      {Plumb {State Fetch {Registers p... {reg_ PC pc_} n...} {Ops po... {pc_ op...} no...} other...}}
-      {PlumbEnd {State Decode {Op {pc_ op...}} {Registers p... {reg_ PC {Add pc_ 1}} n...} {Ops po... {pc_ op...} no...} other...}}
+      {State Fetch {Registers p.. {reg_ PC pc_} n..} {Ops .. {pc_ op..} ..} ..}
+      {State Decode {Op {pc_ op..}} {Registers p.. {reg_ PC {Add pc_ 1}} n..} {Ops .. {pc_ op..} ..} ..}
     }
 
     {R Decode->Decoding
-      {Plumb {State Decode {Op op...} r...}}
-      {PlumbEnd {State Decoding {Op op...} r...}}
+      {State Decode {Op ..} ..}
+      {State Decoding {Op ..} ..}
     }
 
     // ======= Instruction Decoding =======
 
     {R Decoding/HALT
-      {Plumb {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} r...}}
-      {PlumbEnd {State Halt r...}}
+      {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} ..}
+      {State Halt ..}
       :guard Eq(opcode_, 0) // HALT
     }
 
@@ -111,8 +111,8 @@
     {OpOneReg Xori Xor 13}
 
     {R Decoding/LI
-      {Plumb {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} r...}}
-      {PlumbEnd {State Execute {ALU} {Current} {Microcode {PutImm op1_ to reg op0_}}  r...}}
+      {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} ..}
+      {State Execute {ALU} {Current} {Microcode {PutImm op1_ to reg op0_}} ..}
       :guard Eq(opcode_, 14) // LI
     }
 
@@ -132,48 +132,48 @@
     // ======= Microcode Execution =======
 
     {R Execute->Executing
-      {Plumb {State Execute {ALU ops...} {Current} {Microcode step_ mc...} r...}}
-      {PlumbEnd {State ExecutingMicrocode {ALU ops...} {Current} {Microcode step_ mc...} r...}}
+      {State Execute            {ALU ..} {Current} {Microcode step_ ..} ..}
+      {State ExecutingMicrocode {ALU ..} {Current} {Microcode step_ ..} ..}
     }
 
     {R Executing->Microcode/Pick
-      {Plumb {State ExecutingMicrocode {ALU ops...} {Current} {Microcode step_ mc...} r...}}
-      {PlumbEnd {State ExecutingMicrocode {ALU ops...} {Current step_} {Microcode mc...} r...}}
+      {State ExecutingMicrocode {ALU ..} {Current}       {Microcode step_ ..} ..}
+      {State ExecutingMicrocode {ALU ..} {Current step_} {Microcode       ..} ..}
     }
 
     // ======= Memory Operations =======
     {R Execute->Microcode/Load
-      {Plumb {State ExecutingMicrocode {ALU bank_ addr_} {Current {Load into target_}} mc... {Registers p... {target_ rname_ _} n...} r... {RAM before... {bank_ addr_ v_} after...} rr... }}
-      {PlumbEnd {State ExecutingMicrocode {ALU} {Current} mc... {Registers p... {target_ rname_ v_} n...} r... {RAM before... {bank_ addr_ v_} after...} rr... }}
+      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Load into target_}} .. {Registers .. {target_ rname_ _}  ..} .. {RAM .. {bank_ addr_ v_} ..} .. }
+      {State ExecutingMicrocode {ALU}             {Current}                     .. {Registers .. {target_ rname_ v_} ..} .. {RAM .. {bank_ addr_ v_} ..} .. }
     }
 
     {R Execute->Microcode/Store
-      {Plumb {State ExecutingMicrocode {ALU bank_ addr_} {Current {Store into v_}} mc... {RAM before... {bank_ addr_ _} after...} r...}}
-      {PlumbEnd {State ExecutingMicrocode {ALU} {Current} mc... {RAM before... {bank_ addr_ v_} after...} r...}}
+      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Store into v_}} .. {RAM .. {bank_ addr_ _}  ..} ..}
+      {State ExecutingMicrocode {ALU}             {Current}                 .. {RAM .. {bank_ addr_ v_} ..} ..}
     }
 
     // ======= Helpers =======
 
     {R Execute->Microcode/LoadImm
-      {Plumb {State ExecutingMicrocode {ALU ops...} {Current {LoadImm imm_}} mc... r...}}
-      {PlumbEnd {State ExecutingMicrocode {ALU ops... imm_} {Current} mc... r...}}
+      {State ExecutingMicrocode {ALU ..}      {Current {LoadImm imm_}} ..}
+      {State ExecutingMicrocode {ALU .. imm_} {Current}                ..}
     }
 
     {R Execute->Microcode/PutImm
-      {Plumb {State ExecutingMicrocode {ALU} {Current {PutImm imm_ to reg reg_}} mc... {Registers p... {reg_ rname_ _} n...} r...}}
-      {PlumbEnd {State ExecutingMicrocode {ALU} {Current} mc... {Registers p... {reg_ rname_ imm_} n...} r...}}
+      {State ExecutingMicrocode {ALU} {Current {PutImm imm_ to reg reg_}} .. {Registers .. {reg_ rname_ _}    ..} ..}
+      {State ExecutingMicrocode {ALU} {Current}                           .. {Registers .. {reg_ rname_ imm_} ..} ..}
     }
 
     {R Execute->Microcode/LoadReg
-      {Plumb {State ExecutingMicrocode {ALU ops...} {Current {LoadReg reg_}} mc... {Registers p... {reg_ rname_ v_} n...} r...}}
-      {PlumbEnd {State ExecutingMicrocode {ALU ops... v_} {Current} mc... {Registers p... {reg_ rname_ v_} n...} r...}}
+      {State ExecutingMicrocode {ALU ..}    {Current {LoadReg reg_}} .. {Registers .. {reg_ _ v_} ..} ..}
+      {State ExecutingMicrocode {ALU .. v_} {Current}                .. {Registers .. {reg_ _ v_} ..} ..}
     }
 
     // ======= Microcode Completion =======
 
     {R Execute->Microcode/End
-      {Plumb {State ExecutingMicrocode {ALU} {Current} {Microcode} r...}}
-      {PlumbEnd {State Fetch r...}}
+      {State ExecutingMicrocode {ALU} {Current} {Microcode} ..}
+      {State Fetch                                          ..}
     }
   }
 
@@ -182,13 +182,13 @@
       {OpTwoReg OPNAME_ OPCODE_ a_ b_ -> EXPR_}
       {Splat
         {R Concat("Decoding/", ToString(OPNAME_))
-          {Plumb    {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} r...}}
-          {PlumbEnd {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadReg op2_} {OPNAME_ into op0_}}  r...}}
+          {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} ..}
+          {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadReg op2_} {OPNAME_ into op0_}} ..}
           :guard Eq(opcode_, OPCODE_)
         }
         {R Concat("Executing/Microcode->", ToString(OPNAME_))
-          {Plumb    {State ExecutingMicrocode {ALU a_ b_} {Current {OPNAME_ into op0_}} mc... {Registers p... {op0_ rname_ _}     n...} r...}}
-          {PlumbEnd {State ExecutingMicrocode {ALU}       {Current}                     mc... {Registers p... {op0_ rname_ EXPR_} n...} r...}}
+          {State ExecutingMicrocode {ALU a_ b_} {Current {OPNAME_ into op0_}} .. {Registers .. {op0_ rname_ _}     ..} ..}
+          {State ExecutingMicrocode {ALU}       {Current}                     .. {Registers .. {op0_ rname_ EXPR_} ..} ..}
         }
       }
     }
@@ -196,8 +196,8 @@
       {OpTwoRegMem OPNAME_ OPCODE_}
       {Splat
         {R Concat("Decoding/", ToString(OPNAME_))
-          {Plumb    {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} r...}}
-          {PlumbEnd {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadReg op2_} {OPNAME_ into op0_}}  r...}}
+          {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} ..}
+          {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadReg op2_} {OPNAME_ into op0_}} ..}
           :guard Eq(opcode_, OPCODE_)
         }
       }
@@ -205,8 +205,8 @@
     {R Transform/OpOneReg
       {OpOneReg OPNAME_ OP_ OPCODE_}
       {R Concat("Decoding/", ToString(OPNAME_))
-        {Plumb    {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} r...}}
-        {PlumbEnd {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadImm op2_} {OP_ into op0_}}  r...}}
+        {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} ..}
+        {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadImm op2_} {OP_ into op0_}} ..}
         :guard Eq(opcode_, OPCODE_)
       }
     }

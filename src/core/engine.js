@@ -876,7 +876,7 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
                 // In RuleRules context, preserve wildcards
                 return expr;
             }
-            throw new Error("subst: wildcard _ cannot be used in replacement");
+            throw new Error("subst: wildcard _ must have matching count in pattern and replacement (use same number of _ in both)");
         }
         if (!(name in env)) {
             if (preserveUnboundPatterns) {
@@ -895,7 +895,7 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
                 // In RuleRules context, preserve wildcard rest patterns
                 return expr;
             }
-            throw new Error("subst: wildcard ... cannot be used in replacement");
+            throw new Error("subst: wildcard ... must have matching count in pattern and replacement (use same number of ... in both)");
         }
         if (!(name in env)) {
             if (preserveUnboundPatterns) {
@@ -928,6 +928,47 @@ export function subst(expr, env, preserveUnboundPatterns = false) {
 /* --------------------- Rewriting ----------------------------- */
 
 /**
+ * Index wildcards in an expression by replacing _ with __wc0, __wc1, etc.
+ * and ... with __wcr0, __wcr1, etc.
+ * Returns {expr, varCount, varRestCount}
+ */
+function indexWildcards(expr) {
+    const varCounter = {value: 0};
+    const varRestCounter = {value: 0};
+
+    function traverse(node) {
+        // Skip /! blocks - they contain literal patterns, not wildcards to index
+        if (isCall(node) && isSym(node.h) && node.h.v === "/!" && node.a.length === 1) {
+            return node; // Return as-is, don't traverse into /! blocks
+        }
+
+        if (isVar(node) && node.a.length === 1 && isStr(node.a[0]) && node.a[0].v === "_") {
+            const indexed = Call(Sym("Var"), Str(`__wc${varCounter.value}`));
+            varCounter.value++;
+            return indexed;
+        }
+        if (isVarRest(node) && node.a.length === 1 && isStr(node.a[0]) && node.a[0].v === "_") {
+            const indexed = Call(Sym("VarRest"), Str(`__wcr${varRestCounter.value}`));
+            varRestCounter.value++;
+            return indexed;
+        }
+        if (isCall(node)) {
+            const h = node.h === null ? null : traverse(node.h);
+            const a = node.a.map(arg => traverse(arg));
+            return Call(h, ...a);
+        }
+        return node;
+    }
+
+    const result = traverse(expr);
+    return {
+        expr: result,
+        varCount: varCounter.value,
+        varRestCount: varRestCounter.value
+    };
+}
+
+/**
  * Try to match and apply a rule to an expression using indexed rules.
  * Returns {matched: true, result: expr, rule: ruleObject} if successful,
  * or {matched: false} if no rule matches.
@@ -939,12 +980,39 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
     const rulesToCheck = getApplicableRules(expr, ruleIndex);
 
     for (const r of rulesToCheck) {
-        const env = match(r.lhs, expr, {});
+        // Only index wildcards for normal rules, not for RuleRules
+        // In RuleRules context, wildcards are preserved as pattern constructs
+        let lhsToMatch = r.lhs;
+        let rhsToSubst = r.rhs;
+        let guardToEval = r.guard;
+
+        if (!preserveUnboundPatterns) {
+            // Index wildcards in both lhs and rhs for normal rules
+            const lhsIndexed = indexWildcards(r.lhs);
+            const rhsIndexed = indexWildcards(r.rhs);
+
+            // Validate that wildcard counts match (or replacement has 0, meaning "omit")
+            if (rhsIndexed.varCount !== 0 && lhsIndexed.varCount !== rhsIndexed.varCount) {
+                throw new Error(`Rule "${r.name}": pattern has ${lhsIndexed.varCount} _ wildcard(s) but replacement has ${rhsIndexed.varCount}`);
+            }
+            if (rhsIndexed.varRestCount !== 0 && lhsIndexed.varRestCount !== rhsIndexed.varRestCount) {
+                throw new Error(`Rule "${r.name}": pattern has ${lhsIndexed.varRestCount} ... wildcard(s) but replacement has ${rhsIndexed.varRestCount}`);
+            }
+
+            lhsToMatch = lhsIndexed.expr;
+            rhsToSubst = rhsIndexed.expr;
+            if (r.guard) {
+                const guardIndexed = indexWildcards(r.guard);
+                guardToEval = guardIndexed.expr;
+            }
+        }
+
+        const env = match(lhsToMatch, expr, {});
         if (env) {
             // Check guard if present
-            if (r.guard) {
+            if (guardToEval) {
                 // Substitute the guard with matched bindings, preserving Frozen wrappers
-                const guardValue = substWithFrozen(r.guard, env, preserveUnboundPatterns);
+                const guardValue = substWithFrozen(guardToEval, env, preserveUnboundPatterns);
                 // Fully normalize the guard expression (not just fold primitives)
                 // Guards need access to all rules, not just applicable ones
                 const evaluatedGuard = normalizeWithFrozen(guardValue, ruleIndex, 100, false, foldPrimsFn, preserveUnboundPatterns);
@@ -953,7 +1021,7 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
                     continue; // Guard failed, try next rule
                 }
             }
-            const out = subst(r.rhs, env, preserveUnboundPatterns);
+            const out = subst(rhsToSubst, env, preserveUnboundPatterns);
             return {matched: true, result: out, rule: r};
         }
     }

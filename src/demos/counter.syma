@@ -6,7 +6,7 @@
       State({Count 0}),
       {UI
         {Div
-          :class "card"
+          :class "text-white"
           {H1 "Counter"}
           {P "Value: " {Show Count}}
           {Button

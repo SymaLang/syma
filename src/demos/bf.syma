@@ -17,7 +17,7 @@
          }
          {UI
             {Div :class "max-w-2xl mx-auto p-6"
-               {H1 "Brainfuck Interpreter" :class "text-3xl font-bold mb-4"}
+               {H1 "Brainfuck Interpreter" :class "text-white text-3xl font-bold mb-4"}
                {Div :class "mb-4"
                   {Button :onClick Step :class "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2" "Step"}
                   {Button :onClick RunToEnd :class "bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" "Run"}

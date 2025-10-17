@@ -110,6 +110,22 @@ _            ; Equivalent to {Var _}
 
 This is useful when you need to match a structure but don't care about certain values.
 
+**Indexed Wildcards in Rules:**
+
+When wildcards appear in both the pattern and replacement of a rule, they are matched by position:
+
+```lisp
+; First _ in pattern matches first _ in replacement, etc.
+{R "Swap" {Pair _ _} {Pair _ _}}     ; Swaps the two values
+{R "First" {Tuple _ _ _} _}          ; Returns first element, discards rest
+{R "Omit" {Process _ _} {Result}}    ; Match two values but use neither
+```
+
+**Validation Rules:**
+- Pattern and replacement must have the **same count** of `_` wildcards, OR
+- Replacement can have **zero** wildcards (meaning "omit from replacement")
+- Mismatched counts (e.g., 3 in pattern, 1 in replacement) will raise an error
+
 ### Rest Variables (Variadics)
 
 Rest variables match zero or more elements in a sequence:
@@ -123,8 +139,36 @@ Rest variables match zero or more elements in a sequence:
 
 **Shorthand syntax:**
 ```lisp
-xs...        ; Equivalent to {Var xs...} or {VarRest xs}
-...          ; Equivalent to {Var ...} - wildcard rest
+xs...        ; Equivalent to {VarRest xs}
+xs..         ; Also equivalent (shorter form)
+...          ; Wildcard rest - equivalent to {VarRest "_"}
+..           ; Also equivalent (shorter form)
+```
+
+**Note:** Both `..` and `...` suffixes work for both named and wildcard rest patterns. The output will always display using `..` (the shorter canonical form).
+
+**Indexed Rest Wildcards:**
+
+Like single wildcards, rest wildcards (`...` or `..`) are matched by position when they appear in both pattern and replacement:
+
+```lisp
+; First .. in pattern matches first .. in replacement
+{R "PassThrough" {List .. x_ ..} {List .. x_ ..}}  ; Preserve both sequences
+{R "Middle" {Tuple .. x_ ..} x_}                    ; Extract middle, omit sequences
+{R "Flatten" {Nested ..} {Flat ..}}                 ; Matches indexed rest patterns
+```
+
+The same validation rules apply: counts must match or replacement must have zero.
+
+**Exception for RuleRules:**
+
+In meta-rules (RuleRules), wildcards are treated as pattern constructs and are **not** indexed or validated. This allows RuleRules to freely manipulate pattern variables:
+
+```lisp
+{RuleRules
+  {R "Transform"
+    {SomePattern _ _}           ; These wildcards are preserved as-is
+    {AnotherPattern _}}}        ; No count validation in RuleRules context
 ```
 
 ### Examples
@@ -139,13 +183,18 @@ Pattern matching with mixed syntax:
 
 {R "Rule1"
    {Apply {Toggle id_}
-      {TodoState {NextId n_} {Items before... {Item {Id id_}} after...}}}
+      {TodoState {NextId n_} {Items before.. {Item {Id id_}} after..}}}
    ...}
 
 ;; Mix and match as needed for clarity:
-{Items first_ rest...}           ; First item and rest of list
+{Items first_ rest..}            ; First item and rest of list
 {Filter _}                        ; Don't care about filter value
-{State _ {Items ...} active_}    ; Wildcard, any items, capture active
+{State _ {Items ..} active_}     ; Wildcard, any items, capture active
+
+;; Using indexed wildcards:
+{Pair _ _}                        ; Match any pair (no binding)
+{Triple _ x_ _}                   ; Match triple, extract middle value
+{Process .. result_}              ; Match sequence ending with result
 ```
 
 ---
