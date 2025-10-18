@@ -501,6 +501,70 @@ Rules can be restricted to only match expressions nested within specific parent 
 
 The order of `:guard`, `:scope`, and `:prio` doesn't matter - they can appear in any order after the replacement expression.
 
+### Context Binding with `:with`
+
+The `:with` modifier allows rules to bind additional variables from a related context:
+
+```lisp
+{R "Name" pattern replacement :with withPattern}
+{R "Name" pattern replacement :scope Parent :with withPattern}
+```
+
+**How it works:**
+- **With `:scope`**: The `:with` pattern matches against the scoped compound
+- **Without `:scope`**: The `:with` pattern matches against the same expression as the main pattern
+- Bindings from both patterns are merged and available in the replacement
+
+**Examples:**
+
+```lisp
+; Bind context from scoped parent
+:rule General {Some ..} -> {Matched bind_} :scope Foo :with {Foo bind_ ..}
+
+; Expression: {Foo "Something" {Some moo}}
+; Step 1: {Some moo} matches main pattern (inside Foo)
+; Step 2: :with {Foo bind_ ..} matches Foo compound, binds bind_ = "Something"
+; Result: {Foo "Something" {Matched "Something"}}
+```
+
+```lisp
+; Bind from same expression when no :scope
+:rule Extract {Process ..} -> {Result first_ second_} :with {Process first_ second_ ..}
+
+; Expression: {Process "A" "B" "C"}
+; Main pattern matches Process with any args
+; :with pattern binds first_ = "A", second_ = "B"
+; Result: {Result "A" "B"}
+```
+
+**User's original example:**
+
+```lisp
+{Foo "Something" {Some moo}}
+
+:rule Specific {Some ..} -> {Match}
+:rule General {..} -> {Splat oops bind_} :scope Foo :with {Foo bind_ ..}
+
+; When {Some moo} matches:
+; - Main pattern {..} matches {Some moo}
+; - :scope Foo ensures we're inside Foo
+; - :with {Foo bind_ ..} binds bind_ = "Something" from the Foo compound
+; - Result includes both oops and the bound value
+```
+
+**Common use cases:**
+- Accessing parent context while transforming nested elements
+- Extracting multiple values from the same expression
+- Context-aware transformations that need information from the scoping compound
+
+**All modifiers together:**
+
+```lisp
+{R "Name" pattern replacement :guard condition :scope Parent :with contextPattern :prio 100}
+```
+
+The order of `:guard`, `:scope`, `:with`, and `:prio` doesn't matter - they can appear in any order after the replacement expression.
+
 ### Pattern Matching
 
 Patterns can include:

@@ -448,88 +448,85 @@ export class SymaParser {
         const pattern = this.parseString(parts[0].trim());
         let remaining = parts[1].trim();
 
-        // Extract modifiers: :guard, :scope, and priority
+        // Extract modifiers: :guard, :scope, :with, and priority
         let guard = null;
         let scope = null;
+        let withPattern = null;
         let priority = null;
 
-        // Helper to extract a :keyword value from text
-        const extractKeyword = (text, keyword) => {
-            const index = text.indexOf(keyword);
-            if (index === -1) return { found: false, before: text, after: '' };
-
-            const before = text.substring(0, index).trim();
-            const after = text.substring(index + keyword.length).trim();
-            return { found: true, before, after };
+        // Find positions of all keywords
+        const keywords = {
+            ':guard': remaining.indexOf(':guard'),
+            ':scope': remaining.indexOf(':scope'),
+            ':with': remaining.indexOf(':with')
         };
 
-        // Try to extract :guard
-        const guardExtract = extractKeyword(remaining, ':guard');
-        if (guardExtract.found) {
-            // Parse everything after :guard up to :scope or priority
-            let guardText = guardExtract.after;
-            remaining = guardExtract.before;
+        // Sort keywords by position (those that exist)
+        const keywordOrder = Object.entries(keywords)
+            .filter(([_, pos]) => pos !== -1)
+            .sort((a, b) => a[1] - b[1])
+            .map(([kw]) => kw);
 
-            // Check if there's a :scope after the guard
-            const scopeExtract = extractKeyword(guardText, ':scope');
-            if (scopeExtract.found) {
-                guard = this.parseString(scopeExtract.before.trim());
-                guardText = scopeExtract.after;
+        // Extract replacement (everything before first keyword or everything if no keywords)
+        const firstKeywordPos = keywordOrder.length > 0 ? keywords[keywordOrder[0]] : -1;
+        const replacementText = firstKeywordPos !== -1
+            ? remaining.substring(0, firstKeywordPos).trim()
+            : remaining;
 
-                // Extract scope value (next token)
-                const scopeTokens = guardText.trim().split(/\s+/);
-                if (scopeTokens.length > 0 && scopeTokens[0] !== '') {
-                    scope = scopeTokens[0];
-                    // Rest might be priority
-                    guardText = scopeTokens.slice(1).join(' ');
+        // Extract values for each keyword
+        for (let i = 0; i < keywordOrder.length; i++) {
+            const kw = keywordOrder[i];
+            const kwPos = keywords[kw];
+            const nextKwPos = i + 1 < keywordOrder.length ? keywords[keywordOrder[i + 1]] : -1;
+
+            // Extract text after this keyword up to next keyword (or end)
+            const valueStart = kwPos + kw.length;
+            const valueEnd = nextKwPos !== -1 ? nextKwPos : remaining.length;
+            let value = remaining.substring(valueStart, valueEnd).trim();
+
+            if (kw === ':guard') {
+                // Guard value is an expression (up to next keyword or priority)
+                // Check if last token is priority
+                const tokens = value.split(/\s+/);
+                if (tokens.length > 1 && /^\d+$/.test(tokens[tokens.length - 1]) && nextKwPos === -1) {
+                    priority = parseInt(tokens[tokens.length - 1]);
+                    value = tokens.slice(0, -1).join(' ');
                 }
+                guard = this.parseString(value);
+            } else if (kw === ':scope') {
+                // Scope value is a single symbol/token
+                const tokens = value.split(/\s+/);
+                scope = tokens[0];
+                // Rest might be priority if this is the last keyword
+                if (tokens.length > 1 && /^\d+$/.test(tokens[tokens.length - 1]) && nextKwPos === -1) {
+                    priority = parseInt(tokens[tokens.length - 1]);
+                }
+            } else if (kw === ':with') {
+                // With value is a pattern (up to priority at end if any)
+                const tokens = value.split(/\s+/);
+                if (tokens.length > 1 && /^\d+$/.test(tokens[tokens.length - 1]) && nextKwPos === -1) {
+                    priority = parseInt(tokens[tokens.length - 1]);
+                    value = tokens.slice(0, -1).join(' ');
+                }
+                withPattern = this.parseString(value);
             }
+        }
 
-            // Check for priority at the end
-            const tokens = guardText.trim().split(/\s+/);
-            if (tokens.length > 0 && /^\d+$/.test(tokens[tokens.length - 1])) {
+        // Parse replacement (check for priority at end if no keywords found)
+        let replacement;
+        if (keywordOrder.length === 0 && priority === null) {
+            const tokens = replacementText.split(/\s+/);
+            if (tokens.length > 1 && /^\d+$/.test(tokens[tokens.length - 1])) {
                 priority = parseInt(tokens[tokens.length - 1]);
-                if (guard === null) {
-                    // Guard is everything except the priority
-                    guard = this.parseString(tokens.slice(0, -1).join(' '));
-                }
-            } else if (guard === null && guardText.trim()) {
-                guard = this.parseString(guardText.trim());
+                replacement = this.parseString(tokens.slice(0, -1).join(' '));
+            } else {
+                replacement = this.parseString(replacementText);
             }
+        } else {
+            replacement = this.parseString(replacementText);
         }
 
-        // Try to extract :scope (if not already found)
-        if (scope === null) {
-            const scopeExtract = extractKeyword(remaining, ':scope');
-            if (scopeExtract.found) {
-                remaining = scopeExtract.before;
-                const scopeTokens = scopeExtract.after.trim().split(/\s+/);
-                if (scopeTokens.length > 0 && scopeTokens[0] !== '') {
-                    scope = scopeTokens[0];
-                    // Rest might be priority
-                    const rest = scopeTokens.slice(1).join(' ').trim();
-                    if (rest && /^\d+$/.test(rest)) {
-                        priority = parseInt(rest);
-                    }
-                }
-            }
-        }
-
-        // Check for standalone priority at the end (if not already found)
-        if (priority === null) {
-            const lastSpace = remaining.lastIndexOf(' ');
-            if (lastSpace !== -1) {
-                const lastPart = remaining.slice(lastSpace + 1);
-                if (/^\d+$/.test(lastPart)) {
-                    priority = parseInt(lastPart);
-                    remaining = remaining.slice(0, lastSpace);
-                }
-            }
-        }
-
-        const replacement = this.parseString(remaining.trim());
-
-        // Build R[name, pattern, replacement, :guard?, guard?, :scope?, scope?, priority?]
+        // Build R[name, pattern, replacement, :guard?, guard?, :scope?, scope?, :with?, withPattern?, priority?]
         const ruleArgs = [Str(name), pattern, replacement];
 
         if (guard !== null) {
@@ -540,6 +537,11 @@ export class SymaParser {
         if (scope !== null) {
             ruleArgs.push(Sym(':scope'));
             ruleArgs.push(Sym(scope));
+        }
+
+        if (withPattern !== null) {
+            ruleArgs.push(Sym(':with'));
+            ruleArgs.push(withPattern);
         }
 
         if (priority !== null) {

@@ -203,8 +203,9 @@ export function extractRulesFromNode(rulesNode) {
         let prio = 0;
         let guard = null;
         let scope = null;
+        let withPattern = null;
 
-        // Parse named arguments (:guard, :prio, :scope) or legacy positional args
+        // Parse named arguments (:guard, :prio, :scope, :with) or legacy positional args
         let i = 0;
         while (i < rest.length) {
             const arg = rest[i];
@@ -227,6 +228,9 @@ export function extractRulesFromNode(rulesNode) {
                     scope = scopeArg.v;
                 }
                 i += 2;
+            } else if (isSym(arg) && arg.v === ":with" && i + 1 < rest.length) {
+                withPattern = rest[i + 1];
+                i += 2;
             } else {
                 // Legacy: 4th arg could be guard (expression) or prio (number)
                 // 5th arg could be prio if 4th was guard
@@ -243,7 +247,7 @@ export function extractRulesFromNode(rulesNode) {
             }
         }
 
-        rs.push({ name: nm.v, lhs, rhs, guard, prio, scope });
+        rs.push({ name: nm.v, lhs, rhs, guard, prio, scope, withPattern });
     }
     rs.sort((a, b) => b.prio - a.prio);
     return indexRules(rs);
@@ -540,6 +544,7 @@ function extractRuleFromRNode(rNode) {
     let prio = 0;
     let guard = null;
     let scope = null;
+    let withPattern = null;
 
     // Parse optional arguments
     let i = 0;
@@ -562,6 +567,9 @@ function extractRuleFromRNode(rNode) {
                 scope = scopeArg.v;
             }
             i += 2;
+        } else if (isSym(arg) && arg.v === ":with" && i + 1 < rest.length) {
+            withPattern = rest[i + 1];
+            i += 2;
         } else {
             // Legacy positional args
             if (i === 0) {
@@ -577,7 +585,7 @@ function extractRuleFromRNode(rNode) {
         }
     }
 
-    return { name: ruleName, lhs, rhs, guard, prio, scope };
+    return { name: ruleName, lhs, rhs, guard, prio, scope, withPattern };
 }
 
 /**
@@ -1104,10 +1112,54 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
 
         const env = match(lhsToMatch, expr, {});
         if (env) {
-            // Check guard if present
+            // If there's a :with pattern, match it and merge bindings
+            let finalEnv = env;
+            if (r.withPattern) {
+                // Determine what to match :with against:
+                // - If :scope is specified, match against the scoped compound
+                // - Otherwise, match against the same expression (expr)
+                let withTarget = expr;
+
+                if (r.scope) {
+                    // Find the scoped compound in parents
+                    let scopedCompound = null;
+                    for (const parent of parents) {
+                        if (isCall(parent) && isSym(parent.h) && parent.h.v === r.scope) {
+                            scopedCompound = parent;
+                            break;
+                        }
+                    }
+
+                    if (!scopedCompound) {
+                        // This shouldn't happen since we already checked scope earlier
+                        continue;
+                    }
+
+                    withTarget = scopedCompound;
+                }
+
+                // Index wildcards in :with pattern if needed
+                let withPatternToMatch = r.withPattern;
+                if (!preserveUnboundPatterns) {
+                    const withIndexed = indexWildcards(r.withPattern);
+                    withPatternToMatch = withIndexed.expr;
+                }
+
+                // Match :with pattern against the target
+                const withEnv = match(withPatternToMatch, withTarget, {});
+                if (!withEnv) {
+                    continue; // :with pattern didn't match, skip this rule
+                }
+
+                // Merge bindings: withEnv takes precedence if there are conflicts
+                // Actually, they shouldn't conflict - they bind different variables
+                finalEnv = { ...env, ...withEnv };
+            }
+
+            // Check guard if present (with merged environment)
             if (guardToEval) {
                 // Substitute the guard with matched bindings, preserving Frozen wrappers
-                const guardValue = substWithFrozen(guardToEval, env, preserveUnboundPatterns);
+                const guardValue = substWithFrozen(guardToEval, finalEnv, preserveUnboundPatterns);
                 // Fully normalize the guard expression (not just fold primitives)
                 // Guards need access to all rules, not just applicable ones
                 const evaluatedGuard = normalizeWithFrozen(guardValue, ruleIndex, 100, false, foldPrimsFn, preserveUnboundPatterns);
@@ -1116,7 +1168,7 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
                     continue; // Guard failed, try next rule
                 }
             }
-            const out = subst(rhsToSubst, env, preserveUnboundPatterns);
+            const out = subst(rhsToSubst, finalEnv, preserveUnboundPatterns);
             return {matched: true, result: out, rule: r};
         }
     }
