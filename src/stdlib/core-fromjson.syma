@@ -12,23 +12,23 @@
     {R FromJSON/Start/Null {ParseJSONTokens Ok({Tokens {TOKNULL}})} Empty}
 
     ;; Handle possible errors early
-    {R FromJSON/Start/Err {ParseJSONTokens Err(e...)} Err(e...)}
+    {R FromJSON/Start/Err {ParseJSONTokens Err(e..)} Err(e..)}
 
     ;; ------- Real start -----
     {R FromJSON/Start 
-      {ParseJSONTokens Ok({Tokens f_ t...})}
-      {AnnotateJSONTokens {Tokens f_ t...}}
+      {ParseJSONTokens Ok({Tokens f_ t..})}
+      {AnnotateJSONTokens {Tokens f_ t..}}
     }
 
     {R FromJSON/Annotate
-      {AnnotateJSONTokens {Tokens f_ t...}}
-      {Parsing {Annotate {NestId 0 {Stack}} {Depth 0} {AnnotatedTokens} {Curr f_} {Tokens t...}}}
+      {AnnotateJSONTokens {Tokens f_ t..}}
+      {Parsing {Annotate {NestId 0 {Stack}} {Depth 0} {AnnotatedTokens} {Curr f_} {Tokens t..}}}
     }
     
     ;; ---------- Parsing -----------
     {R FromJSON/Parsing/Parse/Start
-      {Parsing Ok({AnnotatedTokens at...})}
-      {Parsing Parse {CurrentFrameType Empty} {NestIdStack} {Frames} {AnnotatedTokens at...}}
+      {Parsing Ok({AnnotatedTokens at..})}
+      {Parsing Parse {CurrentFrameType Empty} {NestIdStack} {Frames} {AnnotatedTokens at..}}
     }
 
     {R FromJSON/Parsing/Parse/End
@@ -43,54 +43,54 @@
 
     ; Eat commas
     {R FromJSON/Parsing/Parse/EatComma
-      {Parsing Parse {CurrentFrameType cft_} {NestIdStack s...} {Frames f...} {AnnotatedTokens {TOKCOMMA} at...}}
-      {Parsing Parse {CurrentFrameType cft_} {NestIdStack s...} {Frames f...} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType cft_} {NestIdStack s..} {Frames f..} {AnnotatedTokens {TOKCOMMA} at..}}
+      {Parsing Parse {CurrentFrameType cft_} {NestIdStack s..} {Frames f..} {AnnotatedTokens at..}}
     }
 
     {R FromJSON/Parsing/Parse/JSONObj/StartFrame
-      {Parsing Parse {CurrentFrameType _} {NestIdStack s...} {Frames f...} {AnnotatedTokens {head_ v_} at...}}
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s... v_} {Frames f... {JSONObj {JSONKV}}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType _} {NestIdStack s..} {Frames f..} {AnnotatedTokens {head_ v_} at..}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s.. v_} {Frames f.. {JSONObj {JSONKV}}} {AnnotatedTokens at..}}
       :guard Eq(head_, TOKLCURLY)
     }
 
     {R FromJSON/Parsing/Parse/JSONArr/StartFrame
-      {Parsing Parse {CurrentFrameType _} {NestIdStack s...} {Frames f...} {AnnotatedTokens {head_ v_} at...}}
-      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... v_} {Frames f... {JSONArr}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType _} {NestIdStack s..} {Frames f..} {AnnotatedTokens {head_ v_} at..}}
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s.. v_} {Frames f.. {JSONArr}} {AnnotatedTokens at..}}
       :guard Eq(head_, TOKLBRACK)
     }
 
     {R FromJSON/Parsing/Parse/JSONObj/EndFrame/InObj
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata... {JSONKV k_}} {lastframetype_ lft... lfl_}} {AnnotatedTokens {head_ v_} at...}}
-      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata... {JSONKV k_ {lastframetype_ lft...}} {JSONKV}}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s.. lastid_} {Frames f.. {prevframetype_ fdata.. {JSONKV k_}} {lastframetype_ lft.. lfl_}} {AnnotatedTokens {head_ v_} at..}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s..} {Frames f.. {prevframetype_ fdata.. {JSONKV k_ {lastframetype_ lft..}} {JSONKV}}} {AnnotatedTokens at..}}
       :guard And(Eq(head_, TOKRCURLY), Eq(prevframetype_, JSONObj))
     }
 
     {R FromJSON/Parsing/Parse/JSONObj/EndFrame/InArr
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata...} {lastframetype_ lft... lfl_}} {AnnotatedTokens {head_ v_} at...}}
-      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata...  {lastframetype_ lft...}}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack s.. lastid_} {Frames f.. {prevframetype_ fdata..} {lastframetype_ lft.. lfl_}} {AnnotatedTokens {head_ v_} at..}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s..} {Frames f.. {prevframetype_ fdata..  {lastframetype_ lft..}}} {AnnotatedTokens at..}}
       :guard And(Eq(head_, TOKRCURLY), Eq(prevframetype_, JSONArr))
     }
 
     {R FromJSON/Parsing/Parse/JSONArr/EndFrame/InObj
-      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata... {JSONKV k_}} {lastframetype_ lft...}} {AnnotatedTokens {head_ v_} at...}}
-      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata... {JSONKV k_ {lastframetype_ lft...}} {JSONKV} }} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s.. lastid_} {Frames f.. {prevframetype_ fdata.. {JSONKV k_}} {lastframetype_ lft..}} {AnnotatedTokens {head_ v_} at..}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s..} {Frames f.. {prevframetype_ fdata.. {JSONKV k_ {lastframetype_ lft..}} {JSONKV} }} {AnnotatedTokens at..}}
       :guard And(Eq(head_, TOKRBRACK), Eq(prevframetype_, JSONObj))
     }
     {R FromJSON/Parsing/Parse/JSONArr/EndFrame/InObj/EmptyArr
-      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata... {JSONKV k_}} {lastframetype_}} {AnnotatedTokens {head_ v_} at...}}
-      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata... {JSONKV k_ {lastframetype_}} {JSONKV} }} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s.. lastid_} {Frames f.. {prevframetype_ fdata.. {JSONKV k_}} {lastframetype_}} {AnnotatedTokens {head_ v_} at..}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s..} {Frames f.. {prevframetype_ fdata.. {JSONKV k_ {lastframetype_}} {JSONKV} }} {AnnotatedTokens at..}}
       :guard And(Eq(head_, TOKRBRACK), Eq(prevframetype_, JSONObj))
     }
 
     {R FromJSON/Parsing/Parse/JSONArr/EndFrame/InArr
-      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s... lastid_} {Frames f... {prevframetype_ fdata...} {lastframetype_ lft...}} {AnnotatedTokens {head_ lastid_} at...}}
-      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s...} {Frames f... {prevframetype_ fdata...  {lastframetype_ lft...}}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONArr} {NestIdStack s.. lastid_} {Frames f.. {prevframetype_ fdata..} {lastframetype_ lft..}} {AnnotatedTokens {head_ lastid_} at..}}
+      {Parsing Parse {CurrentFrameType prevframetype_} {NestIdStack s..} {Frames f.. {prevframetype_ fdata..  {lastframetype_ lft..}}} {AnnotatedTokens at..}}
       :guard And(Eq(head_, TOKRBRACK), Eq(prevframetype_, JSONArr))
     }
 
     {R FromJSON/Parsing/Parse/JSONObj/LastFrame
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack lastid_} {Frames {JSONObj kvs... kv_}} {AnnotatedTokens {TOKRCURLY lastid_}}}
-      {Parsing End {JSONObj kvs...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack lastid_} {Frames {JSONObj kvs.. kv_}} {AnnotatedTokens {TOKRCURLY lastid_}}}
+      {Parsing End {JSONObj kvs..}}
     }
 
     {R FromJSON/Parsing/Parse/JSONArr/LastFrame
@@ -99,27 +99,27 @@
     }
 
     {R FromJSON/Parsing/Parse/JSONArr
-      {Parsing Parse before... {Frames f... {JSONArr v...}} {AnnotatedTokens {head_ tokv...} at...}}
-      {Parsing Parse before... {Frames f... {JSONArr v... }} {ParseValue {head_ tokv...}} {AnnotatedTokens at...}}
+      {Parsing Parse before.. {Frames f.. {JSONArr v..}} {AnnotatedTokens {head_ tokv..} at..}}
+      {Parsing Parse before.. {Frames f.. {JSONArr v.. }} {ParseValue {head_ tokv..}} {AnnotatedTokens at..}}
       :guard And(Neq(head_, TOKRBRACK), Neq(head_, TOKRCURLY))
     }
     {R FromJSON/Parsing/Parse/JSONArr/ParsedValue
-      {Parsing Parse before... {Frames f... {JSONArr v... }} {ParsedValue pv_} {AnnotatedTokens at...}}
-      {Parsing Parse before... {Frames f... {JSONArr v... pv_}} {AnnotatedTokens at...}}
+      {Parsing Parse before.. {Frames f.. {JSONArr v.. }} {ParsedValue pv_} {AnnotatedTokens at..}}
+      {Parsing Parse before.. {Frames f.. {JSONArr v.. pv_}} {AnnotatedTokens at..}}
     }
    
    {R FromJSON/Parsing/Parse/JSONObj/Key
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV}}} {AnnotatedTokens {TOKSTR s_} {TOKCOLON} at...}}
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV s_}}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st.. id_} {Frames f.. {JSONObj kvs.. {JSONKV}}} {AnnotatedTokens {TOKSTR s_} {TOKCOLON} at..}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st.. id_} {Frames f.. {JSONObj kvs.. {JSONKV s_}}} {AnnotatedTokens at..}}
     }
     {R FromJSON/Parsing/Parse/JSONObj/Value
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_}}} {AnnotatedTokens {head_ v...} at...}}
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_}}} {ParseValue {head_ v...}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st.. id_} {Frames f.. {JSONObj kvs.. {JSONKV k_}}} {AnnotatedTokens {head_ v..} at..}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st.. id_} {Frames f.. {JSONObj kvs.. {JSONKV k_}}} {ParseValue {head_ v..}} {AnnotatedTokens at..}}
       :guard And(Neq(head_, TOKRBRACK), Neq(head_, TOKRCURLY))
     }
     {R FromJSON/Parsing/Parse/JSONObj/ParsedValue
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_}}} {ParsedValue v_} {AnnotatedTokens at...}}
-      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st... id_} {Frames f... {JSONObj kvs... {JSONKV k_ v_} {JSONKV}}} {AnnotatedTokens at...}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st.. id_} {Frames f.. {JSONObj kvs.. {JSONKV k_}}} {ParsedValue v_} {AnnotatedTokens at..}}
+      {Parsing Parse {CurrentFrameType JSONObj} {NestIdStack st.. id_} {Frames f.. {JSONObj kvs.. {JSONKV k_ v_} {JSONKV}}} {AnnotatedTokens at..}}
     }
 
     {R FromJSON/Parsing/Parse/Value/Num

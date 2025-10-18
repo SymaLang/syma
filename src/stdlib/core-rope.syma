@@ -13,11 +13,11 @@
     {:rule Rope/catN/0   {RopeCatN}                   -> ""}
     {:rule Rope/catN/1   {RopeCatN x_}                -> x_}
     {:rule Rope/catN/2   {RopeCatN x_ y_}             -> {RopeCat x_ y_}}
-    {:rule Rope/catN/k   {RopeCatN a_ b_ rest...}     -> {RopeCat {RopeCat a_ b_} {RopeCatN rest...}}}
+    {:rule Rope/catN/k   {RopeCatN a_ b_ rest..}     -> {RopeCat {RopeCat a_ b_} {RopeCatN rest..}}}
 
     {:rule Rope/join/0   {RopeJoin _}                   -> ""}
     {:rule Rope/join/1   {RopeJoin sep_ x_}             -> x_}
-    {:rule Rope/join/N   {RopeJoin sep_ x_ y_ rest...}  -> {RopeCatN x_ sep_ {RopeJoin sep_ y_ rest...}}}
+    {:rule Rope/join/N   {RopeJoin sep_ x_ y_ rest..}  -> {RopeCatN x_ sep_ {RopeJoin sep_ y_ rest..}}}
 
     {:rule Rope/nl       {RopeNL}                       -> "\n"}
     {:rule Rope/indent/0 {RopeIndent 0 s_}              -> s_}

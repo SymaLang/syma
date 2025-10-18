@@ -8,8 +8,8 @@
   {Rules
     R(
       "Zipper/FromList",
-      ZipperFromList({tag_ head_ elems...}),
-      Zipper({Before}, {Curr head_}, {After elems...}),
+      ZipperFromList({tag_ head_ elems..}),
+      Zipper({Before}, {Curr head_}, {After elems..}),
       And(Neq(head_, Empty), Neq(tag_, Empty))
     )
     R(
@@ -20,8 +20,8 @@
     )
     R(
       "Zipper/ToList",
-      ZipperToList({Zipper {Before before...} {Curr curr_} {After after...}}),
-      {tag_ curr_ before... after...},
+      ZipperToList({Zipper {Before before..} {Curr curr_} {After after..}}),
+      {tag_ curr_ before.. after..},
       Neq(curr_, Empty)
     )
     R(
@@ -32,32 +32,32 @@
     )
     R(
       "Zipper/MoveNext",
-      ZipperMoveNext({Zipper {Before before...} {Curr curr_} {After next_ after...}}),
-      Zipper({Before before... curr_}, {Curr next_}, {After after...}),
+      ZipperMoveNext({Zipper {Before before..} {Curr curr_} {After next_ after..}}),
+      Zipper({Before before.. curr_}, {Curr next_}, {After after..}),
       Neq(next_, Empty)
     )
     R(
       "Zipper/MoveNext/End",
-      ZipperMoveNext({Zipper {Before before...} {Curr curr_} {After}}),
-      Zipper({Before before... curr_}, {Curr Empty}, {After}),
+      ZipperMoveNext({Zipper {Before before..} {Curr curr_} {After}}),
+      Zipper({Before before.. curr_}, {Curr Empty}, {After}),
       Neq(curr_, Empty)
     )
     R(
       "Zipper/MovePrev",
-      ZipperMovePrev({Zipper {Before before... prev_} {Curr curr_} {After after...}}),
-      Zipper({Before before...}, {Curr prev_}, {After curr_ after...}),
+      ZipperMovePrev({Zipper {Before before.. prev_} {Curr curr_} {After after..}}),
+      Zipper({Before before..}, {Curr prev_}, {After curr_ after..}),
       Neq(prev_, Empty)
     )
     R(
       "Zipper/MovePrev/Start",
-      ZipperMovePrev({Zipper {Before} {Curr curr_} {After after...}}),
-      Zipper({Before}, {Curr Empty}, {After after...}),
+      ZipperMovePrev({Zipper {Before} {Curr curr_} {After after..}}),
+      Zipper({Before}, {Curr Empty}, {After after..}),
       Neq(curr_, Empty)
     )
     R(
       "Zipper/InsertAfter",
-      ZipperInsertAfter({Zipper {Before before...} {Curr curr_} {After after...}}, new_),
-      Zipper({Before before...}, {Curr curr_}, {After new_ after...}),
+      ZipperInsertAfter({Zipper {Before before..} {Curr curr_} {After after..}}, new_),
+      Zipper({Before before..}, {Curr curr_}, {After new_ after..}),
       Neq(curr_, Empty)
     )
     R(
@@ -68,25 +68,25 @@
     )
     R(
       "Zipper/InsertBefore",
-      ZipperInsertBefore({Zipper {Before before...} {Curr curr_} {After after...}}, new_),
-      Zipper({Before before... new_}, {Curr curr_}, {After after...}),
+      ZipperInsertBefore({Zipper {Before before..} {Curr curr_} {After after..}}, new_),
+      Zipper({Before before.. new_}, {Curr curr_}, {After after..}),
       Neq(curr_, Empty)
     )
     R(
       "Zipper/InsertBefore/Empty",
-      ZipperInsertBefore(Zipper(tag_, {Before}, {Curr Empty}, {After after...}), new_),
-      Zipper(tag_, {Before}, {Curr new_}, {After after...}),
+      ZipperInsertBefore(Zipper(tag_, {Before}, {Curr Empty}, {After after..}), new_),
+      Zipper(tag_, {Before}, {Curr new_}, {After after..}),
       Neq(new_, Empty)
     )
     R(
       "Zipper/Delete/HasRight",
-      ZipperDelete(Zipper(tag_, {Before before...}, {Curr _}, {After next_ rest...})),
-      Zipper(tag_, {Before before...}, {Curr next_}, {After rest...})
+      ZipperDelete(Zipper(tag_, {Before before..}, {Curr _}, {After next_ rest..})),
+      Zipper(tag_, {Before before..}, {Curr next_}, {After rest..})
     )
     R(
       "Zipper/Delete/FallToEmpty",
-      ZipperDelete(Zipper(tag_, {Before before...}, {Curr _}, {After})),
-      Zipper(tag_, {Before before...}, {Curr Empty}, {After})
+      ZipperDelete(Zipper(tag_, {Before before..}, {Curr _}, {After})),
+      Zipper(tag_, {Before before..}, {Curr Empty}, {After})
     )
   }
 }

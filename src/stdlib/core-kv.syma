@@ -5,12 +5,12 @@
   {Rules
     ;; Get value from KV list
     {R "Get/Here"
-       {Get tag_ key_ {tag_ before... {KV key_ v_} after...}}
+       {Get tag_ key_ {tag_ before.. {KV key_ v_} after..}}
        v_}
 
     {R "Get/Skip"
-       {Get tag_ key_ {tag_ {KV k_ _} rest...}}
-       {Get tag_ key_ {tag_ rest...}}
+       {Get tag_ key_ {tag_ {KV k_ _} rest..}}
+       {Get tag_ key_ {tag_ rest..}}
        -100}
 
     {R "Get/NotFound"
@@ -19,13 +19,13 @@
 
     ;; Put value into KV list {replace existing}
     {R "Put/Replace"
-       {Put tag_ key_ v_ {tag_ before... {KV key_ _} after...}}
-       {tag_ before... {KV key_ v_} after...}}
+       {Put tag_ key_ v_ {tag_ before.. {KV key_ _} after..}}
+       {tag_ before.. {KV key_ v_} after..}}
 
     ;; Put value into KV list {insert if missing}
     {R "Put/Insert"
-       {Put tag_ key_ v_ {tag_ fields...}}
-       {tag_ fields... {KV key_ v_}}
+       {Put tag_ key_ v_ {tag_ fields..}}
+       {tag_ fields.. {KV key_ v_}}
        -100}
 
     ;; Copy value from one key to another
@@ -45,5 +45,5 @@
        st_}
 
     {R "Patch/Step"
-       {Patch tag_ st_ {KV k_ v_} more...}
-       {Patch tag_ {Put tag_ k_ v_ st_} more...}}}}
+       {Patch tag_ st_ {KV k_ v_} more..}
+       {Patch tag_ {Put tag_ k_ v_ st_} more..}}}}

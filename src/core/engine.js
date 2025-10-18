@@ -12,6 +12,8 @@ const isR = n => isCall(n) && isSym(n.h) && n.h.v === "R";
 const isVar = n => isCall(n) && isSym(n.h) && n.h.v === "Var" && n.a.length === 1 && isStr(n.a[0]);
 const isVarRest = n =>
     isCall(n) && isSym(n.h) && n.h.v === "VarRest" && n.a.length === 1 && isStr(n.a[0]);
+const isGreedyAnchor = n =>
+    isCall(n) && isSym(n.h) && n.h.v === "GreedyAnchor" && n.a.length === 1 && isSym(n.a[0]);
 
 /**
  * Analyze a pattern to determine its indexing key.
@@ -713,7 +715,56 @@ function matchArgsWithRest(pArgs, tArgs, env) {
         if (!e) return null;
     }
 
-    // Try all possible splits for this rest var, from shortest to longest slice
+    // Check if we have a greedy anchor as the first suffix element
+    const hasGreedyAnchor = suffix.length > 0 && isGreedyAnchor(suffix[0]);
+
+    if (hasGreedyAnchor) {
+        // Greedy matching: find LAST occurrence of the anchor symbol
+        const greedyAnchor = suffix[0];
+        const targetSymbol = greedyAnchor.a[0].v;
+        const remainingSuffix = suffix.slice(1);
+        const remaining = tArgs.slice(prefix.length);
+
+        // Find all occurrences of the target symbol
+        const occurrences = [];
+        for (let i = 0; i < remaining.length; i++) {
+            if (isSym(remaining[i]) && remaining[i].v === targetSymbol) {
+                occurrences.push(i);
+            }
+        }
+
+        if (occurrences.length === 0) {
+            return null; // Target symbol not found
+        }
+
+        // Try matching from the last occurrence backwards
+        for (let i = occurrences.length - 1; i >= 0; i--) {
+            const anchorPos = occurrences[i];
+            const middle = remaining.slice(0, anchorPos);
+            const tail = remaining.slice(anchorPos + 1); // Skip the anchor symbol itself
+
+            // Bind the VarRest
+            let e1 = e;
+            const name = restVar.a[0].v;
+            if (name === "_") {
+                e1 = e;
+            } else if (Object.prototype.hasOwnProperty.call(e1, name)) {
+                const bound = e1[name];
+                if (!Array.isArray(bound) || !arrEq(bound, middle)) {
+                    continue;
+                }
+            } else {
+                e1 = { ...e1, [name]: middle };
+            }
+
+            // Match remaining suffix against tail
+            const e2 = matchArgsWithRest(remainingSuffix, tail, e1);
+            if (e2) return e2;
+        }
+        return null; // No match found
+    }
+
+    // Normal non-greedy matching: try all possible splits from shortest to longest
     const name = restVar.a[0].v;
     for (let take = 0; take <= (tArgs.length - prefix.length - minTail); take++) {
         // Candidate binding for this VarRest

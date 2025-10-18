@@ -7,104 +7,104 @@
     {R ToJSON/c {ToJSON x_} Ok("null") :guard {Eq Empty {Frozen x_}}}
     {R ToJSON/d {ToJSON x_} Ok("true") :guard {Eq True {Frozen x_}}}
     {R ToJSON/e {ToJSON x_} Ok("false") :guard {Eq False {Frozen x_}}}
-    {R ToJSON/f {ToJSON {head_ v...}} {Stringifying Processing {Stack} {Before } {Tree {head_ v...}}} :guard {Eq JSONArr {Frozen head_}}}
-    {R ToJSON/g {ToJSON {head_ v...}} {Stringifying Processing {Stack} {Before} {Tree {head_ v...}}} :guard {Eq JSONObj {Frozen head_}}}
+    {R ToJSON/f {ToJSON {head_ v..}} {Stringifying Processing {Stack} {Before } {Tree {head_ v..}}} :guard {Eq JSONArr {Frozen head_}}}
+    {R ToJSON/g {ToJSON {head_ v..}} {Stringifying Processing {Stack} {Before} {Tree {head_ v..}}} :guard {Eq JSONObj {Frozen head_}}}
 
     ; Processing
 
     ; Arr        
     {R ToJSON/Stringifying/Processing/Arr 
-      {Stringifying Processing {Stack s...} {Before bef...} {Tree {JSONArr kvs...} rest...} }
-      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree kvs... EndArr rest...}}
+      {Stringifying Processing {Stack s..} {Before bef..} {Tree {JSONArr kvs..} rest..} }
+      {Stringifying Processing {Stack s.. Arr} {Before bef.. "["} {Tree kvs.. EndArr rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Arr/Start
-      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree v_ rest...} }
-      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree {Stringify v_} rest...}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef.. "["} {Tree v_ rest..} }
+      {Stringifying Processing {Stack s.. Arr} {Before bef.. "["} {Tree {Stringify v_} rest..}}
       :guard IsPrimitive(v_)
     }
 
     {R ToJSON/Stringifying/Processing/Arr/Start/Arr
-      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree {JSONArr v...} rest...} }
-      {Stringifying Processing {Stack s... Arr Obj} {Before bef... "[" "["} {Tree v... EndArr rest...}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef.. "["} {Tree {JSONArr v..} rest..} }
+      {Stringifying Processing {Stack s.. Arr Obj} {Before bef.. "[" "["} {Tree v.. EndArr rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Arr/Start/Obj
-      {Stringifying Processing {Stack s... Arr} {Before bef... "["} {Tree {JSONObj v...} rest...} }
-      {Stringifying Processing {Stack s... Arr Obj} {Before bef... "[" "{"} {Tree v... EndObj rest...}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef.. "["} {Tree {JSONObj v..} rest..} }
+      {Stringifying Processing {Stack s.. Arr Obj} {Before bef.. "[" "{"} {Tree v.. EndObj rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Arr/V/Prim
-      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree v_ rest...}}
-      {Stringifying Processing {Stack s... Arr} {Before bef... ","} {Tree {Stringify v_} rest...}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef..} {Tree v_ rest..}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef.. ","} {Tree {Stringify v_} rest..}}
       :guard IsPrimitive(v_)
     }
 
     {R ToJSON/Stringifying/Processing/Arr/V/Arr
-      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree {JSONArr v...} rest...} }
-      {Stringifying Processing {Stack s... Arr Arr} {Before bef... "," "["} {Tree v... EndArr rest...}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef..} {Tree {JSONArr v..} rest..} }
+      {Stringifying Processing {Stack s.. Arr Arr} {Before bef.. "," "["} {Tree v.. EndArr rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Arr/V/Obj
-      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree {JSONObj v...} rest...} }
-      {Stringifying Processing {Stack s... Arr Obj} {Before bef... "," "{"} {Tree v... EndObj rest...}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef..} {Tree {JSONObj v..} rest..} }
+      {Stringifying Processing {Stack s.. Arr Obj} {Before bef.. "," "{"} {Tree v.. EndObj rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Arr/End
-      {Stringifying Processing {Stack s... Arr} {Before bef...} {Tree v_ rest...}}
-      {Stringifying Processing {Stack s...} {Before bef... "]"} {Tree rest...}}
+      {Stringifying Processing {Stack s.. Arr} {Before bef..} {Tree v_ rest..}}
+      {Stringifying Processing {Stack s..} {Before bef.. "]"} {Tree rest..}}
       :guard Eq({Frozen v_}, EndArr)
     }
 
     ; Obj
 
     {R ToJSON/Stringifying/Processing/Obj 
-      {Stringifying Processing {Stack s...} {Before bef...} {Tree {JSONObj kvs...} rest...} }
-      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree kvs... EndObj rest...}}
+      {Stringifying Processing {Stack s..} {Before bef..} {Tree {JSONObj kvs..} rest..} }
+      {Stringifying Processing {Stack s.. Obj} {Before bef.. "{"} {Tree kvs.. EndObj rest..}}
     }
     
     {R ToJSON/Stringifying/Processing/Obj/Start
-      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ v_} rest...} }
-      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":"} {Stringify v_} rest...}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef.. "{"} {Tree {JSONKV k_ v_} rest..} }
+      {Stringifying Processing {Stack s.. Obj} {Before bef.. "{"} {Tree {Stringify k_} {Stringified ":"} {Stringify v_} rest..}}
       :guard IsPrimitive(v_)
     }
 
     {R ToJSON/Stringifying/Processing/Obj/Start/Arr
-      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ {JSONArr v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Arr} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":"} {Stringified "["} v... EndArr rest...}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef.. "{"} {Tree {JSONKV k_ {JSONArr v..}} rest..} }
+      {Stringifying Processing {Stack s.. Obj Arr} {Before bef.. "{"} {Tree {Stringify k_} {Stringified ":"} {Stringified "["} v.. EndArr rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/Start/Obj
-      {Stringifying Processing {Stack s... Obj} {Before bef... "{"} {Tree {JSONKV k_ {JSONObj v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Obj} {Before bef... "{"} {Tree {Stringify k_} {Stringified ":"} {Stringified "{"} v... EndObj rest...}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef.. "{"} {Tree {JSONKV k_ {JSONObj v..}} rest..} }
+      {Stringifying Processing {Stack s.. Obj Obj} {Before bef.. "{"} {Tree {Stringify k_} {Stringified ":"} {Stringified "{"} v.. EndObj rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/V/Prim
-      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ v_} rest...}}
-      {Stringifying Processing {Stack s... Obj} {Before bef... ","} {Tree {Stringify k_} {Stringified ":"} {Stringify v_} rest...}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef..} {Tree {JSONKV k_ v_} rest..}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef.. ","} {Tree {Stringify k_} {Stringified ":"} {Stringify v_} rest..}}
       :guard IsPrimitive(v_)
     }
 
     {R ToJSON/Stringifying/Processing/Obj/V/Arr
-      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ {JSONArr v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Arr} {Before bef... ","} {Tree {Stringify k_} {Stringified ":"} {Stringified "["} v... EndArr rest...}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef..} {Tree {JSONKV k_ {JSONArr v..}} rest..} }
+      {Stringifying Processing {Stack s.. Obj Arr} {Before bef.. ","} {Tree {Stringify k_} {Stringified ":"} {Stringified "["} v.. EndArr rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/V/Obj
-      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree {JSONKV k_ {JSONObj v...}} rest...} }
-      {Stringifying Processing {Stack s... Obj Obj} {Before bef... ","} {Tree {Stringify k_} {Stringified ":"} {Stringified "{"} v... EndObj rest...}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef..} {Tree {JSONKV k_ {JSONObj v..}} rest..} }
+      {Stringifying Processing {Stack s.. Obj Obj} {Before bef.. ","} {Tree {Stringify k_} {Stringified ":"} {Stringified "{"} v.. EndObj rest..}}
     }
 
     {R ToJSON/Stringifying/Processing/Obj/End
-      {Stringifying Processing {Stack s... Obj} {Before bef...} {Tree v_ rest...}}
-      {Stringifying Processing {Stack s...} {Before bef... "}"} {Tree rest...}}
+      {Stringifying Processing {Stack s.. Obj} {Before bef..} {Tree v_ rest..}}
+      {Stringifying Processing {Stack s..} {Before bef.. "}"} {Tree rest..}}
       :guard Eq(v_, EndObj)
     }
 
     ; Advance stringified value
     {R ToJSON/Stringifying/Processing/Stringified
-      {Stringifying Processing {Stack s...} {Before bef...} {Tree Stringified(v_) rest...}}
-      {Stringifying Processing {Stack s...} {Before bef... v_} {Tree rest...}}
+      {Stringifying Processing {Stack s..} {Before bef..} {Tree Stringified(v_) rest..}}
+      {Stringifying Processing {Stack s..} {Before bef.. v_} {Tree rest..}}
       :guard IsStr({Frozen v_})
     }
 
@@ -152,14 +152,14 @@
     }
 
     {R ToJSON/Stringifying/Processing/Guard/IsPrimitive/False
-      IsPrimitive(head_, ...)
+      IsPrimitive(head_, ..)
       Or(Eq(head_, JSONArr), Eq(head_, JSONObj))
     }
 
     ; End
     {R ToJSON/Stringifying/Processing/End
-      {Stringifying Processing {Stack} {Before bef...} {Tree}}
-      {Stringifying Concatenating Concat(bef...)}
+      {Stringifying Processing {Stack} {Before bef..} {Tree}}
+      {Stringifying Concatenating Concat(bef..)}
     }
 
     {R ToJSON/Stringifying/Concatenating/End

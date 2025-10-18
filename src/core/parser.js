@@ -184,7 +184,7 @@ export class SymaParser {
                 continue;
             }
 
-            // Symbols (including special ones like →, _, ...)
+            // Symbols (including special ones like →, _, ..., and greedy anchors like ..])
             let sym = '';
             while (i < len) {
                 const ch = src[i];
@@ -252,6 +252,13 @@ export class SymaParser {
                     } else {
                         expr = Call(Sym('VarRest'), Str(name));
                     }
+                }
+
+                // Handle GreedyAnchor: ..symbol → {GreedyAnchor symbol}
+                // This enables greedy matching to the LAST occurrence of symbol
+                else if (sym.v.startsWith('..') && sym.v.length > 2) {
+                    const targetSymbol = sym.v.slice(2);
+                    expr = Call(Sym('GreedyAnchor'), Sym(targetSymbol));
                 }
 
                 // Handle Var shorthand: name_ → {Var "name"}
@@ -605,6 +612,12 @@ export class SymaParser {
                 }
             }
 
+            // Handle GreedyAnchor: {GreedyAnchor symbol} → ..symbol
+            if (isSym(node.h) && node.h.v === 'GreedyAnchor' &&
+                node.a.length === 1 && isSym(node.a[0])) {
+                return `..${node.a[0].v}`;
+            }
+
             // Handle Var shorthand: {Var "name"} → name_
             if (isSym(node.h) && node.h.v === 'Var' &&
                 node.a.length === 1 && isStr(node.a[0])) {
@@ -696,6 +709,12 @@ export class SymaParser {
                 } else {
                     return `${name}..`;
                 }
+            }
+
+            // Handle GreedyAnchor: {GreedyAnchor symbol} → ..symbol
+            if (isSym(node.h) && node.h.v === 'GreedyAnchor' &&
+                node.a.length === 1 && isSym(node.a[0])) {
+                return `..${node.a[0].v}`;
             }
 
             // Handle Var shorthand: {Var "name"} → name_
