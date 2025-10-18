@@ -379,16 +379,19 @@ Rules define pattern-based transformations:
 ```lisp
 {R "Name" pattern replacement guard? priority?}
 R("Name", pattern, replacement, guard?, priority?)
-{R "Name" pattern replacement :guard guard}
+{R "Name" pattern replacement :guard guard :prio priority :scope Parent :with contextPattern :innermost}
 ```
 
 - `"Name"`: A string identifier for the rule
 - `pattern`: An expression pattern to match
 - `replacement`: The expression that replaces matches
 - `guard`: Optional condition that must evaluate to `True` (4th argument, or `:guard` syntax)
-- `priority`: Optional numeric priority (higher values apply first)
+- `priority`: Optional numeric priority (higher values apply first, or `:prio` syntax)
   - If 4th argument is a number, it's treated as priority
   - If 4th argument is an expression and 5th is a number, they're guard and priority respectively
+- `:scope Parent`: Optional scope restriction (see below)
+- `:with contextPattern`: Optional context binding (see below)
+- `:innermost`: Optional flag for bottom-up evaluation (see below)
 
 **Examples:**
 ```lisp
@@ -565,6 +568,79 @@ The `:with` modifier allows rules to bind additional variables from a related co
 
 The order of `:guard`, `:scope`, `:with`, and `:prio` doesn't matter - they can appear in any order after the replacement expression.
 
+### Innermost-First Evaluation with `:innermost`
+
+By default, Syma uses **outermost-first** evaluation, where rules try to match parent nodes before their children. The `:innermost` flag reverses this for specific rules, enabling **bottom-up** evaluation.
+
+```lisp
+{R "Name" pattern replacement :innermost}
+{R "Name" pattern replacement :scope Parent :innermost}
+```
+
+**How it works:**
+
+The runtime uses a **two-pass approach** in each normalization step:
+
+1. **Pass 1 (Innermost-first)**: Recursively traverse the tree bottom-up, trying only rules marked with `:innermost`
+   - Process all children first (recursively)
+   - Then try to match innermost rules at the current node
+   - Return immediately if a match is found
+
+2. **Pass 2 (Outermost-first)**: Standard top-down traversal for all non-innermost rules
+   - Try to match rules at the current node first
+   - Then recursively process children
+   - Uses the normal outermost-first strategy
+
+**When to use `:innermost`:**
+
+Use `:innermost` when you need children to be fully normalized before a parent rule can match. This is particularly useful for:
+
+- **Scoped folding operations** - process scope contents first, then fold the scope
+- **Accumulation patterns** - collect values from children before processing parent
+- **Context-sensitive transformations** - normalize nested values before applying parent context
+
+**Example:**
+
+```lisp
+; Process {LiftedOneOf} nodes inside fold-oneof scope first
+:rule OneOf/Fold/A {LiftedOneOf ..} -> c_
+  :scope fold-oneof
+  :with {fold-oneof .. {Variant c_} ..}
+  :innermost
+
+:rule OneOf/Fold/B {OneOfResult ..} -> c_
+  :scope fold-oneof
+  :with {fold-oneof .. {Variant c_} ..}
+  :innermost
+
+; After innermost rules finish, fold the scope itself
+:rule OneOf/Fold {fold-oneof R {Variant c_} ..} -> {R ..}
+```
+
+**Execution order:**
+
+```lisp
+; Expression: {fold-oneof R {Variant "x"} {LiftedOneOf a b}}
+
+; Pass 1: Innermost rules only
+; Step 1: Process {LiftedOneOf a b} (innermost rule matches)
+; → Result: {fold-oneof R {Variant "x"} "x"}
+
+; Pass 2: Regular rules
+; Step 2: Process {fold-oneof R {Variant "x"} "x"} (fold rule matches)
+; → Result: {R "x"}
+```
+
+Without `:innermost`, the fold rule would match first and consume the scope before the innermost rules could process its children.
+
+**Combining with other modifiers:**
+
+```lisp
+{R "Name" pattern replacement :guard condition :scope Parent :with contextPattern :innermost :prio 100}
+```
+
+The `:innermost` flag can be combined with `:scope`, `:with`, `:guard`, and `:prio` in any order.
+
 ### Pattern Matching
 
 Patterns can include:
@@ -576,16 +652,25 @@ Patterns can include:
 
 ### Normalization Strategy
 
-The runtime uses an outermost-first strategy with integrated primitive folding:
+The runtime uses a **two-pass strategy** for each normalization step:
 
-1. **Rule Application**: Try to match rules at the current expression level
-2. **Recursion**: If no match, recursively try children (still outermost-first)
-3. **Priority**: Apply the highest-priority matching rule when found
-4. **Primitive Folding**: After each rule application, fold any primitive operations
-5. **Fixed Point**: Repeat until neither rules nor primitives can make changes
+1. **Innermost Pass**: Bottom-up traversal for rules marked with `:innermost`
+   - Process children recursively first
+   - Try to match innermost rules at each node
+   - Return immediately if any innermost rule matches
+
+2. **Outermost Pass**: Top-down traversal for regular rules
+   - Try to match rules at the current expression level first
+   - If no match, recursively try children (outermost-first)
+   - Apply the highest-priority matching rule when found
+
+3. **Primitive Folding**: After each rule application, fold any primitive operations
+
+4. **Fixed Point**: Repeat all passes until neither rules nor primitives can make changes
 
 **Important Details:**
-- **Outermost-first is critical for determinism** - rules at higher levels take precedence
+- **Innermost rules process children before parents** - enables bottom-up transformations
+- **Outermost-first is critical for determinism** - regular rules at higher levels take precedence
 - **Primitives fold after each step** - expressions like `Eq(6, -1)` become `False` immediately
 - **The loop continues if either rules OR primitives change the expression** - this ensures complete normalization
 - **Guards are fully normalized** - allowing rules like `R("name", pattern, replacement, :guard IsNumericOrSpaceOrLetterX(x_))` to work correctly
@@ -1308,7 +1393,7 @@ Module definitions become rules with high priority (1000):
 2. **Module system** for code organization and namespacing
 3. **Pattern matching** with variables and wildcards
 4. **Rewrite rules** for computation and transformation
-5. **Normalization** as the execution model
+5. **Two-pass normalization** - innermost-first for `:innermost` rules, then outermost-first for regular rules
 6. **Symbol qualification** for namespace isolation
 7. **Context-aware projection** for UI rendering
 8. **Event handling** through `Apply` patterns with lifting rules
@@ -1316,5 +1401,6 @@ Module definitions become rules with high priority (1000):
 10. **Event action combinators** for composable UI interactions
 11. **Meta-programming** with rule-rewriting rules
 12. **Priority system** for controlling rule application order
+13. **Evaluation strategies** - `:innermost` for bottom-up, `:scope` for context restrictions
 
 Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.

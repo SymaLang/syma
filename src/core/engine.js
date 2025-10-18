@@ -204,8 +204,9 @@ export function extractRulesFromNode(rulesNode) {
         let guard = null;
         let scope = null;
         let withPattern = null;
+        let innermost = false;
 
-        // Parse named arguments (:guard, :prio, :scope, :with) or legacy positional args
+        // Parse named arguments (:guard, :prio, :scope, :with, :innermost) or legacy positional args
         let i = 0;
         while (i < rest.length) {
             const arg = rest[i];
@@ -231,6 +232,9 @@ export function extractRulesFromNode(rulesNode) {
             } else if (isSym(arg) && arg.v === ":with" && i + 1 < rest.length) {
                 withPattern = rest[i + 1];
                 i += 2;
+            } else if (isSym(arg) && arg.v === ":innermost") {
+                innermost = true;
+                i += 1;
             } else {
                 // Legacy: 4th arg could be guard (expression) or prio (number)
                 // 5th arg could be prio if 4th was guard
@@ -247,7 +251,7 @@ export function extractRulesFromNode(rulesNode) {
             }
         }
 
-        rs.push({ name: nm.v, lhs, rhs, guard, prio, scope, withPattern });
+        rs.push({ name: nm.v, lhs, rhs, guard, prio, scope, withPattern, innermost });
     }
     rs.sort((a, b) => b.prio - a.prio);
     return indexRules(rs);
@@ -545,6 +549,7 @@ function extractRuleFromRNode(rNode) {
     let guard = null;
     let scope = null;
     let withPattern = null;
+    let innermost = false;
 
     // Parse optional arguments
     let i = 0;
@@ -570,6 +575,9 @@ function extractRuleFromRNode(rNode) {
         } else if (isSym(arg) && arg.v === ":with" && i + 1 < rest.length) {
             withPattern = rest[i + 1];
             i += 2;
+        } else if (isSym(arg) && arg.v === ":innermost") {
+            innermost = true;
+            i += 1;
         } else {
             // Legacy positional args
             if (i === 0) {
@@ -585,7 +593,7 @@ function extractRuleFromRNode(rNode) {
         }
     }
 
-    return { name: ruleName, lhs, rhs, guard, prio, scope, withPattern };
+    return { name: ruleName, lhs, rhs, guard, prio, scope, withPattern, innermost };
 }
 
 /**
@@ -1175,6 +1183,72 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
     return {matched: false};
 }
 
+
+/**
+ * Try innermost-first pass: recursively traverse bottom-up, trying only innermost rules.
+ * Returns {matched: true, expr: newExpr, ...} if an innermost rule matched, else {matched: false}
+ */
+function tryInnermostFirst(expr, rules, foldPrimsFn, preserveUnboundPatterns, parents, skipFrozen, includeDebugInfo, pathSoFar = []) {
+    // Skip Frozen nodes if requested
+    if (skipFrozen && isCall(expr) && isSym(expr.h) && expr.h.v === "Frozen") {
+        return {matched: false};
+    }
+
+    // First, recursively process children (bottom-up)
+    if (isCall(expr)) {
+        const newParents = [...parents, expr];
+
+        // Process head
+        if (expr.h) {
+            const headResult = tryInnermostFirst(expr.h, rules, foldPrimsFn, preserveUnboundPatterns, newParents, skipFrozen, includeDebugInfo, pathSoFar.concat('h'));
+            if (headResult.matched) {
+                // Reconstruct with new head
+                const newExpr = Call(headResult.expr, ...expr.a);
+                return {matched: true, expr: newExpr, rule: headResult.rule, path: headResult.path, before: headResult.before, after: headResult.after};
+            }
+        }
+
+        // Process arguments
+        for (let i = 0; i < expr.a.length; i++) {
+            const childResult = tryInnermostFirst(expr.a[i], rules, foldPrimsFn, preserveUnboundPatterns, newParents, skipFrozen, includeDebugInfo, pathSoFar.concat(i));
+            if (childResult.matched) {
+                // Reconstruct with new child at position i
+                const newArgs = [...expr.a];
+                newArgs[i] = childResult.expr;
+                const newExpr = Call(expr.h, ...newArgs);
+                return {matched: true, expr: newExpr, rule: childResult.rule, path: childResult.path, before: childResult.before, after: childResult.after};
+            }
+        }
+    }
+
+    // Now try matching innermost rules at this node (after children processed)
+    // Build an index with only innermost rules
+    const innermostRulesArray = rules.allRules.filter(r => r.innermost);
+    if (innermostRulesArray.length === 0) {
+        return {matched: false};
+    }
+
+    const innermostIndex = indexRules(innermostRulesArray);
+
+    const matchResult = tryMatchRule(expr, innermostIndex, foldPrimsFn, preserveUnboundPatterns, parents);
+    if (matchResult.matched) {
+        if (includeDebugInfo) {
+            return {
+                matched: true,
+                expr: matchResult.result,
+                rule: matchResult.rule.name,
+                path: pathSoFar,
+                before: expr,
+                after: matchResult.result
+            };
+        } else {
+            return {matched: true, expr: matchResult.result};
+        }
+    }
+
+    return {matched: false};
+}
+
 /**
  * Unified iterative apply-once implementation.
  * Options:
@@ -1184,6 +1258,24 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
 function applyOnceIterative(expr, rules, foldPrimsFn = null, preserveUnboundPatterns = false, options = {}) {
     const {skipFrozen = false, includeDebugInfo = false} = options;
 
+    // Pass 1: Try innermost-first traversal for innermost rules
+    const innermostResult = tryInnermostFirst(expr, rules, foldPrimsFn, preserveUnboundPatterns, [], skipFrozen, includeDebugInfo);
+    if (innermostResult.matched) {
+        if (includeDebugInfo) {
+            return {
+                changed: true,
+                expr: innermostResult.expr,
+                rule: innermostResult.rule,
+                path: innermostResult.path,
+                before: innermostResult.before,
+                after: innermostResult.after
+            };
+        } else {
+            return {changed: true, expr: innermostResult.expr};
+        }
+    }
+
+    // Pass 2: Standard outermost-first traversal for non-innermost rules
     // Track path and parent chain for scope checking
     const work = [{parent: null, node: expr, path: [], parents: []}];
 
@@ -1196,9 +1288,9 @@ function applyOnceIterative(expr, rules, foldPrimsFn = null, preserveUnboundPatt
             continue;
         }
 
-        // Try to match and apply a rule at this node
+        // Try to match and apply a rule at this node (excluding innermost rules)
         const matchResult = tryMatchRule(node, rules, foldPrimsFn, preserveUnboundPatterns, parents);
-        if (matchResult.matched) {
+        if (matchResult.matched && !matchResult.rule.innermost) {
             const out = matchResult.result;
 
             // Reconstruct the tree with the replacement

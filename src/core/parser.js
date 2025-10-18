@@ -438,7 +438,7 @@ export class SymaParser {
     // =============== REPL-specific parsing ===============
 
     parseInlineRule(name, ruleText) {
-        // Parse inline rule syntax: pattern → replacement [:guard condition] [:scope Parent] [priority]
+        // Parse inline rule syntax: pattern → replacement [:guard condition] [:scope Parent] [:innermost] [priority]
         const arrow = ruleText.includes('→') ? '→' : '->';
         const parts = ruleText.split(arrow);
         if (parts.length !== 2) {
@@ -448,17 +448,19 @@ export class SymaParser {
         const pattern = this.parseString(parts[0].trim());
         let remaining = parts[1].trim();
 
-        // Extract modifiers: :guard, :scope, :with, and priority
+        // Extract modifiers: :guard, :scope, :with, :innermost, and priority
         let guard = null;
         let scope = null;
         let withPattern = null;
+        let innermost = false;
         let priority = null;
 
         // Find positions of all keywords
         const keywords = {
             ':guard': remaining.indexOf(':guard'),
             ':scope': remaining.indexOf(':scope'),
-            ':with': remaining.indexOf(':with')
+            ':with': remaining.indexOf(':with'),
+            ':innermost': remaining.indexOf(':innermost')
         };
 
         // Sort keywords by position (those that exist)
@@ -509,6 +511,14 @@ export class SymaParser {
                     value = tokens.slice(0, -1).join(' ');
                 }
                 withPattern = this.parseString(value);
+            } else if (kw === ':innermost') {
+                // :innermost is a flag with no value
+                innermost = true;
+                // Check if there's a priority number after it
+                const tokens = value.split(/\s+/).filter(t => t.length > 0);
+                if (tokens.length > 0 && /^\d+$/.test(tokens[tokens.length - 1]) && nextKwPos === -1) {
+                    priority = parseInt(tokens[tokens.length - 1]);
+                }
             }
         }
 
@@ -526,7 +536,7 @@ export class SymaParser {
             replacement = this.parseString(replacementText);
         }
 
-        // Build R[name, pattern, replacement, :guard?, guard?, :scope?, scope?, :with?, withPattern?, priority?]
+        // Build R[name, pattern, replacement, :guard?, guard?, :scope?, scope?, :with?, withPattern?, :innermost?, priority?]
         const ruleArgs = [Str(name), pattern, replacement];
 
         if (guard !== null) {
@@ -544,7 +554,12 @@ export class SymaParser {
             ruleArgs.push(withPattern);
         }
 
+        if (innermost) {
+            ruleArgs.push(Sym(':innermost'));
+        }
+
         if (priority !== null) {
+            ruleArgs.push(Sym(':prio'));
             ruleArgs.push(Num(priority));
         }
 
