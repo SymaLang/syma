@@ -794,6 +794,177 @@ function matchArgsWithRest(pArgs, tArgs, env) {
     return null; // no split worked
 }
 
+/**
+ * Generate all possible match environments for a pattern and subject.
+ * Used when guards are present to try all rest variable splits.
+ */
+function matchAll(pat, subj, env = {}) {
+    const results = [];
+    matchAllHelper(pat, subj, env, results);
+    return results;
+}
+
+function matchAllHelper(pat, subj, env, results) {
+    // Pattern variable?
+    if (isVar(pat)) {
+        const name = pat.a[0].v;
+        if (name === "_") {
+            results.push(env);
+            return;
+        }
+        if (Object.prototype.hasOwnProperty.call(env, name)) {
+            if (deq(env[name], subj)) {
+                results.push(env);
+            }
+            return;
+        }
+        results.push({ ...env, [name]: subj });
+        return;
+    }
+
+    // Literals
+    if (isSym(pat) || isNum(pat) || isStr(pat)) {
+        if (deq(pat, subj)) {
+            results.push(env);
+        }
+        return;
+    }
+
+    // VarRest not allowed outside Call
+    if (isVarRest(pat)) return;
+
+    // Calls
+    if (isCall(pat)) {
+        if (!isCall(subj)) return;
+
+        // Handle empty calls
+        if (pat.h === null && subj.h === null) {
+            matchArgsWithRestAll(pat.a, subj.a, env, results);
+            return;
+        }
+        if (pat.h === null || subj.h === null) return;
+
+        // Match as flat sequences
+        const patSeq = [pat.h, ...pat.a];
+        const subjSeq = [subj.h, ...subj.a];
+        matchArgsWithRestAll(patSeq, subjSeq, env, results);
+        return;
+    }
+}
+
+/**
+ * Generate all possible environments for matching argument vectors with rest variables
+ */
+function matchArgsWithRestAll(pArgs, tArgs, env, results) {
+    // Fast path: no VarRest
+    const hasRest = pArgs.some(pa => isVarRest(pa));
+    if (!hasRest) {
+        if (pArgs.length !== tArgs.length) return;
+        let e = env;
+        for (let i = 0; i < pArgs.length; i++) {
+            const envs = [];
+            matchAllHelper(pArgs[i], tArgs[i], e, envs);
+            if (envs.length === 0) return;
+            e = envs[0]; // Take first match for non-rest patterns
+        }
+        results.push(e);
+        return;
+    }
+
+    // Find first VarRest index
+    const idx = pArgs.findIndex(pa => isVarRest(pa));
+    const prefix = pArgs.slice(0, idx);
+    const restVar = pArgs[idx];
+    const suffix = pArgs.slice(idx + 1);
+
+    // Check for greedy anchor
+    const hasGreedyAnchor = suffix.length > 0 && isGreedyAnchor(suffix[0]);
+
+    if (hasGreedyAnchor) {
+        // Greedy matching logic (same as before, but collect all valid environments)
+        const greedyAnchor = suffix[0];
+        const targetSymbol = greedyAnchor.a[0].v;
+        const remainingSuffix = suffix.slice(1);
+
+        // Match prefix
+        let e = env;
+        for (let i = 0; i < prefix.length; i++) {
+            const envs = [];
+            matchAllHelper(prefix[i], tArgs[i], e, envs);
+            if (envs.length === 0) return;
+            e = envs[0];
+        }
+
+        const remaining = tArgs.slice(prefix.length);
+        const occurrences = [];
+        for (let i = 0; i < remaining.length; i++) {
+            if (isSym(remaining[i]) && remaining[i].v === targetSymbol) {
+                occurrences.push(i);
+            }
+        }
+
+        if (occurrences.length === 0) return;
+
+        // Try all occurrences from last to first
+        for (let i = occurrences.length - 1; i >= 0; i--) {
+            const anchorPos = occurrences[i];
+            const middle = remaining.slice(0, anchorPos);
+            const tail = remaining.slice(anchorPos + 1);
+
+            const name = restVar.a[0].v;
+            let e1 = e;
+            if (name === "_") {
+                e1 = e;
+            } else if (Object.prototype.hasOwnProperty.call(e1, name)) {
+                const bound = e1[name];
+                if (!Array.isArray(bound) || !arrEq(bound, middle)) {
+                    continue;
+                }
+            } else {
+                e1 = { ...e1, [name]: middle };
+            }
+
+            matchArgsWithRestAll(remainingSuffix, tail, e1, results);
+        }
+        return;
+    }
+
+    // The suffix must match the tail; compute minimal tail length
+    const minTail = suffix.reduce((n, pat) => n + (isVarRest(pat) ? 0 : 1), 0);
+    if (tArgs.length < prefix.length + minTail) return;
+
+    // Match prefix
+    let e = env;
+    for (let i = 0; i < prefix.length; i++) {
+        const envs = [];
+        matchAllHelper(prefix[i], tArgs[i], e, envs);
+        if (envs.length === 0) return;
+        e = envs[0];
+    }
+
+    // Try all possible splits for this rest var
+    const name = restVar.a[0].v;
+    for (let take = 0; take <= (tArgs.length - prefix.length - minTail); take++) {
+        const middle = tArgs.slice(prefix.length, prefix.length + take);
+        const tail = tArgs.slice(prefix.length + take);
+
+        let e1 = e;
+        if (name === "_") {
+            e1 = e;
+        } else if (Object.prototype.hasOwnProperty.call(e1, name)) {
+            const bound = e1[name];
+            if (!Array.isArray(bound) || !arrEq(bound, middle)) {
+                continue;
+            }
+        } else {
+            e1 = { ...e1, [name]: middle };
+        }
+
+        // Recursively match suffix against tail, collecting all results
+        matchArgsWithRestAll(suffix, tail, e1, results);
+    }
+}
+
 /* Env: plain object mapping var name -> Expr */
 export function match(pat, subj, env = {}) {
     // Pattern variable?
@@ -1169,8 +1340,13 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
             }
         }
 
-        const env = match(lhsToMatch, expr, {});
-        if (env) {
+        // When a guard is present, we may need to try multiple matches
+        // (different rest variable splits) until one satisfies the guard
+        const allEnvs = guardToEval ? matchAll(lhsToMatch, expr, {}) : [match(lhsToMatch, expr, {})];
+
+        for (const env of allEnvs) {
+            if (!env) continue;
+
             // If there's a :with pattern, match it and merge bindings
             let finalEnv = env;
             if (r.withPattern) {
@@ -1224,12 +1400,13 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
                 const evaluatedGuard = normalizeWithFrozen(guardValue, ruleIndex, 100, false, foldPrimsFn, preserveUnboundPatterns);
                 // Guard must evaluate to the symbol True
                 if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
-                    continue; // Guard failed, try next rule
+                    continue; // Guard failed, try next env (next rest split)
                 }
             }
             const out = subst(rhsToSubst, finalEnv, preserveUnboundPatterns);
             return {matched: true, result: out, rule: r};
         }
+        // If we get here, all environments were tried and none matched (guard failed or :with failed)
     }
     return {matched: false};
 }

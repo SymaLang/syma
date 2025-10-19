@@ -125,8 +125,8 @@ When wildcards appear in both the pattern and replacement of a rule, they are ma
 
 ```lisp
 ; First _ in pattern matches first _ in replacement, etc.
-{R "Swap" {Pair _ _} {Pair _ _}}     ; Swaps the two values
-{R "First" {Tuple _ _ _} _}          ; Returns first element, discards rest
+{R "Swap" {Pair a_ b_} {Pair b_ a_}}     ; Swaps the two values
+{R "First" {Tuple _ a_ b_} _}          ; Returns first element, discards rest
 {R "Omit" {Process _ _} {Result}}    ; Match two values but use neither
 ```
 
@@ -204,6 +204,79 @@ Like single wildcards, rest wildcards (`...` or `..`) are matched by position wh
 
 The same validation rules apply: counts must match or replacement must have zero.
 
+### Greedy Anchors for Rest Patterns
+
+By default, rest variables use **non-greedy matching** - they match the shortest possible sequence. Greedy anchors allow you to match to the **last** occurrence of a symbol instead of the first.
+
+**Syntax:**
+```lisp
+..symbol     ; Greedy anchor - matches to LAST occurrence of symbol
+```
+
+**How it works:**
+
+When a greedy anchor appears after a rest variable in a pattern, the rest variable will capture everything up to the **last** occurrence of the anchor symbol:
+
+```lisp
+; Non-greedy (default behavior):
+{before.. [ inner.. ] after..}
+; Input: {1 [ 2 [ 3 ] 4 ] 5}
+; Matches: before=[1], inner=[2, [, 3], after=[4, ], 5]
+;                      ↑ matches to FIRST ]
+
+; Greedy (with anchor):
+{before.. [ inner.. ..] after..}
+; Input: {1 [ 2 [ 3 ] 4 ] 5}
+; Matches: before=[1], inner=[2, [, 3, ], 4], after=[5]
+;                      ↑ matches to LAST ]
+```
+
+**Practical Examples:**
+
+```lisp
+; Parse nested brackets greedily
+:rule ParseBrackets
+  {before.. [ content.. ..] after..}
+  -> {Bracket {Before before..} {Content content..} {After after..}}
+
+; Input: {Start [ nested [ deep ] here ] End}
+; Result: {Bracket
+;           {Before Start}
+;           {Content nested [ deep ] here}
+;           {After End}}
+
+; Extract content between first opening and last closing delimiter
+:rule ExtractBalanced
+  {prefix.. < body.. ..> suffix..}
+  -> {Extracted body..}
+
+; Input: {Text < outer < inner > text > End}
+; Result: {Extracted outer < inner > text}
+
+; Match to last occurrence of a specific marker
+:rule SplitAtLast
+  {head.. MARKER tail.. ..MARKER rest..}
+  -> {Split {Head head..} {Middle tail..} {Tail rest..}}
+
+; Input: {A MARKER B MARKER C}
+; Result: {Split {Head A} {Middle MARKER B} {Tail C}}
+```
+
+**Key Points:**
+
+- Greedy anchors only affect the rest variable **immediately before** them
+- They work by finding all occurrences of the target symbol and trying matches from last to first
+- The anchor symbol itself is consumed (not included in the matched sequence)
+- Multiple greedy anchors can appear in the same pattern, each operating independently
+- Greedy anchors are particularly useful for parsing nested structures like brackets, quotes, or delimiters
+
+**Common Use Cases:**
+
+- **Nested bracket parsing**: Match content between outermost delimiters
+- **Balanced delimiter extraction**: Extract text between first open and last close
+- **Reverse prefix matching**: Find content before the last occurrence of a marker
+- **Greedy splitting**: Split at the rightmost occurrence of a separator
+
 **Exception for RuleRules:**
 
 In meta-rules (RuleRules), wildcards are treated as pattern constructs and are **not** indexed or validated. This allows RuleRules to freely manipulate pattern variables:
@@ -245,6 +318,11 @@ Pattern matching with mixed syntax:
 {prefix.. {Err e..} suffix..}    ; Match compound with Err somewhere in the middle
 {first.. last_}                   ; Match compound, capturing all but last element
 
+;; Greedy anchors for matching to last occurrence:
+{before.. [ content.. ..] after..}  ; Match to LAST ] instead of first
+{start.. < body.. ..> end..}        ; Extract content between first < and last >
+{prefix.. SEP rest.. ..SEP tail..}  ; Split at last occurrence of SEP
+
 ;; Practical examples using flat sequence semantics:
 {R "BubbleError"
    {.. {Err msg..} ..}            ; Match any compound containing an error
@@ -271,7 +349,7 @@ Syma supports a module system for organizing code into reusable, composable unit
 ```lisp
 {Module Module/Name
   {Export Symbol1 Symbol2 ...}           ; What this module provides
-  {Import Other/Module as Alias [open]}  ; Dependencies
+  {Import Other/Module as Alias open macro}  ; Dependencies
   {Defs {Name value} ...}                ; Constants/definitions
   {Program ...}                           ; Main program (entry modules only)
   {Rules ...}                             ; Transformation rules
@@ -283,7 +361,7 @@ Syma supports a module system for organizing code into reusable, composable unit
 Module(Module/Name,
   Export(Symbol1, Symbol2, ...),         ; What this module provides
   Import(Other/Module, as, Alias),       ; Dependencies (note: 'as' is literal)
-  Import(Core/KV, as, KV, open),         ; Open import
+  Import(Core/KV, as, KV, open, macro),         ; Open import
   Defs(Name(value), ...),                ; Constants/definitions
   Program(...),                          ; Main program (entry modules only)
   Rules(...),                            ; Transformation rules
@@ -1391,16 +1469,17 @@ Module definitions become rules with high priority (1000):
 
 1. **Symbolic expressions** as universal syntax
 2. **Module system** for code organization and namespacing
-3. **Pattern matching** with variables and wildcards
-4. **Rewrite rules** for computation and transformation
-5. **Two-pass normalization** - innermost-first for `:innermost` rules, then outermost-first for regular rules
-6. **Symbol qualification** for namespace isolation
-7. **Context-aware projection** for UI rendering
-8. **Event handling** through `Apply` patterns with lifting rules
-9. **Symbolic effects** for pure I/O representation
-10. **Event action combinators** for composable UI interactions
-11. **Meta-programming** with rule-rewriting rules
-12. **Priority system** for controlling rule application order
-13. **Evaluation strategies** - `:innermost` for bottom-up, `:scope` for context restrictions
+3. **Pattern matching** with variables, wildcards, and rest patterns
+4. **Greedy anchors** - `..symbol` for matching to last occurrence instead of first
+5. **Rewrite rules** for computation and transformation
+6. **Two-pass normalization** - innermost-first for `:innermost` rules, then outermost-first for regular rules
+7. **Symbol qualification** for namespace isolation
+8. **Context-aware projection** for UI rendering
+9. **Event handling** through `Apply` patterns with lifting rules
+10. **Symbolic effects** for pure I/O representation
+11. **Event action combinators** for composable UI interactions
+12. **Meta-programming** with rule-rewriting rules
+13. **Priority system** for controlling rule application order
+14. **Evaluation strategies** - `:innermost` for bottom-up, `:scope` for context restrictions
 
 Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.
