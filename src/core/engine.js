@@ -13,7 +13,7 @@ const isVar = n => isCall(n) && isSym(n.h) && n.h.v === "Var" && n.a.length === 
 const isVarRest = n =>
     isCall(n) && isSym(n.h) && n.h.v === "VarRest" && n.a.length === 1 && isStr(n.a[0]);
 const isGreedyAnchor = n =>
-    isCall(n) && isSym(n.h) && n.h.v === "GreedyAnchor" && n.a.length === 1 && isSym(n.a[0]);
+    isCall(n) && isSym(n.h) && n.h.v === "GreedyAnchor" && n.a.length === 1;
 
 /**
  * Analyze a pattern to determine its indexing key.
@@ -719,29 +719,30 @@ function matchArgsWithRest(pArgs, tArgs, env) {
     const hasGreedyAnchor = suffix.length > 0 && isGreedyAnchor(suffix[0]);
 
     if (hasGreedyAnchor) {
-        // Greedy matching: find LAST occurrence of the anchor symbol
+        // Greedy matching: find LAST occurrence matching the anchor pattern
         const greedyAnchor = suffix[0];
-        const targetSymbol = greedyAnchor.a[0].v;
+        const anchorPattern = greedyAnchor.a[0];  // Can be any pattern, not just a symbol
         const remainingSuffix = suffix.slice(1);
         const remaining = tArgs.slice(prefix.length);
 
-        // Find all occurrences of the target symbol
-        const occurrences = [];
+        // Find all positions where the anchor pattern matches
+        const matchPositions = [];
         for (let i = 0; i < remaining.length; i++) {
-            if (isSym(remaining[i]) && remaining[i].v === targetSymbol) {
-                occurrences.push(i);
+            const anchorEnv = match(anchorPattern, remaining[i], {});
+            if (anchorEnv) {
+                matchPositions.push({pos: i, env: anchorEnv});
             }
         }
 
-        if (occurrences.length === 0) {
-            return null; // Target symbol not found
+        if (matchPositions.length === 0) {
+            return null; // Pattern not found
         }
 
-        // Try matching from the last occurrence backwards
-        for (let i = occurrences.length - 1; i >= 0; i--) {
-            const anchorPos = occurrences[i];
+        // Try matching from the last occurrence backwards (greedy)
+        for (let i = matchPositions.length - 1; i >= 0; i--) {
+            const {pos: anchorPos, env: anchorEnv} = matchPositions[i];
             const middle = remaining.slice(0, anchorPos);
-            const tail = remaining.slice(anchorPos + 1); // Skip the anchor symbol itself
+            const tail = remaining.slice(anchorPos + 1); // Skip the matched element
 
             // Bind the VarRest
             let e1 = e;
@@ -756,6 +757,9 @@ function matchArgsWithRest(pArgs, tArgs, env) {
             } else {
                 e1 = { ...e1, [name]: middle };
             }
+
+            // Merge anchor pattern bindings with rest variable bindings
+            e1 = { ...e1, ...anchorEnv };
 
             // Match remaining suffix against tail
             const e2 = matchArgsWithRest(remainingSuffix, tail, e1);
@@ -890,7 +894,7 @@ function matchArgsWithRestAll(pArgs, tArgs, env, results) {
     if (hasGreedyAnchor) {
         // Greedy matching logic (same as before, but collect all valid environments)
         const greedyAnchor = suffix[0];
-        const targetSymbol = greedyAnchor.a[0].v;
+        const anchorPattern = greedyAnchor.a[0];  // Can be any pattern, not just a symbol
         const remainingSuffix = suffix.slice(1);
 
         // Match prefix
@@ -903,18 +907,21 @@ function matchArgsWithRestAll(pArgs, tArgs, env, results) {
         }
 
         const remaining = tArgs.slice(prefix.length);
-        const occurrences = [];
+
+        // Find all positions where the anchor pattern matches
+        const matchPositions = [];
         for (let i = 0; i < remaining.length; i++) {
-            if (isSym(remaining[i]) && remaining[i].v === targetSymbol) {
-                occurrences.push(i);
+            const anchorEnv = match(anchorPattern, remaining[i], {});
+            if (anchorEnv) {
+                matchPositions.push({pos: i, env: anchorEnv});
             }
         }
 
-        if (occurrences.length === 0) return;
+        if (matchPositions.length === 0) return;
 
         // Try all occurrences from last to first
-        for (let i = occurrences.length - 1; i >= 0; i--) {
-            const anchorPos = occurrences[i];
+        for (let i = matchPositions.length - 1; i >= 0; i--) {
+            const {pos: anchorPos, env: anchorEnv} = matchPositions[i];
             const middle = remaining.slice(0, anchorPos);
             const tail = remaining.slice(anchorPos + 1);
 
@@ -930,6 +937,9 @@ function matchArgsWithRestAll(pArgs, tArgs, env, results) {
             } else {
                 e1 = { ...e1, [name]: middle };
             }
+
+            // Merge anchor pattern bindings with rest variable bindings
+            e1 = { ...e1, ...anchorEnv };
 
             matchArgsWithRestAll(remainingSuffix, tail, e1, results);
         }

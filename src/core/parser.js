@@ -47,6 +47,7 @@ export class SymaParser {
         const len = src.length;
         let line = 1;
         let col = 1;
+        let lastTokenEnd = 0; // Track end position of last token
 
         const isWS = c => c === ' ' || c === '\t' || c === '\n' || c === '\r';
         const isDigit = c => c >= '0' && c <= '9';
@@ -62,6 +63,13 @@ export class SymaParser {
                 col++;
             }
             i++;
+        };
+
+        const addToken = (token) => {
+            // Check if this token is adjacent to the previous one (no whitespace/comments between)
+            token.adjacent = (i > 0 && lastTokenEnd === token.pos.index);
+            tokens.push(token);
+            lastTokenEnd = i; // Update last token end position
         };
 
         while (i < len) {
@@ -113,7 +121,7 @@ export class SymaParser {
 
             // Delimiters
             if (c === '{' || c === '}' || c === '(' || c === ')' || c === ',') {
-                tokens.push({ t: c, pos: startPos });
+                addToken({ t: c, pos: startPos });
                 advance();
                 continue;
             }
@@ -150,7 +158,7 @@ export class SymaParser {
                 if (i > len || src[i-1] !== quoteChar) {
                     this.die('Unterminated string', startPos);
                 }
-                tokens.push({ t: 'str', v: s, pos: startPos });
+                addToken({ t: 'str', v: s, pos: startPos });
                 continue;
             }
 
@@ -180,7 +188,7 @@ export class SymaParser {
 
                 const num = Number(numStr);
                 if (!Number.isFinite(num)) this.die(`Bad number: ${numStr}`, startPos);
-                tokens.push({ t: 'num', v: num, pos: startPos });
+                addToken({ t: 'num', v: num, pos: startPos });
                 continue;
             }
 
@@ -193,7 +201,7 @@ export class SymaParser {
                 advance();
             }
             if (!sym.length) this.die(`Unexpected character: ${c}`, startPos);
-            tokens.push({ t: 'sym', v: sym, pos: startPos });
+            addToken({ t: 'sym', v: sym, pos: startPos });
         }
         return tokens;
     }
@@ -244,8 +252,17 @@ export class SymaParser {
                     const name = sym.v.slice(0, -suffix.length);
 
                     if (name === '') {
-                        // Just ... or .. or ___ is wildcard rest
-                        expr = Call(Sym('VarRest'), Str('_'));
+                        // Check for complex greedy anchor: ..{pattern} or ..(pattern)
+                        // If .. is immediately followed by { or (, parse as greedy anchor
+                        const nextTok = peek();
+                        if (nextTok && (nextTok.t === '{' || nextTok.t === '(') && nextTok.adjacent) {
+                            // Parse the complex pattern
+                            const pattern = parseExpr();
+                            expr = Call(Sym('GreedyAnchor'), pattern);
+                        } else {
+                            // Just ... or .. or ___ is wildcard rest
+                            expr = Call(Sym('VarRest'), Str('_'));
+                        }
                     } else if (name.endsWith('_')) {
                         // Remove trailing underscore from name (e.g., xs_... → VarRest "xs")
                         expr = Call(Sym('VarRest'), Str(name.slice(0, -1)));
@@ -612,10 +629,15 @@ export class SymaParser {
                 }
             }
 
-            // Handle GreedyAnchor: {GreedyAnchor symbol} → ..symbol
-            if (isSym(node.h) && node.h.v === 'GreedyAnchor' &&
-                node.a.length === 1 && isSym(node.a[0])) {
-                return `..${node.a[0].v}`;
+            // Handle GreedyAnchor: {GreedyAnchor pattern} → ..pattern or ..{pattern}
+            if (isSym(node.h) && node.h.v === 'GreedyAnchor' && node.a.length === 1) {
+                const pattern = node.a[0];
+                // Simple symbol: ..symbol
+                if (isSym(pattern)) {
+                    return `..${pattern.v}`;
+                }
+                // Complex pattern: ..{pattern}
+                return `..${this.nodeToString(pattern, indent)}`;
             }
 
             // Handle Var shorthand: {Var "name"} → name_
@@ -711,10 +733,15 @@ export class SymaParser {
                 }
             }
 
-            // Handle GreedyAnchor: {GreedyAnchor symbol} → ..symbol
-            if (isSym(node.h) && node.h.v === 'GreedyAnchor' &&
-                node.a.length === 1 && isSym(node.a[0])) {
-                return `..${node.a[0].v}`;
+            // Handle GreedyAnchor: {GreedyAnchor pattern} → ..pattern or ..{pattern}
+            if (isSym(node.h) && node.h.v === 'GreedyAnchor' && node.a.length === 1) {
+                const pattern = node.a[0];
+                // Simple symbol: ..symbol
+                if (isSym(pattern)) {
+                    return `..${pattern.v}`;
+                }
+                // Complex pattern: ..{pattern}
+                return `..${this.prettyPrint(pattern, indent, opts)}`;
             }
 
             // Handle Var shorthand: {Var "name"} → name_
