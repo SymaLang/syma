@@ -31,13 +31,12 @@ export const symaMonarchTokens = {
         'Universe', 'Program', 'Rules', 'Module', 'Export', 'Import', 'Defs',
         'R', 'Apply', 'Effects', 'Flow', 'EffQueue', 'Inbox',
         'Lambda', 'Let', 'If', 'Match', 'Case', 'Quote', 'Unquote',
-        'Var', 'VarRest', 'Project', 'true', 'false', 'nil'
+        'Var', 'VarRest', 'Project', 'True', 'False', 'Empty'
     ],
 
     operators: [
         '+', '-', '*', '/', '%', '=', '!=', '<', '>', '<=', '>=',
         'and', 'or', 'not', '&', '|', '^', '~', '<<', '>>',
-        'head', 'tail', 'cons', 'append'
     ],
 
     // Regular expressions

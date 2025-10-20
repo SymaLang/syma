@@ -10,10 +10,12 @@ The projector architecture provides a modular way to render symbolic UI represen
 BaseProjector (abstract)
     ├── DOMProjector      - Renders to browser DOM
     ├── TraceProjector    - Renders to text trace format
+    ├── StringProjector   - Renders to HTML strings (SSR/SSG)
+    ├── TerminalProjector - Renders to terminal/CLI
     └── Future projectors...
         ├── CanvasProjector   - Could render to HTML5 Canvas
-        ├── TerminalProjector - Could render to terminal/CLI
-        └── ServerProjector   - Could render to HTML strings
+        ├── ServerProjector   - Server-side rendering variant
+        └── PDFProjector      - Generate PDF documents
 ```
 
 ## Core Concepts
@@ -78,6 +80,42 @@ UI Tree:
   </Div>
 === END TRACE ===
 ```
+
+### StringProjector
+
+Renders symbolic UI to HTML string:
+- Server-side rendering (SSR)
+- Static site generation (SSG)
+- HTML email templates
+- Pre-rendered page shells
+- SEO-friendly output
+
+Features:
+- Supports `/@ projection` with context
+- Handles `Project[...]` and `Show[...]` nodes
+- Omits event handlers (client-side only)
+- Omits bindings (bind-value, bind-checked, etc.)
+- Escapes HTML special characters
+- Proper self-closing tags
+
+Can be used directly via `renderToString()` utility or through the `ProjectToString` primitive:
+
+```lisp
+; Simple usage without state (for static HTML)
+(ProjectToString
+  (Div :class "card"
+    (H1 "Hello World")))
+
+; With state (for dynamic content)
+(ProjectToString
+  (Div :class "card"
+    (H1 "Hello, " (Show name)))
+  (State (name "Alice")))
+```
+
+Returns: `"<div class=\"card\"><h1>Hello World</h1></div>"`
+
+The state parameter is optional - if omitted, `Empty` is used as the default state.
 
 ## Usage
 

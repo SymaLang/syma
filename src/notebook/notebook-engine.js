@@ -155,6 +155,18 @@ export class NotebookEngine {
             // Extract current rules
             const rules = engine.extractRules(this.repl.universe);
 
+            // Create context-aware foldPrims for this execution
+            const createFoldPrimsWithContext = () => (expr, skipFolds = []) => {
+                const context = {
+                    universe: this.repl.universe,
+                    normalizeFunc: (e, r, maxSteps = 10000, skipPrims = false) =>
+                        engine.normalize(e, r, maxSteps, skipPrims, foldPrimsWithContext),
+                    extractRulesFunc: engine.extractRules
+                };
+                return foldPrims(expr, skipFolds, context);
+            };
+            const foldPrimsWithContext = createFoldPrimsWithContext();
+
             // Normalize the expression with optional trace
             let result;
             let trace = null;
@@ -169,7 +181,7 @@ export class NotebookEngine {
                     rules,
                     this.repl.maxSteps,
                     false,
-                    foldPrims
+                    foldPrimsWithContext
                 );
                 result = traceResult.result;
                 trace = traceResult.trace;
@@ -346,7 +358,7 @@ export class NotebookEngine {
                     });
                 }
             } else {
-                result = engine.normalize(expr, rules, this.repl.maxSteps, false, foldPrims);
+                result = engine.normalize(expr, rules, this.repl.maxSteps, false, foldPrimsWithContext);
             }
 
             // Format the result
@@ -570,6 +582,18 @@ export class NotebookEngine {
                                         const expr = this.repl.parser.parseString(traceContent);
                                         const rules = engine.extractRules(this.repl.universe);
 
+                                        // Create context-aware foldPrims for this :trace execution
+                                        const createTraceFoldPrimsWithContext = () => (expr, skipFolds = []) => {
+                                            const context = {
+                                                universe: this.repl.universe,
+                                                normalizeFunc: (e, r, maxSteps = 10000, skipPrims = false) =>
+                                                    engine.normalize(e, r, maxSteps, skipPrims, traceFoldPrimsWithContext),
+                                                extractRulesFunc: engine.extractRules
+                                            };
+                                            return foldPrims(expr, skipFolds, context);
+                                        };
+                                        const traceFoldPrimsWithContext = createTraceFoldPrimsWithContext();
+
                                         // Start timing
                                         const startTime = performance.now();
 
@@ -579,7 +603,7 @@ export class NotebookEngine {
                                             rules,
                                             this.repl.maxSteps || 10000,
                                             false,
-                                            foldPrims
+                                            traceFoldPrimsWithContext
                                         );
 
                                         // End timing

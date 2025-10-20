@@ -88,29 +88,48 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
 
     // Apply RuleRules to transform the Universe itself
     // This makes the transformations permanent in the Universe data structure
-    uni = applyRuleRules(uni, foldPrims);
+    // Use plain foldPrims here (no universe context needed during meta-rule processing)
+    uni = applyRuleRules(uni, (expr, skipFolds = []) => foldPrims(expr, skipFolds));
 
     GLOBAL_UNIVERSE = uni;
     GLOBAL_RULES = extractRules(uni);
 
     // Normalize the Program on initial load to apply any startup rules
+    // Use plain foldPrims here (ProjectToString shouldn't be used during initialization)
     const initialProgram = getProgram(GLOBAL_UNIVERSE);
     if (initialProgram) {
-        const normalized = normalize(initialProgram, GLOBAL_RULES, 10000, false, foldPrims);
+        const normalized = normalize(initialProgram, GLOBAL_RULES, 10000, false, (expr, skipFolds = []) => foldPrims(expr, skipFolds));
         GLOBAL_UNIVERSE = setProgram(GLOBAL_UNIVERSE, normalized);
     }
 
     const mount = document.querySelector(mountSelector);
     if (!mount) throw new Error(`Mount not found: ${mountSelector}`);
 
-    // Bind normalize functions with foldPrims
+    // Create context-aware foldPrims wrapper
+    // This captures the universe context needed by special primitives like ProjectToString
+    const createFoldPrimsWithContext = () => (expr, skipFolds = []) => {
+        const context = {
+            universe: GLOBAL_UNIVERSE,
+            normalizeFunc: normalizeBound,
+            extractRulesFunc: extractRules
+        };
+        return foldPrims(expr, skipFolds, context);
+    };
+
+    // Bind normalize functions with context-aware foldPrims
+    // Note: These need to be defined before createFoldPrimsWithContext uses them
+    let foldPrimsWithContext = createFoldPrimsWithContext();
+
     const normalizeBound = (expr, rules, maxSteps = 10000, skipPrims = false) => {
-        return normalize(expr, rules, maxSteps, skipPrims, foldPrims);
+        return normalize(expr, rules, maxSteps, skipPrims, foldPrimsWithContext);
     };
 
     const normalizeWithTraceBound = (expr, rules, maxSteps = 10000, skipPrims = false) => {
-        return normalizeWithTrace(expr, rules, maxSteps, skipPrims, foldPrims);
+        return normalizeWithTrace(expr, rules, maxSteps, skipPrims, foldPrimsWithContext);
     };
+
+    // Recreate foldPrimsWithContext now that normalizeBound is defined
+    foldPrimsWithContext = createFoldPrimsWithContext();
 
     // Create and initialize projector
     GLOBAL_PROJECTOR = ProjectorFactory.create(projectorType, {
@@ -200,12 +219,34 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
 
 /* --------------------- Expose API ---------------------------- */
 
-// Create wrapped functions for export
-const normalizeBrowser = (expr, rules, maxSteps = 10000, skipPrims = false) =>
-    normalize(expr, rules, maxSteps, skipPrims, foldPrims);
+// Create wrapped functions for export with universe context
+const normalizeBrowser = (expr, rules, maxSteps = 10000, skipPrims = false) => {
+    // Create context-aware foldPrims if GLOBAL_UNIVERSE is available
+    const foldPrimsFn = GLOBAL_UNIVERSE ? (e, skipFolds = []) => {
+        const context = {
+            universe: GLOBAL_UNIVERSE,
+            normalizeFunc: normalizeBrowser,
+            extractRulesFunc: extractRules
+        };
+        return foldPrims(e, skipFolds, context);
+    } : (e, skipFolds = []) => foldPrims(e, skipFolds);
 
-const normalizeWithTraceBrowser = (expr, rules, maxSteps = 10000, skipPrims = false) =>
-    normalizeWithTrace(expr, rules, maxSteps, skipPrims, foldPrims);
+    return normalize(expr, rules, maxSteps, skipPrims, foldPrimsFn);
+};
+
+const normalizeWithTraceBrowser = (expr, rules, maxSteps = 10000, skipPrims = false) => {
+    // Create context-aware foldPrims if GLOBAL_UNIVERSE is available
+    const foldPrimsFn = GLOBAL_UNIVERSE ? (e, skipFolds = []) => {
+        const context = {
+            universe: GLOBAL_UNIVERSE,
+            normalizeFunc: normalizeBrowser,
+            extractRulesFunc: extractRules
+        };
+        return foldPrims(e, skipFolds, context);
+    } : (e, skipFolds = []) => foldPrims(e, skipFolds);
+
+    return normalizeWithTrace(expr, rules, maxSteps, skipPrims, foldPrimsFn);
+};
 
 window.SymbolicHost = {
     boot,

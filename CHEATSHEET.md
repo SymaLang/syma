@@ -100,6 +100,12 @@ This document lists all available primitive operations in the Syma language runt
 | `Serialize` | - | `[Expr]` | `Str` | Convert expression to JSON string |
 | `Deserialize` | - | `[Str]` | `Expr` | Parse JSON string back to expression |
 
+## Projection Operations
+
+| Primitive | Signature | Returns | Description |
+|-----------|-----------|---------|-------------|
+| `ProjectToString` | `[UI]`\|`[UI, State]` | `Str` | Render UI node to HTML string (omits event handlers/bindings, optional state) |
+
 ## Notes
 
 - **Primitives fold during normalization**: These operations are evaluated automatically when their arguments are fully computed values.
@@ -167,4 +173,13 @@ This document lists all available primitive operations in the Syma language runt
 {Debug "x" {+ 2 3}}    ; Logs "[DEBUG x] 5", returns 5
 {CharFromCode 65}      ; → "A"
 {Reverse "a" "b" "c"}  ; → Splice["c", "b", "a"] (can be splatted)
+
+; Projection Operations
+{ProjectToString {Div :class "card" {H1 "Hello"}}}
+; → "<div class=\"card\"><h1>Hello</h1></div>"
+
+{ProjectToString
+  {Div {P "Hello, " {Show name}}}
+  {State {KV name "Alice"}}}
+; → "<div><p>Hello, Alice</p></div>"
 ```

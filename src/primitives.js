@@ -8,22 +8,26 @@
 
 import { K, Sym, Num, Str, isNum, isStr, isSym, isCall, Splice, isSplice, Call } from './ast-helpers.js';
 import { freshId } from './effects/processor.js';
+import { renderToString } from './projectors/string.js';
 
 /**
  * Fold primitive operations into their computed values
  * Called during normalization to evaluate built-in functions
+ * @param {Object} node - The expression to fold
+ * @param {Array} skipFolds - Array of primitive names to skip
+ * @param {Object} context - Optional context for special primitives (universe, normalizeFunc, extractRulesFunc)
  */
-export function foldPrims(node, skipFolds = []) {
+export function foldPrims(node, skipFolds = [], context = null) {
     if (isCall(node)) {
         // Handle empty calls (node.h === null)
         if (node.h === null) {
             // Fold arguments but keep the empty call structure
-            const a = node.a.map((a) => foldPrims(a, skipFolds));
+            const a = node.a.map((a) => foldPrims(a, skipFolds, context));
             return {k: K.Call, h: null, a};
         }
 
-        const h = foldPrims(node.h, skipFolds);
-        const a = node.a.map((a) => foldPrims(a, skipFolds));
+        const h = foldPrims(node.h, skipFolds, context);
+        const a = node.a.map((a) => foldPrims(a, skipFolds, context));
 
         // Flatten any Splice objects in the arguments
         const flattened = [];
@@ -37,7 +41,7 @@ export function foldPrims(node, skipFolds = []) {
 
         // Delegate to specific primitive handlers
         if (isSym(h)) {
-            const result = foldPrimitive(h.v, flattened, skipFolds);
+            const result = foldPrimitive(h.v, flattened, skipFolds, context);
             if (result !== null) return result;
             return {k: K.Call, h, a: flattened};
         }
@@ -58,10 +62,15 @@ export function foldPrims(node, skipFolds = []) {
 /**
  * Central dispatcher for primitive operations
  */
-function foldPrimitive(op, args, skipFolds) {
+function foldPrimitive(op, args, skipFolds, context = null) {
     // Skip specified folds
     if (skipFolds.includes(op)) {
         return null;
+    }
+
+    // Special primitives that require universe context
+    if (op === "ProjectToString") {
+        return foldProjectToString(args, context);
     }
     // Arithmetic operations
     switch (op) {
@@ -1223,4 +1232,53 @@ function formatDebugValue(node) {
     }
     // Fallback to JSON for complex structures
     return JSON.stringify(node);
+}
+
+// ============= Projection Operations =============
+
+/**
+ * ProjectToString: Render UI nodes to HTML string
+ * ProjectToString[ui_node] -> Str(html)
+ * ProjectToString[ui_node, state] -> Str(html)
+ *
+ * Requires universe context with:
+ * - universe: The universe AST
+ * - normalizeFunc: Normalization function
+ * - extractRulesFunc: Rules extraction function
+ *
+ * This primitive enables SSR, SSG, and static site generation within Syma.
+ * It uses the StringProjector to render symbolic UI to HTML, omitting
+ * event handlers and bindings (client-side only features).
+ *
+ * The state parameter is optional - if omitted, Empty is used as the default state.
+ */
+function foldProjectToString(args, context) {
+    if (!context || !context.universe || !context.normalizeFunc || !context.extractRulesFunc) {
+        // Context not available - can't fold this primitive
+        // This can happen during meta-rule evaluation where we don't have universe context
+        return null;
+    }
+
+    if (args.length === 0) {
+        return null; // Can't project nothing, remain symbolic
+    }
+
+    const uiNode = args[0];
+    const state = args.length >= 2 ? args[1] : Sym("Empty");
+
+    try {
+        const html = renderToString(
+            uiNode,
+            state,
+            context.universe,
+            context.normalizeFunc,
+            context.extractRulesFunc
+        );
+
+        return Str(html);
+    } catch (e) {
+        // If projection fails, remain symbolic
+        console.error('ProjectToString error:', e);
+        return null;
+    }
 }

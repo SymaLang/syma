@@ -836,6 +836,10 @@ The runtime provides a comprehensive standard library of primitive operations th
 - `{Serialize expr}` → converts any Syma expression to JSON string for storage/transmission
 - `{Deserialize str}` → parses JSON string back to original Syma expression
 
+**Projection Operations:**
+- `{ProjectToString ui}` → renders UI node to HTML string (state defaults to Empty)
+- `{ProjectToString ui state}` → renders UI node to HTML string with given state context
+
 ### Serialization and Deserialization
 
 The `Serialize` and `Deserialize` primitives enable powerful metaprogramming patterns:
@@ -865,6 +869,60 @@ The `Serialize` and `Deserialize` primitives enable powerful metaprogramming pat
 {R "EvalStored"
   {Eval key_}
   {Normalize {Deserialize {StorageGet key_}}}}
+```
+
+### ProjectToString for Server-Side Rendering
+
+The `ProjectToString` primitive enables rendering UI nodes to HTML strings, making it possible to implement Server-Side Rendering (SSR), Static Site Generation (SSG), and other HTML generation use cases directly within Syma:
+
+```lisp
+; Simple static HTML generation (no state needed)
+{ProjectToString
+  {Div :class "card"
+    {H1 "Welcome"}
+    {P "This is static content"}}}
+; → "<div class=\"card\"><h1>Welcome</h1><p>This is static content</p></div>"
+
+; Dynamic content with state
+{ProjectToString
+  {Div :class "profile"
+    {H2 "Hello, " {Show userName}}
+    {P "Email: " {Show userEmail}}}
+  {State
+    {KV userName "Alice"}
+    {KV userEmail "alice@example.com"}}}
+; → "<div class=\"profile\"><h2>Hello, Alice</h2><p>Email: alice@example.com</p></div>"
+```
+
+**Key Features:**
+- **Omits event handlers**: `onClick`, `onInput`, etc. are removed (client-side only)
+- **Omits bindings**: `bind-value`, `bind-checked`, etc. are removed (client-side only)
+- **Supports projection**: Handles `Project[...]` and `Show[...]` nodes with state context
+- **Escapes HTML**: Automatically escapes special characters for security
+- **Optional state**: State parameter can be omitted for pure static HTML
+
+**Use Cases:**
+- **Static Site Generation**: Generate complete HTML pages at build time
+- **Server-Side Rendering**: Render pages on the server for SEO and initial load performance
+- **Email Templates**: Generate HTML email bodies
+- **Documentation**: Generate HTML documentation from symbolic UI definitions
+- **Pre-rendering**: Create page shells for faster initial loads
+
+**Example - Blog Post Generator:**
+```lisp
+{R "GeneratePostHTML"
+  {GeneratePost post_}
+  {ProjectToString
+    {Article :class "blog-post"
+      {Header
+        {H1 {Show title}}
+        {Time :datetime {Show date} {Show formattedDate}}}
+      {Div :class "content" {Show content}}}
+    {State
+      {KV title {Get Post title post_}}
+      {KV date {Get Post date post_}}
+      {KV formattedDate {FormatDate {Get Post date post_}}}
+      {KV content {Get Post content post_}}}}}
 ```
 
 ### Note on Lists
