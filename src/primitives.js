@@ -11,6 +11,22 @@ import { freshId } from './effects/processor.js';
 import { renderToString } from './projectors/string.js';
 
 /**
+ * Get the set of meta-safe primitive names (including aliases)
+ */
+export function getMetaSafePrimitives() {
+    const metaSafe = new Set();
+    for (const prim of PRIMITIVE_REGISTRY) {
+        if (prim.isMetaSafe) {
+            metaSafe.add(prim.name);
+            for (const alias of (prim.aliases || [])) {
+                metaSafe.add(alias);
+            }
+        }
+    }
+    return metaSafe;
+}
+
+/**
  * Fold primitive operations into their computed values
  * Called during normalization to evaluate built-in functions
  * @param {Object} node - The expression to fold
@@ -61,6 +77,7 @@ export function foldPrims(node, skipFolds = [], context = null) {
 
 /**
  * Central dispatcher for primitive operations
+ * Uses the registry to look up and invoke handlers
  */
 function foldPrimitive(op, args, skipFolds, context = null) {
     // Skip specified folds
@@ -68,118 +85,11 @@ function foldPrimitive(op, args, skipFolds, context = null) {
         return null;
     }
 
-    // Special primitives that require universe context
-    if (op === "ProjectToString") {
-        return foldProjectToString(args, context);
-    }
-    // Arithmetic operations
-    switch (op) {
-        case "Add": return foldAdd(args);
-        case "+": return foldAdd(args); // Alias
-        case "Sub": return foldSub(args);
-        case "-": return foldSub(args); // Alias
-        case "Mul": return foldMul(args);
-        case "*": return foldMul(args); // Alias
-        case "Div": return foldDiv(args);
-        case "/": return foldDiv(args); // Alias
-        case "Mod": return foldMod(args);
-        case "%": return foldMod(args); // Alias
-        case "Pow": return foldPow(args);
-        case "^": return foldPow(args); // Alias
-        case "Sqrt": return foldSqrt(args);
-        case "Abs": return foldAbs(args);
-        case "Min": return foldMin(args);
-        case "Max": return foldMax(args);
-        case "Floor": return foldFloor(args);
-        case "Ceil": return foldCeil(args);
-        case "Round": return foldRound(args);
-    }
-
-    // String operations
-    switch (op) {
-        case "Concat": return foldConcat(args);
-        case "ToString": return foldToString(args);
-        case "ToNormalString": return foldToNormalString(args);
-        case "ToUpper": return foldToUpper(args);
-        case "ToLower": return foldToLower(args);
-        case "Trim": return foldTrim(args);
-        case "StrLen": return foldStrLen(args);
-        case "Substring": return foldSubstring(args);
-        case "IndexOf": return foldIndexOf(args);
-        case "Replace": return foldReplace(args);
-        case "ReplaceAll": return foldReplaceAll(args);
-        case "Split": return foldSplit(args);
-        case "SplitToChars": return foldSplitToChars(args);
-        case "SplitBy": return foldSplitBy(args);
-        case "Join": return foldJoin(args);
-        case "Escape": return foldEscape(args);
-        case "Unescape": return foldUnescape(args);
-    }
-
-    // Comparison operations
-    switch (op) {
-        case "Eq": return foldEq(args);
-        case "==": return foldEq(args); // Alias
-        case "Neq": return foldNeq(args);
-        case "!=": return foldNeq(args); // Alias
-        case "Lt": return foldLt(args);
-        case "<": return foldLt(args); // Alias
-        case "Gt": return foldGt(args);
-        case ">": return foldGt(args); // Alias
-        case "Lte": return foldLte(args);
-        case "<=": return foldLte(args); // Alias
-        case "Gte": return foldGte(args);
-        case ">=": return foldGte(args); // Alias
-    }
-
-    // Boolean operations
-    switch (op) {
-        case "And": return foldAnd(args);
-        case "Or": return foldOr(args);
-        case "Not": return foldNot(args);
-    }
-
-    // Type checking
-    switch (op) {
-        case "IsNum": return foldIsNum(args);
-        case "IsStr": return foldIsStr(args);
-        case "IsSym": return foldIsSym(args);
-        case "IsTrue": return foldIsTrue(args);
-        case "IsFalse": return foldIsFalse(args);
-        case "AreNums": return foldAreNums(args);
-        case "AreStrings": return foldAreStrings(args);
-        case "AreSyms": return foldAreSyms(args);
-    }
-
-    // Bitwise operations
-    switch (op) {
-        case "BitAnd": return foldBitAnd(args);
-        case "&": return foldBitAnd(args); // Alias
-        case "BitOr": return foldBitOr(args);
-        case "|": return foldBitOr(args); // Alias
-        case "BitXor": return foldBitXor(args);
-        case "BitNot": return foldBitNot(args);
-        case "~": return foldBitNot(args); // Alias
-        case "BitShiftLeft": return foldBitShiftLeft(args);
-        case "<<": return foldBitShiftLeft(args); // Alias
-        case "BitShiftRight": return foldBitShiftRight(args);
-        case ">>": return foldBitShiftRight(args); // Alias
-        case "BitShiftRightUnsigned": return foldBitShiftRightUnsigned(args);
-        case ">>>": return foldBitShiftRightUnsigned(args); // Alias
-    }
-
-    // Utilities
-    switch (op) {
-        case "FreshId": return foldFreshId(args);
-        case "Random": return foldRandom(args);
-        case "ParseNum": return foldParseNum(args);
-        case "Debug": return foldDebug(args);
-        case "CharFromCode": return foldCharFromCode(args);
-        case "Splat": return foldSplat(args);
-        case "...!": return foldSplat(args);
-        case "Reverse": return foldReverse(args);
-        case "Serialize": return foldSerialize(args);
-        case "Deserialize": return foldDeserialize(args);
+    // Look up the primitive in the registry
+    for (const prim of PRIMITIVE_REGISTRY) {
+        if (prim.name === op || prim.aliases?.includes(op)) {
+            return prim.handler(args, context);
+        }
     }
 
     return null;
@@ -1282,3 +1192,105 @@ function foldProjectToString(args, context) {
         return null;
     }
 }
+
+// ============= Primitive Registry =============
+// Central registry of all primitives with their metadata
+
+/**
+ * Central Primitive Registry
+ * Each primitive is defined with:
+ * - name: The primitive name
+ * - handler: Function that implements the primitive
+ * - isMetaSafe: Whether it's safe to evaluate during meta-rule processing
+ * - aliases: Optional array of alternative names
+ */
+const PRIMITIVE_REGISTRY = [
+    // Arithmetic (meta-safe)
+    { name: 'Add', handler: foldAdd, isMetaSafe: true, aliases: ['+'] },
+    { name: 'Sub', handler: foldSub, isMetaSafe: true, aliases: ['-'] },
+    { name: 'Mul', handler: foldMul, isMetaSafe: true, aliases: ['*'] },
+    { name: 'Div', handler: foldDiv, isMetaSafe: true, aliases: ['/'] },
+    { name: 'Mod', handler: foldMod, isMetaSafe: true, aliases: ['%'] },
+    { name: 'Pow', handler: foldPow, isMetaSafe: false, aliases: ['^'] },
+    { name: 'Sqrt', handler: foldSqrt, isMetaSafe: false },
+    { name: 'Abs', handler: foldAbs, isMetaSafe: false },
+    { name: 'Min', handler: foldMin, isMetaSafe: false },
+    { name: 'Max', handler: foldMax, isMetaSafe: false },
+    { name: 'Floor', handler: foldFloor, isMetaSafe: false },
+    { name: 'Ceil', handler: foldCeil, isMetaSafe: false },
+    { name: 'Round', handler: foldRound, isMetaSafe: false },
+
+    // String operations (meta-safe for rule name generation)
+    { name: 'Concat', handler: foldConcat, isMetaSafe: true },
+    { name: 'ToString', handler: foldToString, isMetaSafe: true },
+    { name: 'ToNormalString', handler: foldToNormalString, isMetaSafe: false },
+    { name: 'ToUpper', handler: foldToUpper, isMetaSafe: false },
+    { name: 'ToLower', handler: foldToLower, isMetaSafe: false },
+    { name: 'Trim', handler: foldTrim, isMetaSafe: false },
+    { name: 'StrLen', handler: foldStrLen, isMetaSafe: false },
+    { name: 'Substring', handler: foldSubstring, isMetaSafe: false },
+    { name: 'IndexOf', handler: foldIndexOf, isMetaSafe: false },
+    { name: 'Replace', handler: foldReplace, isMetaSafe: true },
+    { name: 'ReplaceAll', handler: foldReplaceAll, isMetaSafe: true },
+    { name: 'Split', handler: foldSplit, isMetaSafe: true },
+    { name: 'SplitToChars', handler: foldSplitToChars, isMetaSafe: false },
+    { name: 'SplitBy', handler: foldSplitBy, isMetaSafe: false },
+    { name: 'Join', handler: foldJoin, isMetaSafe: true },
+    { name: 'Escape', handler: foldEscape, isMetaSafe: false },
+    { name: 'Unescape', handler: foldUnescape, isMetaSafe: false },
+
+    // Type conversion (meta-safe)
+    { name: 'ToNumber', handler: foldParseNum, isMetaSafe: true },
+    { name: 'ParseNum', handler: foldParseNum, isMetaSafe: false },
+
+    // Comparison operations (NOT meta-safe - needed at runtime for guards)
+    { name: 'Eq', handler: foldEq, isMetaSafe: false, aliases: ['=='] },
+    { name: 'Neq', handler: foldNeq, isMetaSafe: false, aliases: ['!='] },
+    { name: 'Lt', handler: foldLt, isMetaSafe: false, aliases: ['<'] },
+    { name: 'Gt', handler: foldGt, isMetaSafe: false, aliases: ['>'] },
+    { name: 'Lte', handler: foldLte, isMetaSafe: false, aliases: ['<='] },
+    { name: 'Gte', handler: foldGte, isMetaSafe: false, aliases: ['>='] },
+
+    // Boolean operations (NOT meta-safe - needed at runtime for guards)
+    { name: 'And', handler: foldAnd, isMetaSafe: false },
+    { name: 'Or', handler: foldOr, isMetaSafe: false },
+    { name: 'Not', handler: foldNot, isMetaSafe: false },
+
+    // Type checking (NOT meta-safe - needed at runtime for guards)
+    { name: 'IsNum', handler: foldIsNum, isMetaSafe: false },
+    { name: 'IsStr', handler: foldIsStr, isMetaSafe: false },
+    { name: 'IsSym', handler: foldIsSym, isMetaSafe: false },
+    { name: 'IsTrue', handler: foldIsTrue, isMetaSafe: false },
+    { name: 'IsFalse', handler: foldIsFalse, isMetaSafe: false },
+    { name: 'AreNums', handler: foldAreNums, isMetaSafe: false },
+    { name: 'AreStrings', handler: foldAreStrings, isMetaSafe: false },
+    { name: 'AreSyms', handler: foldAreSyms, isMetaSafe: false },
+
+    // Bitwise operations
+    { name: 'BitAnd', handler: foldBitAnd, isMetaSafe: false, aliases: ['&'] },
+    { name: 'BitOr', handler: foldBitOr, isMetaSafe: false, aliases: ['|'] },
+    { name: 'BitXor', handler: foldBitXor, isMetaSafe: false },
+    { name: 'BitNot', handler: foldBitNot, isMetaSafe: false, aliases: ['~'] },
+    { name: 'BitShiftLeft', handler: foldBitShiftLeft, isMetaSafe: false, aliases: ['<<'] },
+    { name: 'BitShiftRight', handler: foldBitShiftRight, isMetaSafe: false, aliases: ['>>'] },
+    { name: 'BitShiftRightUnsigned', handler: foldBitShiftRightUnsigned, isMetaSafe: false, aliases: ['>>>'] },
+
+    // Utilities
+    { name: 'FreshId', handler: foldFreshId, isMetaSafe: false }, // Side effects
+    { name: 'Random', handler: foldRandom, isMetaSafe: false }, // Side effects
+    { name: 'Debug', handler: foldDebug, isMetaSafe: false }, // Side effects
+    { name: 'CharFromCode', handler: foldCharFromCode, isMetaSafe: false },
+    { name: 'Splat', handler: foldSplat, isMetaSafe: true, aliases: ['...!'] },
+    { name: 'Reverse', handler: foldReverse, isMetaSafe: false },
+
+    // Serialization (meta-safe)
+    { name: 'Serialize', handler: foldSerialize, isMetaSafe: true },
+    { name: 'Deserialize', handler: foldDeserialize, isMetaSafe: true },
+
+    // Slicing (meta-safe)
+    { name: 'Length', handler: foldStrLen, isMetaSafe: true },
+    { name: 'Slice', handler: foldSubstring, isMetaSafe: true },
+
+    // Projection
+    { name: 'ProjectToString', handler: foldProjectToString, isMetaSafe: false }
+];

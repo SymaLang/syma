@@ -6,6 +6,7 @@
  ******************************************************************/
 
 import { Sym, Str, Call, isSym, isNum, isStr, isCall, clone, deq, Splice, isSplice, arrEq, show } from '../ast-helpers.js';
+import { getMetaSafePrimitives } from '../primitives.js';
 
 /* --------------------- Rule extraction ----------------------- */
 const isR = n => isCall(n) && isSym(n.h) && n.h.v === "R";
@@ -640,39 +641,20 @@ function extractMacroScopes(macroScopesNode) {
  * avoiding side effects and preserving runtime-only expressions.
  */
 function createMetaFoldPrimsFn(originalFoldPrimsFn) {
-    // Whitelist of primitives safe to evaluate during meta-rule processing
+    // Get meta-safe primitives from the registry
     // These are pure functions needed for rule name generation and meta-operations
-    const META_SAFE_PRIMITIVES = [
-        'Concat',      // String concatenation for rule names
-        'ToString',    // Convert symbols to strings for rule names
-        'Add',         // Arithmetic for Arity calculation
-        'Sub',         // Basic arithmetic
-        'Mul',         // Basic arithmetic
-        'Div',         // Basic arithmetic
-        'Mod',         // Basic arithmetic
-        'ToNumber',    // Type conversion
-        'Length',      // String/array length
-        'Slice',       // String/array slicing
-        'Join',        // Array joining
-        'Split',       // String splitting
-        'Splat',       // Splat
-        'Replace',     // String replacement
-        'ReplaceAll',  // String replacement
-        '...!',        // Splat
-        'Serialize',   // Expression serialization
-        'Deserialize'  // Expression deserialization
-        // Note: Explicitly exclude:
-        // - FreshId (side effects)
-        // - Comparison ops (Gt, Lt, Eq, etc.) - needed at runtime for guards
-        // - Logical ops (And, Or, Not) - needed at runtime for guards
-        // - Any I/O or effect-related primitives
-    ];
+    // The registry explicitly excludes:
+    // - FreshId (side effects)
+    // - Comparison ops (Gt, Lt, Eq, etc.) - needed at runtime for guards
+    // - Logical ops (And, Or, Not) - needed at runtime for guards
+    // - Any I/O or effect-related primitives
+    const META_SAFE_PRIMITIVES = getMetaSafePrimitives();
 
     return (expr) => {
         // Check if this is a primitive call we should evaluate
         if (isCall(expr) && isSym(expr.h)) {
             const primName = expr.h.v;
-            if (!META_SAFE_PRIMITIVES.includes(primName)) {
+            if (!META_SAFE_PRIMITIVES.has(primName)) {
                 // Don't evaluate this primitive during meta-rule processing
                 return expr;
             }
@@ -1287,12 +1269,12 @@ function indexWildcards(expr) {
         }
 
         if (isVar(node) && node.a.length === 1 && isStr(node.a[0]) && node.a[0].v === "_") {
-            const indexed = Call(Sym("Var"), Str(`__wc${varCounter.value}`));
+            const indexed = Call(Sym("Var"), Str(`__SYMAINTERNAL__wc${varCounter.value}`));
             varCounter.value++;
             return indexed;
         }
         if (isVarRest(node) && node.a.length === 1 && isStr(node.a[0]) && node.a[0].v === "_") {
-            const indexed = Call(Sym("VarRest"), Str(`__wcr${varRestCounter.value}`));
+            const indexed = Call(Sym("VarRest"), Str(`__SYMAINTERNAL__wcr${varRestCounter.value}`));
             varRestCounter.value++;
             return indexed;
         }

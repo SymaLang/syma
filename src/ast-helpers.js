@@ -26,7 +26,7 @@ export const isCall = n => n && n.k === K.Call;
 export const clone = n => JSON.parse(JSON.stringify(n));
 
 /* Structural deep equality */
-export const deq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+export const deq = (a, b) => JSON.stringify(a) === JSON.stringify(b); // Yes, I know...
 
 /* Splice helper for rest variables */
 export const Splice = (items) => ({ __splice: true, items });
