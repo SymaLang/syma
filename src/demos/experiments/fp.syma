@@ -1,0 +1,6 @@
+:rule Map {.. Map f_ {x_ xs..}} -> {.. {f_ x_} Map f_ {xs..}} :innermost
+:rule Map/Leaf {.. Map f_ {}} -> {..} :innermost
+
+:rule Filter {.. Filter f_ {x_ xs..}} -> {.. x_ Filter f_ {xs..}} :innermost :guard {f_ x_}
+:rule Filter/Remove {.. Filter f_ {x_ xs..}} -> {.. Filter f_ {xs..}} :innermost
+:rule Filter/Leaf {.. Filter f_ {}} -> {..} :innermost

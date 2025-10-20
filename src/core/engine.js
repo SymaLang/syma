@@ -842,6 +842,13 @@ function matchAllHelper(pat, subj, env, results) {
             matchArgsWithRestAll(pat.a, subj.a, env, results);
             return;
         }
+
+        // Special case: if pattern head is VarRest, it can match empty calls
+        if (subj.h === null && isVarRest(pat.h)) {
+            matchArgsWithRestAll([pat.h, ...pat.a], [], env, results);
+            return;
+        }
+
         if (pat.h === null || subj.h === null) return;
 
         // Match as flat sequences
@@ -992,8 +999,17 @@ export function match(pat, subj, env = {}) {
             // Both are empty calls, just match args
             return matchArgsWithRest(pat.a, subj.a, env);
         }
+
+        // Special case: if pattern head is VarRest, it can match empty calls
+        // because VarRest matches zero or more elements (including null head)
+        if (subj.h === null && isVarRest(pat.h)) {
+            // Pattern like {.. args..} should match {}
+            // Treat subject as empty sequence
+            return matchArgsWithRest([pat.h, ...pat.a], [], env);
+        }
+
         if (pat.h === null || subj.h === null) {
-            // Only one is empty, no match
+            // Only one is empty and pattern head is not VarRest, no match
             return null;
         }
 
@@ -1293,8 +1309,12 @@ function indexWildcards(expr) {
  * @param {*} expr - Expression to match
  * @param {Object} ruleIndex - Indexed rule structure
  * @param {Array} parents - Array of ancestor nodes from root to immediate parent
+ * @param {Object} guardRuleIndex - Optional separate rule index for guard evaluation (defaults to ruleIndex)
  */
-function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatterns = false, parents = []) {
+function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatterns = false, parents = [], guardRuleIndex = null) {
+    // Use the full rule index for guard evaluation if provided
+    const rulesForGuards = guardRuleIndex || ruleIndex;
+
     // Get only the applicable rules for this expression
     const rulesToCheck = getApplicableRules(expr, ruleIndex);
 
@@ -1396,8 +1416,8 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
                 // Substitute the guard with matched bindings, preserving Frozen wrappers
                 const guardValue = substWithFrozen(guardToEval, finalEnv, preserveUnboundPatterns);
                 // Fully normalize the guard expression (not just fold primitives)
-                // Guards need access to all rules, not just applicable ones
-                const evaluatedGuard = normalizeWithFrozen(guardValue, ruleIndex, 100, false, foldPrimsFn, preserveUnboundPatterns);
+                // Guards need access to all rules (use rulesForGuards which may be broader than ruleIndex)
+                const evaluatedGuard = normalizeWithFrozen(guardValue, rulesForGuards, 100, false, foldPrimsFn, preserveUnboundPatterns);
                 // Guard must evaluate to the symbol True
                 if (!isSym(evaluatedGuard) || evaluatedGuard.v !== "True") {
                     continue; // Guard failed, try next env (next rest split)
@@ -1415,6 +1435,8 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
 /**
  * Try innermost-first pass: recursively traverse bottom-up, trying only innermost rules.
  * Returns {matched: true, expr: newExpr, ...} if an innermost rule matched, else {matched: false}
+ *
+ * Note: Guards need access to ALL rules for normalization, not just innermost rules
  */
 function tryInnermostFirst(expr, rules, foldPrimsFn, preserveUnboundPatterns, parents, skipFrozen, includeDebugInfo, pathSoFar = []) {
     // Skip Frozen nodes if requested
@@ -1458,7 +1480,8 @@ function tryInnermostFirst(expr, rules, foldPrimsFn, preserveUnboundPatterns, pa
 
     const innermostIndex = indexRules(innermostRulesArray);
 
-    const matchResult = tryMatchRule(expr, innermostIndex, foldPrimsFn, preserveUnboundPatterns, parents);
+    // Pass the full rule index for guard evaluation (guards need access to all rules, not just innermost)
+    const matchResult = tryMatchRule(expr, innermostIndex, foldPrimsFn, preserveUnboundPatterns, parents, rules);
     if (matchResult.matched) {
         if (includeDebugInfo) {
             return {
