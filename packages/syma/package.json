@@ -1,0 +1,30 @@
+{
+  "name": "syma",
+  "version": "0.5.0",
+  "description": "Symbolic programming language and runtime - umbrella package",
+  "type": "module",
+  "bin": {
+    "syma": "./bin/syma.js",
+    "syma-repl": "./bin/syma-repl.js",
+    "syma-compile": "./bin/syma-compile.js",
+    "symc": "./bin/syma-compile.js",
+    "syma-notebook": "./bin/syma-notebook.js"
+  },
+  "files": [
+    "bin/**/*.js"
+  ],
+  "dependencies": {
+    "@syma/cli": "*",
+    "@syma/notebook": "*",
+    "serve": "^14.2.4"
+  },
+  "keywords": [
+    "syma",
+    "symbolic",
+    "programming",
+    "rewrite",
+    "pattern-matching"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@syma/cli",
+  "version": "0.5.0",
+  "description": "Syma REPL and compiler CLI tools",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./compiler": "./bin/syma-compile.js",
+    "./repl/repl": "./src/repl/repl.js",
+    "./repl/repl-node": "./src/repl/repl-node.js",
+    "./repl/commands": "./src/repl/commands.js",
+    "./repl/autocomplete": "./src/repl/autocomplete.js",
+    "./bin/syma": "./bin/syma",
+    "./bin/syma-repl.js": "./bin/syma-repl.js",
+    "./bin/syma-compile.js": "./bin/syma-compile.js"
+  },
+  "bin": {
+    "syma": "./bin/syma",
+    "syma-repl": "./bin/syma-repl.js",
+    "syma-compile": "./bin/syma-compile.js",
+    "symc": "./bin/syma-compile.js"
+  },
+  "scripts": {
+    "repl": "node ./bin/syma-repl.js"
+  },
+  "files": [
+    "bin/syma",
+    "bin/**/*.js",
+    "src/**/*.js",
+    "templates/**/*.syma"
+  ],
+  "dependencies": {
+    "@syma/core": "*",
+    "@syma/platform-node": "*",
+    "@syma/projectors": "*",
+    "@syma/stdlib": "*",
+    "glob": "^11.0.3",
+    "tar": "^7.4.3"
+  },
+  "keywords": [
+    "syma",
+    "cli",
+    "repl",
+    "compiler"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@syma/demos",
+  "version": "0.5.0",
+  "description": "Example Syma programs and demonstrations",
+  "type": "module",
+  "private": true,
+  "files": [
+    "syma/**/*.syma"
+  ],
+  "keywords": [
+    "syma",
+    "demos",
+    "examples"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}

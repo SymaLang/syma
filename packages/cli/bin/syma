@@ -1,0 +1,144 @@
+#!/usr/bin/env node
+
+/**
+ * Unified Syma CLI
+ *
+ * Commands:
+ *   syma repl              - Start interactive REPL
+ *   syma compile <file>    - Compile Syma source to JSON AST
+ *   syma run <file>        - Run a Syma program
+ *   syma build             - Build entry from package.syma
+ *   syma init              - Initialize a new Syma project
+ *   syma add <package>     - Install and add package to dependencies
+ *   syma remove <package>  - Remove package from dependencies
+ *   syma update [package]  - Update package(s) to latest version
+ *   syma list              - List installed packages
+ *   syma install           - Install all dependencies from package.syma
+ */
+
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const command = process.argv[2];
+
+// If no command or --help, show help
+if (!command || command === '--help' || command === '-h') {
+  console.log(`
+Syma CLI - Symbolic Programming Language
+
+Usage:
+  syma <command> [options]
+
+Commands:
+  repl                      Start interactive REPL
+  compile <file> [options]  Compile Syma source to JSON AST
+  run <file>                Run a Syma program
+  build                     Build entry from package.syma
+
+  init                      Initialize a new Syma project
+  add <package>             Install and add package to dependencies
+  remove <package>          Remove package from dependencies
+  update [package]          Update package(s) to latest version
+  list                      List installed packages
+  install                   Install all dependencies from package.syma
+
+Options:
+  --help, -h                Show help
+  --version, -v             Show version
+
+Examples:
+  syma repl                 Start REPL
+  syma run app.syma         Run a program
+  syma init                 Create new project
+  syma add @syma/stdlib     Install package
+
+For more info, visit: https://syma-lang.org
+`);
+  process.exit(0);
+}
+
+// Handle version flag
+if (command === '--version' || command === '-v') {
+  const pkg = await import('../package.json', { assert: { type: 'json' } });
+  console.log(`syma v${pkg.default.version}`);
+  process.exit(0);
+}
+
+// Route to appropriate subcommand
+switch (command) {
+  case 'repl': {
+    // Adjust argv so syma-repl sees the correct arguments
+    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+    const { main } = await import('./syma-repl.js');
+    await main();
+    break;
+  }
+
+  case 'compile': {
+    // Adjust argv so syma-compile sees the correct arguments
+    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+    const { main } = await import('./syma-compile.js');
+    await main();
+    break;
+  }
+
+  case 'run': {
+    const { runCommand } = await import('../src/commands/run.js');
+    await runCommand(process.argv.slice(3));
+    break;
+  }
+
+  case 'build': {
+    const { buildCommand } = await import('../src/commands/build.js');
+    await buildCommand(process.argv.slice(3));
+    break;
+  }
+
+  case 'init': {
+    const { initCommand } = await import('../src/pm/commands/init.js');
+    await initCommand(process.argv.slice(3));
+    break;
+  }
+
+  case 'add': {
+    const { addCommand } = await import('../src/pm/commands/add.js');
+    await addCommand(process.argv.slice(3));
+    break;
+  }
+
+  case 'remove':
+  case 'rm': {
+    const { removeCommand } = await import('../src/pm/commands/remove.js');
+    await removeCommand(process.argv.slice(3));
+    break;
+  }
+
+  case 'update':
+  case 'up': {
+    const { updateCommand } = await import('../src/pm/commands/update.js');
+    await updateCommand(process.argv.slice(3));
+    break;
+  }
+
+  case 'list':
+  case 'ls': {
+    const { listCommand } = await import('../src/pm/commands/list.js');
+    await listCommand(process.argv.slice(3));
+    break;
+  }
+
+  case 'install':
+  case 'i': {
+    const { installCommand } = await import('../src/pm/commands/install.js');
+    await installCommand(process.argv.slice(3));
+    break;
+  }
+
+  default:
+    console.error(`Unknown command: ${command}`);
+    console.error(`Run 'syma --help' for usage information.`);
+    process.exit(1);
+}

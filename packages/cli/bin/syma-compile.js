@@ -11,17 +11,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
-import { createParser } from '../src/core/parser-factory.js';
-import { Module, ModuleCompiler } from '../src/core/module-compiler.js';
-import { NodeModulePlatform } from '../src/platform/node-module-platform.js';
-import { isSym, isCall } from '../src/ast-helpers.js';
+import { createParser } from '@syma/core/parser-factory';
+import { Module, ModuleCompiler } from '@syma/core/module-compiler';
+import { NodeModulePlatform } from '@syma/platform-node';
+import { isSym, isCall } from '@syma/core/ast-helpers';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /* ---------------- Main Compiler ---------------- */
 async function compile(options) {
-  const { files, bundle, entry, output, pretty, format, stdlibPath, library, silent } = options;
+  const { files, bundle, entry, output, pretty, format, stdlibPath, library, silent = false } = options;
 
   const parser = await createParser({ useTreeSitter: false });
 
@@ -52,10 +52,10 @@ async function compile(options) {
 
     if (output) {
       fs.writeFileSync(output, formatted);
-    } else if (!silent) {
+    } else {
       console.log(formatted);
     }
-    return;
+    return formatted;
   }
 
   if (bundle) {
@@ -133,11 +133,14 @@ async function compile(options) {
     if (output) {
       fs.writeFileSync(output, json);
       if (!silent) {
-        console.log(`# Bundled ${compiler.loadedModules.size} modules to ${output}`);
+        console.error(`# Bundled ${compiler.loadedModules.size} modules to ${output}`);
       }
     } else if (!silent) {
       console.log(json);
     }
+
+    // Return the JSON string for programmatic use
+    return json;
 
   } else {
     // Single file mode
@@ -180,11 +183,14 @@ async function compile(options) {
         if (output) {
           fs.writeFileSync(output, json);
           if (!silent) {
-            console.log(`# Compiled module ${moduleName} with ${compiler.loadedModules.size} dependencies to ${output}`);
+            console.error(`# Compiled module ${moduleName} with ${compiler.loadedModules.size} dependencies to ${output}`);
           }
         } else if (!silent) {
           console.log(json);
         }
+
+        // Return the JSON string for programmatic use
+        return json;
       } else {
         throw new Error('Module name must be a symbol');
       }
@@ -196,6 +202,9 @@ async function compile(options) {
       } else if (!silent) {
         console.log(json);
       }
+
+      // Return the JSON string for programmatic use
+      return json;
     }
   }
 }
@@ -220,7 +229,6 @@ Options:
   --entry <name>        Entry module name (optional for single file)
   --stdlib <path>       Path to standard library modules
   --format, -f          Format/pretty-print .syma file
-  --silent              Suppress all stdout output
   -h, --help            Show this help
 
 Examples:
@@ -245,7 +253,7 @@ Examples:
 `);
 }
 
-async function main() {
+export async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
@@ -261,8 +269,7 @@ async function main() {
     output: null,
     pretty: false,
     format: false,
-    stdlibPath: null,
-    silent: false
+    stdlibPath: null
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -300,10 +307,6 @@ async function main() {
         options.format = true;
         break;
 
-      case '--silent':
-        options.silent = true;
-        break;
-
       default:
         if (arg.startsWith('-')) {
           console.error(`Unknown option: ${arg}`);
@@ -332,7 +335,13 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+// Export compile function for programmatic use
+export { compile };
+
+// Run if invoked directly (not imported)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(error => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}

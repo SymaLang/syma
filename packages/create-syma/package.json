@@ -1,0 +1,21 @@
+{
+  "name": "create-syma",
+  "version": "0.5.0",
+  "description": "Scaffolding tool for Syma applications",
+  "type": "module",
+  "bin": {
+    "create-syma": "./bin/create-syma.js"
+  },
+  "files": [
+    "bin/**/*.js",
+    "templates/**/*"
+  ],
+  "keywords": [
+    "syma",
+    "scaffolding",
+    "create",
+    "vite"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}

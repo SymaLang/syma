@@ -1,0 +1,36 @@
+{Module App/Main
+  {Import Core/Lift as Lift open}
+
+  {Program
+    {App
+      State({CounterState 0})
+      {UI {Div :class "card p-6"
+        {H1 :class "text-2xl font-bold mb-4" "Counter Module Demo"}
+        {Div :class "text-4xl font-mono mb-4"
+          "Count: " {Show Count}}
+        {Div :class "flex gap-2"
+          {Button :onClick Inc :class "px-4 py-2 bg-blue-500 text-white rounded" "+"}
+          {Button :onClick Dec :class "px-4 py-2 bg-red-500 text-white rounded" "-"}
+        }
+      }}
+    }
+    {Effects {Pending} {Inbox}}
+  }
+
+  {Rules
+    {R "ShowCount"
+      {/@ {Show Count} {App {State {CounterState st_}} _}}
+      st_
+    }
+
+    {R "Inc"
+      {Apply Inc {State {CounterState st_}}}
+      {State {CounterState Add(st_, 1)}}
+    }
+
+    {R "Dec"
+      {Apply Dec {State {CounterState st_}}}
+      {State {CounterState Sub(st_, 1)}}
+    }
+  }
+}

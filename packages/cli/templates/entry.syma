@@ -1,0 +1,12 @@
+{Module Main
+  {Export}
+
+  {Program
+    {Effects
+      {Pending
+        {Print a {Message "Hello, Syma!\n"}
+      }}
+      {Inbox}
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@syma/projectors",
+  "version": "0.5.0",
+  "description": "UI rendering projectors for Syma (DOM, string, terminal, trace)",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./base": "./src/base.js",
+    "./dom": "./src/dom.js",
+    "./string": "./src/string.js",
+    "./terminal": "./src/terminal.js",
+    "./trace": "./src/trace.js"
+  },
+  "files": [
+    "src/**/*.js"
+  ],
+  "dependencies": {
+    "@syma/core": "*"
+  },
+  "keywords": [
+    "syma",
+    "rendering",
+    "ui",
+    "projector"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}

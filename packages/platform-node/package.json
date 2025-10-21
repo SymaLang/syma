@@ -1,0 +1,25 @@
+{
+  "name": "@syma/platform-node",
+  "version": "0.5.0",
+  "description": "Node.js platform adapter for Syma",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./platform": "./src/node.js",
+    "./module-platform": "./src/node-module-platform.js"
+  },
+  "files": [
+    "src/**/*.js"
+  ],
+  "dependencies": {
+    "@syma/core": "*"
+  },
+  "keywords": [
+    "syma",
+    "nodejs",
+    "platform"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}

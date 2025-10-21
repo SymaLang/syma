@@ -1,0 +1,29 @@
+{
+  "name": "@syma/platform-browser",
+  "version": "0.5.0",
+  "description": "Browser platform adapter for Syma",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./platform": "./src/browser.js",
+    "./runtime": "./src/runtime.js",
+    "./events": "./src/events.js",
+    "./debug": "./src/debug.js"
+  },
+  "files": [
+    "src/**/*.js",
+    "src/**/*.css"
+  ],
+  "dependencies": {
+    "@syma/core": "*",
+    "@syma/projectors": "*"
+  },
+  "keywords": [
+    "syma",
+    "browser",
+    "platform"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}

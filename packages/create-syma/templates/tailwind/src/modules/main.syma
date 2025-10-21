@@ -1,0 +1,47 @@
+{Module App/Main
+  {Import Core/Lift as Lift open}
+
+  {Program
+    {App
+      {State {CounterState 0}}
+      {UI {Div :class "min-h-screen bg-gray-50 flex items-center justify-center p-8"
+        {Div :class "max-w-lg w-full"
+          {Div :class "bg-white border border-gray-200 rounded-lg shadow-sm p-8"
+            {Div :class "mb-8"
+              {H1 :class "text-3xl font-bold text-gray-900 mb-3" "Syma"}
+              {P :class "text-gray-600 mb-4" "Click the buttons below to test the interactive counter and see Syma's term-rewriting in action."}
+              {P :class "text-sm text-gray-500" "Edit " {Code :class "bg-gray-100 px-1.5 py-0.5 rounded text-xs" "src/modules/main.syma"} " to get started."}
+            }
+            {Div :class "bg-gray-50 border border-gray-200 rounded p-6 mb-6"
+              {Div :class "text-sm text-gray-500 mb-1" "count"}
+              {Div :class "text-5xl font-mono text-gray-900"
+                {Show Count}}
+            }
+            {Div :class "flex gap-3"
+              {Button :onClick Dec :class "flex-1 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 font-medium rounded hover:bg-gray-50 active:bg-gray-100 transition-colors" "Decrement"}
+              {Button :onClick Inc :class "flex-1 px-4 py-2.5 bg-gray-900 border border-gray-900 text-white font-medium rounded hover:bg-gray-800 active:bg-gray-700 transition-colors" "Increment"}
+            }
+          }
+        }
+      }}
+    }
+    {Effects {Pending} {Inbox}}
+  }
+
+  {Rules
+    {R "ShowCount"
+      {/@ {Show Count} {App {State {CounterState st_}} _}}
+      st_
+    }
+
+    {R "Inc"
+      {Apply Inc {State {CounterState st_}}}
+      {State {CounterState Add(st_, 1)}}
+    }
+
+    {R "Dec"
+      {Apply Dec {State {CounterState st_}}}
+      {State {CounterState Sub(st_, 1)}}
+    }
+  }
+}

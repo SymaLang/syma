@@ -1,0 +1,38 @@
+{
+  "name": "@syma/core",
+  "version": "0.5.0",
+  "description": "Platform-independent Syma runtime engine",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./engine": "./src/core/engine.js",
+    "./parser": "./src/core/parser.js",
+    "./tree-sitter-parser": "./src/core/tree-sitter-parser.js",
+    "./parser-factory": "./src/core/parser-factory.js",
+    "./module-compiler": "./src/core/module-compiler.js",
+    "./ast-helpers": "./src/ast-helpers.js",
+    "./primitives": "./src/primitives.js",
+    "./utils": "./src/utils.js",
+    "./effects/processor": "./src/effects/processor.js",
+    "./platform": "./src/platform/index.js",
+    "./core/ast-diff.js": "./src/core/ast-diff.js",
+    "./core/trace-utils.js": "./src/core/trace-utils.js",
+    "./core/text-diff.js": "./src/core/text-diff.js"
+  },
+  "files": [
+    "src/**/*.js"
+  ],
+  "peerDependencies": {
+    "tree-sitter": "^0.25.0",
+    "web-tree-sitter": "^0.25.9"
+  },
+  "keywords": [
+    "syma",
+    "symbolic",
+    "rewrite",
+    "pattern-matching"
+  ],
+  "author": "Pavlo Yevsehnieiev",
+  "license": "MIT"
+}
