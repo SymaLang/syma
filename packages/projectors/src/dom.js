@@ -42,6 +42,8 @@ export class DOMProjector extends BaseProjector {
         this.normalizeFunc = config.options?.normalize;
         this.extractRulesFunc = config.options?.extractRules;
         this.universe = config.options?.universe;
+        this.onError = config.options?.onError || null; // Error callback
+        this.onRenderSuccess = config.options?.onRenderSuccess || null; // Success callback
 
         if (!this.normalizeFunc || !this.extractRulesFunc) {
             throw new Error("DOMProjector requires normalize and extractRules functions in options");
@@ -55,38 +57,68 @@ export class DOMProjector extends BaseProjector {
      * @param {Object} universe - The universe AST
      */
     render(universe) {
-        this.universe = universe;
+        let renderSucceeded = false;
+        try {
+            this.universe = universe;
 
-        const app = this.getProgramApp(universe);
-        if (!isCall(app) || !isSym(app.h) || app.h.v !== "App") {
-            throw new Error("Program must contain App[state, ui]");
+            const app = this.getProgramApp(universe);
+            if (!isCall(app) || !isSym(app.h) || app.h.v !== "App") {
+                throw new Error("Program must contain App[State[...], UI[...]]");
+            }
+
+            // Find State and UI nodes by head symbol
+            const state = app.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "State");
+            const ui = app.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "UI");
+
+            if (!state) {
+                throw new Error("App must contain State[...] node");
+            }
+            if (!ui) {
+                throw new Error("App must contain UI[...] node");
+            }
+
+            // Build new virtual tree
+            const newVirtualTree = this.buildVirtualTree(ui, state);
+
+            if (!this.virtualTree || !this.rootElement) {
+                // First render - create DOM from scratch
+                this.mount.innerHTML = "";
+                this.rootElement = this.createDOMFromVirtual(newVirtualTree, state, this.onDispatch);
+                this.mount.appendChild(this.rootElement);
+                this.domMap.set(newVirtualTree, this.rootElement);
+            } else {
+                // Incremental update - diff and patch
+                // Pass both old and new states for proper comparison
+                const patches = this.diff(this.virtualTree, newVirtualTree, this.virtualState, state);
+                this.applyPatches(patches, state, this.onDispatch);
+            }
+
+            this.virtualTree = newVirtualTree;
+            this.virtualState = state; // Store the state for next diff
+
+            // Note: We intentionally DON'T clear hashCache here!
+            // The newState of this render becomes the oldState of the next render.
+            // Clearing would force us to rehash the same tree on every render.
+            // WeakMap automatically handles GC when nodes are no longer referenced.
+
+            renderSucceeded = true;
+        } catch (error) {
+            // Notify error callback if provided
+            if (this.onError) {
+                this.onError(error, universe);
+                // Don't re-throw if we have an error handler - it's been handled
+                // This prevents duplicate error logging in the console
+            } else {
+                // Re-throw if no error handler to maintain existing behavior
+                throw error;
+            }
+        } finally {
+            // Only clear errors if render actually succeeded
+            // This is in finally block to ensure it runs even if there are other issues
+            if (renderSucceeded && this.onRenderSuccess) {
+                this.onRenderSuccess();
+            }
         }
-
-        const [state, ui] = app.a;
-
-        // Build new virtual tree
-        const newVirtualTree = this.buildVirtualTree(ui, state);
-
-        if (!this.virtualTree || !this.rootElement) {
-            // First render - create DOM from scratch
-            this.mount.innerHTML = "";
-            this.rootElement = this.createDOMFromVirtual(newVirtualTree, state, this.onDispatch);
-            this.mount.appendChild(this.rootElement);
-            this.domMap.set(newVirtualTree, this.rootElement);
-        } else {
-            // Incremental update - diff and patch
-            // Pass both old and new states for proper comparison
-            const patches = this.diff(this.virtualTree, newVirtualTree, this.virtualState, state);
-            this.applyPatches(patches, state, this.onDispatch);
-        }
-
-        this.virtualTree = newVirtualTree;
-        this.virtualState = state; // Store the state for next diff
-
-        // Note: We intentionally DON'T clear hashCache here!
-        // The newState of this render becomes the oldState of the next render.
-        // Clearing would force us to rehash the same tree on every render.
-        // WeakMap automatically handles GC when nodes are no longer referenced.
     }
 
     /**

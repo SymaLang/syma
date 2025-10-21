@@ -143,6 +143,7 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
             normalize: normalizeBound,
             normalizeWithTrace: normalizeWithTraceBound,
             extractRules
+            // onError and onRenderSuccess will be set after debug overlay initialization
         }
     });
 
@@ -160,6 +161,29 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
 
     // Set the dispatch handler
     GLOBAL_PROJECTOR.onDispatch = dispatchAction;
+
+    // Initialize debug overlay if requested (BEFORE initial render and effects processor)
+    if (debug) {
+        const parser = new SymaParser();
+        GLOBAL_DEBUG_OVERLAY = new DebugOverlay({
+            parser,
+            getUniverse: () => GLOBAL_UNIVERSE
+        });
+
+        // Attach error handlers immediately - debouncing will handle transient errors
+        if (GLOBAL_PROJECTOR) {
+            GLOBAL_PROJECTOR.onError = (error, universe) => {
+                GLOBAL_DEBUG_OVERLAY.handleError(error);
+            };
+            GLOBAL_PROJECTOR.onRenderSuccess = () => {
+                GLOBAL_DEBUG_OVERLAY.handleRenderSuccess();
+            };
+        }
+
+        console.log('[Syma Debug] Debug overlay initialized with error handlers');
+    } else {
+        GLOBAL_DEBUG_OVERLAY = null;
+    }
 
     // Initial render
     GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
@@ -184,18 +208,6 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
             }
         }
     );
-
-    // Initialize debug overlay if requested
-    if (debug) {
-        const parser = new SymaParser();
-        GLOBAL_DEBUG_OVERLAY = new DebugOverlay({
-            parser,
-            getUniverse: () => GLOBAL_UNIVERSE
-        });
-        console.log('[Syma Debug] Debug overlay initialized. Press Ctrl+D (or Cmd+D) to toggle.');
-    } else {
-        GLOBAL_DEBUG_OVERLAY = null;
-    }
 
     // Return a handle for HMR and testing
     return {

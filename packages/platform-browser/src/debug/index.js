@@ -5,6 +5,7 @@
  ******************************************************************/
 
 export { DebugOverlay } from './DebugOverlay.js';
+export { ErrorSection } from './ErrorSection.js';
 export { ProgramSection } from './ProgramSection.js';
 export { RulesSection } from './RulesSection.js';
 export { fuzzyMatch, highlightMatches } from './utils.js';

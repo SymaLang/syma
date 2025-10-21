@@ -3,14 +3,14 @@
   {Export}
   {Rules
     {R "LiftApplyThroughProgram"
-      Apply(act_, Program(app_, eff_))
-      Program(Apply(act_, app_), eff_)
+      Apply(act_, Program(.. App(..) ..))
+      Program(.. Apply(act_, App(..)), ..)
       :prio 1000
     }
 
     {R "LiftApplyThroughApp"
-       Apply(act_, App(st_, ui_))
-       App(Apply(act_, st_), ui_)
+       Apply(act_, App(.. State(..) ..))
+       App(.. Apply(act_, State(..)), ..)
        :prio 1000
     }
   }
