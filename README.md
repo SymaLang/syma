@@ -19,19 +19,22 @@
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/syma-fe
-cd syma-fe
-npm install
+# Install globally
+npm install -g syma
+
 ```
 
 ### Run a Program
 
 ```bash
 # Execute a Syma program directly
-syma program.syma
+syma run program.syma
 
-# Or run the REPL
-syma
+# Run with arguments
+syma run app.syma -- --input file.txt --verbose
+
+# Or start the REPL
+syma repl
 
 # Start the interactive notebook
 npm run dev
@@ -48,27 +51,45 @@ Syma comes with comprehensive documentation covering all aspects of the language
 
 - **[Language Reference](LANGUAGE.md)** - Complete language specification covering atoms, compounds, patterns, modules, rules, effects, and more
 - **[Tutorial](TUTORIAL.md)** - Learn symbolic programming from scratch with interactive examples and real applications
+- **[CLI Guide](CLI.md)** - Complete command-line interface reference for all tools and workflows
 - **[REPL Guide](REPL.md)** - Master the interactive development environment and runtime execution
 - **[Notebook Guide](NOTEBOOK.md)** - Build literate programs with the Jupyter-style notebook interface
 - **[RuleRules Tutorial](RULERULES-TUTORIAL.md)** - Advanced meta-programming: write rules that transform other rules
 
 ## Development Tools
 
-### REPL Commands
+### CLI Tools
 
-Run the REPL with:
-
-```bash
-syma
-```
-
-Or
+The Syma CLI provides a unified interface for all development tasks:
 
 ```bash
-npm run repl
+# Interactive REPL for experimentation
+syma repl
+syma repl -l program.syma    # Load and interact with a file
+syma repl --trace            # Debug with trace mode
+
+# Run programs
+syma run program.syma                    # Execute a program
+syma run app.syma -- --key value         # Pass arguments
+
+# Compilation
+syma compile input.syma --out output.json --pretty
+syma compile src/*.syma --bundle --entry App/Main --out universe.json
+syma compile file.syma --format          # Format/pretty-print
+
+# Package management
+syma init                    # Initialize project
+syma add @syma/stdlib        # Add dependencies
+syma install                 # Install all dependencies
+syma build                   # Build project
+
+# Frontend Project scaffolding
+npm create syma@latest my-app           # Create new project
+npm create syma@latest my-app tailwind  # With Tailwind CSS 4
+
 ```
 
-Then use `:help` to see available commands
+See **[CLI.md](CLI.md)** for complete documentation.
 
 ### Notebook Interface
 
@@ -81,45 +102,10 @@ The browser-based notebook provides:
 - **Rich output**: Pretty-printed results, errors, and DOM rendering
 
 ```bash
-npm run dev
+syma-notebook
+
 # Open http://localhost:5173
 ```
-
-### Compilation
-
-```bash
-# Compile a single module
-syma-compile input.syma --out output.json
-
-# Bundle modules with dependencies
-syma-compile src/*.syma --bundle --entry App/Main --out universe.json
-
-# Pretty print for debugging
-syma-compile input.syma --out output.json --pretty
-```
-
-
-## Example Applications
-
-The repository includes several complete example applications:
-
-### Counter App
-```bash
-npm run demo:counter
-```
-Simple interactive counter demonstrating state management and UI rendering.
-
-### Todo List
-```bash
-npm run demo:todo
-```
-Complete todo application with filtering, persistence, and effects.
-
-### Algebra Simplifier
-```bash
-npm run demo:math
-```
-Symbolic algebra system that simplifies mathematical expressions using rewrite rules.
 
 ## Why Symbolic Programming?
 
@@ -134,13 +120,14 @@ Traditional programming tells computers what to do step-by-step. Symbolic progra
 
 ## License
 
-Just play with it.
+Syma is open source under the MIT License. See the [LICENSE](LICENSE.txt) file for details.
 
 ## Resources
 
 - **Documentation**: See the guides in the repository
-- **Examples**: Check out `src/demos/` for complete applications
+- **Examples**: Check out `packages/demos/` for complete applications
 
 ## Philosophy
 
-> "In Syma, you don't write instructions: you define transformations that evolve your program from one state to another. Think in patterns, not procedures."
+> — Everything in Syma is just pattern matching and matter patching.
+
