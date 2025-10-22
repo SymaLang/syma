@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [
     symaPlugin({
       entryModule: 'App/Main',
-      modulesDir: 'src/modules'
+      modulesDir: 'src'
     })
   ]
 });

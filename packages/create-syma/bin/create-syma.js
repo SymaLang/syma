@@ -61,6 +61,7 @@ async function createProject(projectName, template) {
   console.log('\nDone! Now run:\n');
   console.log(`  cd ${projectName}`);
   console.log(`  npm install`);
+  console.log(`  syma install`);
   console.log(`  npm run dev`);
   console.log();
 }

@@ -266,6 +266,8 @@ export class SymbolQualifier {
                       'A', 'Section', 'Header', 'Footer', 'Nav', 'Main', 'Article', 'Aside',
                       'Form', 'Label', 'Select', 'Option', 'Textarea', 'Table', 'Tr', 'Td', 'Th',
                       'Img', 'Video', 'Audio', 'Canvas', 'Svg', 'Path',
+                      // Other thingies
+                      'Frozen', 'Splat',
                       // Tag helper symbols
                       'KV', 'Props',
                       // Effect terms

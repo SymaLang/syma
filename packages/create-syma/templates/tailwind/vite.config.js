@@ -7,7 +7,7 @@ export default defineConfig({
     tailwindcss(),
     symaPlugin({
       entryModule: 'App/Main',
-      modulesDir: 'src/modules'
+      modulesDir: 'src'
     })
   ]
 });
