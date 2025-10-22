@@ -45,7 +45,13 @@ export class NodeModulePlatform extends ModuleCompilerPlatform {
                 // Default stdlib locations to check
                 const possiblePaths = [];
 
-                // Try to resolve @syma/stdlib package (works when installed via npm)
+                // 1. Check installed packages in .syma/virtual first
+                const virtualDir = path.join(process.cwd(), '.syma/virtual');
+                if (fs.existsSync(virtualDir)) {
+                    possiblePaths.push(virtualDir);
+                }
+
+                // 2. Try to resolve @syma/stdlib package (works when installed via npm)
                 try {
                     const stdlibPackagePath = require.resolve('@syma/stdlib/package.json');
                     const stdlibRoot = path.dirname(stdlibPackagePath);
@@ -54,7 +60,7 @@ export class NodeModulePlatform extends ModuleCompilerPlatform {
                     // @syma/stdlib not found in node_modules, try other paths
                 }
 
-                // Add development and legacy paths
+                // 3. Add development and legacy paths
                 possiblePaths.push(
                     // Monorepo development (packages/stdlib/syma)
                     path.join(currentModuleDir, '../../../stdlib/syma'),
@@ -65,9 +71,46 @@ export class NodeModulePlatform extends ModuleCompilerPlatform {
                 );
 
                 for (const stdPath of possiblePaths) {
-                    const modulePath = path.join(stdPath, `${moduleName.toLowerCase().replace(/\//g, '-')}.syma`);
-                    if (fs.existsSync(modulePath)) {
-                        return modulePath;
+                    // For .syma/virtual, the module is a directory with the full namespace
+                    if (stdPath.includes('.syma/virtual')) {
+                        const virtualModulePath = path.join(stdPath, moduleName);
+
+                        // Check if package.syma exists to get the entry point
+                        const packageSymaPath = path.join(virtualModulePath, 'package.syma');
+                        if (fs.existsSync(packageSymaPath)) {
+                            try {
+                                const packageContent = fs.readFileSync(packageSymaPath, 'utf-8');
+                                const entryMatch = packageContent.match(/\{Entry\s+"([^"]+)"\}/);
+                                if (entryMatch) {
+                                    const entryPath = path.join(virtualModulePath, entryMatch[1]);
+                                    if (fs.existsSync(entryPath)) {
+                                        return entryPath;
+                                    }
+                                }
+                            } catch (e) {
+                                // Fall through to default candidates
+                            }
+                        }
+
+                        // Fallback: Look for index.syma or main.syma in the module directory
+                        const candidates = [
+                            path.join(virtualModulePath, 'index.syma'),
+                            path.join(virtualModulePath, 'main.syma'),
+                            path.join(virtualModulePath, 'src', 'main.syma'),
+                            // Also try the module name directly as a file
+                            `${virtualModulePath}.syma`
+                        ];
+                        for (const candidate of candidates) {
+                            if (fs.existsSync(candidate)) {
+                                return candidate;
+                            }
+                        }
+                    } else {
+                        // For stdlib paths, use the kebab-case convention
+                        const modulePath = path.join(stdPath, `${moduleName.toLowerCase().replace(/\//g, '-')}.syma`);
+                        if (fs.existsSync(modulePath)) {
+                            return modulePath;
+                        }
                     }
                 }
 

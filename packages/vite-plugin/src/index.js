@@ -126,9 +126,9 @@ export default function symaPlugin(options = {}) {
         const module = moduleMap.get(entryName);
         if (!module) {
             // Don't warn for Core/* modules - they're in stdlib and will be resolved by the compiler
-            if (!entryName.startsWith('Core/')) {
-                console.warn(`${colors.yellow}[syma] ⚠ Module ${entryName} not found${colors.reset}`);
-            }
+            // if (!entryName.startsWith('Core/')) {
+            //     console.warn(`${colors.yellow}[syma] ⚠ Module ${entryName} not found${colors.reset}`);
+            // }
             return [];
         }
 

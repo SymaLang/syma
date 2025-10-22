@@ -402,7 +402,49 @@ The Syma effects system provides a purely symbolic interface for I/O operations.
 
 ---
 
-### 13. Process Exit (Terminal)
+### 13. Syma File Operations (REPL/Node.js only)
+
+#### Read Syma File Request (Pending)
+```lisp
+{ReadSymaFile id {Path "filename.syma"}}
+```
+
+#### Read Syma File Response (Inbox)
+```lisp
+; Success:
+{ReadSymaFileComplete id {Frozen parsedExpression}}
+
+; Error:
+{ReadSymaFileComplete id {Error "message"}}
+```
+
+#### Write Syma File Request (Pending)
+```lisp
+{WriteSymaFile id {Path "filename.syma"} {Ast expression} {Pretty True|False}}
+```
+
+#### Write Syma File Response (Inbox)
+```lisp
+; Success:
+{WriteSymaFileComplete id Ok}
+
+; Error:
+{WriteSymaFileComplete id {Error "message"}}
+```
+
+**Fields:**
+- `Path`: File path wrapped in `{Path "..."}`
+- `Ast`: Syma AST expression to write (for WriteSymaFile)
+- `Pretty`: Boolean flag - `True` for pretty-printed output, `False` for compact (defaults to `False`)
+
+**Notes:**
+- ReadSymaFile parses the file content into a Syma AST and wraps it in `{Frozen ...}` to prevent eval-on-read (code-as-data)
+- To evaluate the loaded code, extract it from the Frozen wrapper and normalize explicitly
+- WriteSymaFile serializes an AST to Syma source code (unwrap Frozen before writing if needed)
+
+---
+
+### 14. Process Exit (Terminal)
 
 #### Exit Request (Pending)
 ```lisp
@@ -451,6 +493,7 @@ These effects are processed immediately and removed from Pending atomically:
 - ClipboardWrite/Read
 - Navigate/ReadLocation
 - FileRead/Write
+- ReadSymaFile/WriteSymaFile
 - Exec
 - Exit
 - WsSend/WsClose (for connected sockets)
@@ -474,7 +517,8 @@ These effects are removed from Pending immediately upon scheduling, with respons
 **Browser:**
 - Storage uses localStorage/sessionStorage
 - Navigation uses History API
-- File operations not available
+- File operations limited (fetch for read, download for write)
+- Syma file operations not available (returns error responses)
 - Process execution not available
 - Exit not available
 
@@ -482,6 +526,7 @@ These effects are removed from Pending immediately upon scheduling, with respons
 - Storage uses in-memory map
 - Navigation not available (no-op)
 - Full file system access
+- Syma file operations with parser integration
 - Process execution via child_process
 - Exit terminates process
 

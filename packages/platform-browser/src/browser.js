@@ -5,6 +5,7 @@
  ******************************************************************/
 
 import { Platform } from '@syma/core/platform';
+import { SymaParser } from '@syma/core/parser';
 
 export class BrowserPlatform extends Platform {
     constructor(options = {}) {
@@ -233,6 +234,23 @@ export class BrowserPlatform extends Platform {
     // Execution (not available in browser)
     async exec(command) {
         throw new Error("Command execution not available in browser environment");
+    }
+
+    // Syma-specific file operations (not available in browser)
+    async readSymaFile(path) {
+        const errorMsg = `ReadSymaFile is not available in browser environment. ` +
+                        `Syma file operations require filesystem access and are only supported in Node.js/REPL. ` +
+                        `Consider using HttpReq to fetch parsed data from a server instead.`;
+        console.error(`[Syma] ReadSymaFile error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+
+    async writeSymaFile(path, ast, pretty = false) {
+        const errorMsg = `WriteSymaFile is not available in browser environment. ` +
+                        `Syma file operations require filesystem access and are only supported in Node.js/REPL. ` +
+                        `Consider using HttpReq to send data to a server for persistence instead.`;
+        console.error(`[Syma] WriteSymaFile error: ${errorMsg}`);
+        throw new Error(errorMsg);
     }
 
     // Platform identification

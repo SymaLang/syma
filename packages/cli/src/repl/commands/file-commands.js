@@ -56,7 +56,31 @@ export class FileCommands {
     }
 
     async reload(args) {
+        // If no explicit lastFileOperation, search history
         if (!this.lastFileOperation) {
+            // Search backwards through history for last :load or :bundle command
+            for (let i = this.repl.history.length - 1; i >= 0; i--) {
+                const historyEntry = this.repl.history[i];
+
+                if (historyEntry.startsWith(':load ') || historyEntry.startsWith(':bundle ')) {
+                    this.repl.platform.printWithNewline(`Found in history: ${historyEntry}`);
+
+                    // Parse the command
+                    const parts = historyEntry.slice(1).split(/\s+/);
+                    const command = parts[0]; // 'load' or 'bundle'
+                    const cmdArgs = parts.slice(1);
+                    const rawArgs = historyEntry.slice(command.length + 2); // Everything after ':command '
+
+                    // Re-execute the found command
+                    if (command === 'load') {
+                        return await this.load(cmdArgs, rawArgs);
+                    } else if (command === 'bundle') {
+                        return await this.bundle(cmdArgs, rawArgs);
+                    }
+                }
+            }
+
+            // Still nothing found in history
             this.repl.platform.printWithNewline("No previous :bundle or :load command to reload");
             return true;
         }

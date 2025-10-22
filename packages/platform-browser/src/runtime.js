@@ -199,7 +199,6 @@ async function boot(universeOrUrl, mountSelector = "#app", projectorType = "dom"
         },
         () => {
             // Re-render after effects update
-            console.log(JSON.stringify(GLOBAL_UNIVERSE))
             GLOBAL_PROJECTOR.universe = GLOBAL_UNIVERSE;
             GLOBAL_PROJECTOR.render(GLOBAL_UNIVERSE);
 

@@ -100,7 +100,7 @@ export class Module {
   }
 
   parseImports(nodes) {
-    // Parse {Import X/Y as Z [from "path"] [open] [macro]}
+    // Parse {Import X/Y [as Z] [from "path"] [open] [macro]}
     let i = 0;
     while (i < nodes.length) {
       const moduleNode = nodes[i++];
@@ -108,43 +108,36 @@ export class Module {
         throw new Error(
           'Import module must be a symbol.\n' +
           'Valid syntax:\n' +
-          '  {Import Module/Name as Alias}  or  Import(Module/Name, as, Alias)\n' +
+          '  {Import Module/Name [as Alias]}  or  Import(Module/Name, [as, Alias])\n' +
           'Examples:\n' +
-          '  {Import Core/KV as KV}\n' +
+          '  {Import Core/KV}               - Alias defaults to full name (Core/KV)\n' +
+          '  {Import Core/KV as KV}         - Use short alias (KV)\n' +
           '  {Import Core/KV as KV open}\n' +
           '  {Import Core/Rules/Sugar as CRS macro}'
         );
       }
 
-      if (i >= nodes.length || !isSym(nodes[i]) || nodes[i].v !== 'as') {
-        throw new Error(
-          `Import must have "as" clause after module name.\n` +
-          `Found: Import ${moduleNode.v} ...\n` +
-          `Expected: Import ${moduleNode.v} as Alias\n\n` +
-          'Valid syntax:\n' +
-          '  Brace:    {Import Module/Name as Alias [open] [macro]}\n' +
-          '  Function: Import(Module/Name, as, Alias, [open], [macro])\n\n' +
-          'Examples:\n' +
-          '  {Import Core/KV as KV}               - Qualified import\n' +
-          '  {Import Core/KV as KV open}          - Open import (unqualified symbols)\n' +
-          '  {Import Core/Rules/Sugar as CRS macro} - Import RuleRules\n' +
-          '  {Import Core/Set as CS open macro}   - Both open and macro'
-        );
-      }
-      i++; // skip 'as'
+      // Check for optional 'as' clause
+      let alias;
+      if (i < nodes.length && isSym(nodes[i]) && nodes[i].v === 'as') {
+        i++; // skip 'as'
 
-      if (i >= nodes.length || !isSym(nodes[i])) {
-        throw new Error(
-          `Import must have an alias after "as".\n` +
-          `Found: Import ${moduleNode.v} as ...\n` +
-          `Expected: Import ${moduleNode.v} as AliasName\n\n` +
-          'The alias is how you reference the imported module\'s symbols.\n' +
-          'Examples:\n' +
-          '  {Import Core/KV as KV}    - Use as KV/Get, KV/Set\n' +
-          '  Import(Core/List, as, L)  - Use as L/Map, L/Filter'
-        );
+        if (i >= nodes.length || !isSym(nodes[i])) {
+          throw new Error(
+            `Import must have an alias after "as".\n` +
+            `Found: Import ${moduleNode.v} as ...\n` +
+            `Expected: Import ${moduleNode.v} as AliasName\n\n` +
+            'The alias is how you reference the imported module\'s symbols.\n' +
+            'Examples:\n' +
+            '  {Import Core/KV as KV}    - Use as KV/Get, KV/Set\n' +
+            '  Import(Core/List, as, L)  - Use as L/Map, L/Filter'
+          );
+        }
+        alias = nodes[i++].v;
+      } else {
+        // Use full module name as alias when no "as" clause is provided
+        alias = moduleNode.v;
       }
-      const alias = nodes[i++].v;
 
       let fromPath = null;
       let open = false;

@@ -5,6 +5,7 @@
  ******************************************************************/
 
 import { Platform } from '@syma/core/platform';
+import { SymaParser } from '@syma/core/parser';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as readline from 'readline';
@@ -403,6 +404,30 @@ export class NodePlatform extends Platform {
                 stderr: error.stderr || error.message,
                 exitCode: error.code || 1
             };
+        }
+    }
+
+    // Syma-specific file operations
+    async readSymaFile(filePath) {
+        try {
+            const content = await this.readFile(filePath);
+            const parser = new SymaParser();
+            const ast = parser.parseString(content, filePath);
+            return ast;
+        } catch (error) {
+            throw new Error(`Failed to read and parse Syma file ${filePath}: ${error.message}`);
+        }
+    }
+
+    async writeSymaFile(filePath, ast, pretty = false) {
+        try {
+            const parser = new SymaParser();
+            const content = pretty
+                ? parser.prettyPrint(ast)
+                : parser.nodeToString(ast);
+            await this.writeFile(filePath, content);
+        } catch (error) {
+            throw new Error(`Failed to write Syma file ${filePath}: ${error.message}`);
         }
     }
 

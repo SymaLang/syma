@@ -262,17 +262,50 @@ Every second, the count decreases. When it hits 0, the timer stops.
 
 ### File System (Node.js)
 
-**Read**
+**Read Text File**
 ```lisp
 {FileRead id {Path "/data/file.txt"}}
 → {FileReadComplete id {Content "file contents"}}
 ```
 
-**Write**
+**Write Text File**
 ```lisp
 {FileWrite id {Path "/data/out.txt"} {Content "data"}}
 → {FileWriteComplete id Ok}
 ```
+
+**Read Syma File (Code as Data)**
+```lisp
+{ReadSymaFile id {Path "/code/module.syma"}}
+→ {ReadSymaFileComplete id {Frozen parsedExpression}}
+```
+
+**Write Syma File**
+```lisp
+{WriteSymaFile id {Path "/code/output.syma"} {Ast expr} {Pretty True}}
+→ {WriteSymaFileComplete id Ok}
+```
+
+**Why Frozen?**
+
+`ReadSymaFile` wraps the parsed code in `{Frozen}` to prevent eval-on-read. This enables **code-as-data** patterns:
+
+```lisp
+syma> :rule LoadModule
+  {Program app_ {Effects pending_ {Inbox {ReadSymaFileComplete id_ {Frozen code_}} rest..}}}
+  → {Program
+      {Apply {ModuleLoaded code_} app_}  ; Store code without evaluating
+      {Effects pending_ {Inbox rest..}}}
+Rule "LoadModule" added
+
+; Later, explicitly evaluate when needed:
+syma> :rule EvalStoredModule
+  {EvalModule {StoredCode code_}}
+  → {Normalize code_}  ; Extract from storage and normalize explicitly
+Rule "EvalStoredModule" added
+```
+
+Without `{Frozen}`, the loaded code would be normalized immediately, potentially executing it before you're ready. With `{Frozen}`, you control when and how the code is evaluated.
 
 ### Console I/O
 
@@ -542,6 +575,24 @@ You can **inspect** the effects queue:
 
 `effects..` is just a list of symbolic terms.
 
+### Development Tip: Freeze Effects During Debugging
+
+When debugging complex effect flows, wrap the `Effects` node in `{Frozen}` to inspect the exact structure without normalization:
+
+```lisp
+syma> :rule DebugEffects
+  {Apply action_ {Program app_ effects_}}
+  → {Debug {Frozen effects_}}  ; Inspect effects without transforming them
+Rule "DebugEffects" added
+```
+
+This lets you see:
+- Exactly what's in the Pending queue
+- All inbox messages waiting to be processed
+- The raw structure before any rules fire
+
+To resume normal execution, just remove the `{Frozen}` wrapper.
+
 🜛 *Effects aren't hidden in callbacks or promises. They're data you can log, inspect, test, and transform.*
 
 ⸻
@@ -621,6 +672,8 @@ Read file, split into chunks, upload via HTTP:
 - **Platform adapters** bridge symbolic and real I/O
 - Effects are **inspectable, testable, and transformable**
 - **Same symbolic interface** works across browser, Node.js, and future platforms
+- **ReadSymaFile returns `{Frozen code}`** to enable code-as-data patterns
+- **Use `{Frozen}` during debugging** to inspect universe parts without normalization
 
 ⸻
 

@@ -1,51 +1,21 @@
 {Module
   Core/Effect
-  {Import Core/Plumb as CP open macro}
-  {Export PrintEff}
+  {Export Eff}
   {Rules
-    R("EnqueueEffect/Generic",
-      {Plumb {EffQueue {Emit eff_} cmds...} {Effects {Pending pend...} inbox_}},
-      {PlumbEnd {EffQueue cmds...} {Effects {Pending pend... eff_} inbox_}}
-    )
-    R(
-      "EnqueueEffect/Print",
-      {Plumb {EffQueue {Print m_} rest...}},
-      {PlumbEnd {EffQueue {Emit {PrintEff m_}} rest...}}
-    )
-    R(
-      "EnqueueEffect/ReadLine",
-      {Plumb {EffQueue {ReadLine} rest...}},
-      {PlumbEnd {EffQueue {Emit {ReadLineEff}} rest...}}
-    )
-    R(
-      "EnqueueEffect/FileRead",
-      {Plumb {EffQueue {FileRead p_} rest...}},
-      {PlumbEnd {EffQueue {Emit {FileReadEff p_}} rest...}}
-    )
-    R(
-      "PrintEff/New",
-      {PrintEff m_},
-      {Print FreshId() {Message m_}}
-    )
-    R(
-      "ReadLineEff/New",
-      {ReadLineEff},
-      {ReadLine FreshId()}
-    )
-    R(
-      "FileReadEff/New",
-      {FileReadEff path_},
-      {FileRead FreshId() {Path path_}}
-    )
-    R(
-      "PrintComplete",
-      {Plumb
-        {Effects
-          pending_
-          {Inbox {PrintComplete id_ Success} rest...}
-        }
-      },
-      {PlumbEnd {Effects pending_ {Inbox rest...}}}
-    )
+    {R Eff
+      {.. {Eff ef_} ..}
+      {Splat {Eff ef_} {.. ..}}
+      :scope Program
+    }
+
+    {R Eff->Pending
+      {Program {Eff ef_} .. {Effects {Pending ..} ..} ..}
+      {Program .. {Effects {Pending .. ef_} ..} ..}
+    }
+
+    {R Eff/MoveLeft
+      {Program .. {Eff e..} ..}
+      {Program {Eff e..} .. ..}
+    }
   }
 }

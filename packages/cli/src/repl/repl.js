@@ -106,28 +106,34 @@ export class SymaREPL {
                 // After effects update, normalize to trigger inbox processing rules
                 const rules = engine.extractRules(this.universe);
 
-                // If trace is enabled and we're in :norm context, collect trace
-                if (this.trace && this.inNormCommand) {
-                    const { result: normalized, trace } = engine.normalizeWithTrace(
-                        newProg,
-                        rules,
-                        this.maxSteps,
-                        false,
-                        this.foldPrimsWithContext
-                    );
+                try {
+                    // If trace is enabled and we're in :norm context, collect trace
+                    if (this.trace && this.inNormCommand) {
+                        const { result: normalized, trace } = engine.normalizeWithTrace(
+                            newProg,
+                            rules,
+                            this.maxSteps,
+                            false,
+                            this.foldPrimsWithContext
+                        );
 
-                    if (trace.length > 0) {
-                        // Accumulate the trace to show later
-                        this.normCommandTraces.push({
-                            label: 'Effects processing',
-                            trace: trace
-                        });
+                        if (trace.length > 0) {
+                            // Accumulate the trace to show later
+                            this.normCommandTraces.push({
+                                label: 'Effects processing',
+                                trace: trace
+                            });
+                        }
+
+                        this.universe = engine.setProgram(this.universe, normalized);
+                    } else {
+                        const normalized = engine.normalize(newProg, rules, this.maxSteps, false, this.foldPrimsWithContext);
+                        this.universe = engine.setProgram(this.universe, normalized);
                     }
-
-                    this.universe = engine.setProgram(this.universe, normalized);
-                } else {
-                    const normalized = engine.normalize(newProg, rules, this.maxSteps, false, this.foldPrimsWithContext);
-                    this.universe = engine.setProgram(this.universe, normalized);
+                } catch (err) {
+                    // Don't crash on normalization errors - log them and continue
+                    this.platform.print(`\nError during effects processing:\n${err.message}\n`);
+                    // Keep the old universe state
                 }
             },
             () => {
@@ -570,13 +576,19 @@ export class SymaREPL {
 
         // Process any initial effects (like EffQueue, Flow, etc.)
         // First normalize the program to trigger any effect-generating rules
-        const rules = engine.extractRules(this.universe);
-        const program = engine.getProgram(this.universe);
-        const normalized = engine.normalize(program, rules, this.maxSteps, false, this.foldPrimsWithContext);
-        this.universe = engine.setProgram(this.universe, normalized);
+        try {
+            const rules = engine.extractRules(this.universe);
+            const program = engine.getProgram(this.universe);
+            const normalized = engine.normalize(program, rules, this.maxSteps, false, this.foldPrimsWithContext);
+            this.universe = engine.setProgram(this.universe, normalized);
 
-        // Now wait for effects to complete
-        await this.waitForEffects();
+            // Now wait for effects to complete
+            await this.waitForEffects();
+        } catch (err) {
+            // Don't crash on normalization errors - log them and continue
+            this.platform.print(`\nError during initial normalization:\n${err.message}\n`);
+            // Universe is already loaded, just skip the normalization step
+        }
     }
 
     async saveFile(path, format = 'auto') {

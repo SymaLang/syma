@@ -624,6 +624,28 @@ See [CHEATSHEET.md](../../CHEATSHEET.md) for complete primitive reference.
 
 ---
 
+### Frozen Wrapper
+
+The `{Frozen expr}` wrapper prevents normalization (rule matching and primitive folding) of its contents:
+
+**Use cases:**
+- **Guards**: Check matched values as-is without transformation
+- **Code-as-data**: Prevent eval-on-read when loading Syma files
+- **Development**: Inspect universe parts without normalization
+
+```lisp
+; In guards - check type without normalizing
+when {IsNum {Frozen x_}}
+
+; Code-as-data - ReadSymaFile returns Frozen
+{ReadSymaFileComplete id {Frozen code}}
+
+; Debugging - inspect without transforming
+{Debug {Frozen state_}}
+```
+
+---
+
 ### REPL Commands
 
 ```

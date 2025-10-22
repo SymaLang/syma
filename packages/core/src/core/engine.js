@@ -466,13 +466,15 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
 
             // Apply the applicable meta-rules (index them first)
             const indexedMetaRules = indexRules(applicableMetaRules);
-            const transformedNode = normalize(
+            // RuleRules operate at compile-time, don't respect Frozen wrappers
+            const transformedNode = normalizeIterative(
                 singleRuleNode,
                 indexedMetaRules,
                 10000,
                 false,
                 metaFoldPrimsFn,
-                true
+                true,
+                { skipFrozen: false, includeTrace: false }
             );
 
             // Extract the transformed rules from the Rules wrapper
@@ -496,8 +498,10 @@ export function applyRuleRules(universe, foldPrimsFn = null) {
                     // Evaluate the name expression (e.g., Concat, ToString, Add operations)
                     // Use the meta fold function to evaluate these expressions
                     const emptyRuleIndex = indexRules([]);
+                    // Compile-time evaluation, don't respect Frozen wrappers
                     const evaluatedName = metaFoldPrimsFn ?
-                        normalize(nameExpr, emptyRuleIndex, 1000, false, metaFoldPrimsFn, false) :
+                        normalizeIterative(nameExpr, emptyRuleIndex, 1000, false, metaFoldPrimsFn, false,
+                            { skipFrozen: false, includeTrace: false }) :
                         nameExpr;
 
                     // Reconstruct the R node with evaluated name
@@ -583,15 +587,15 @@ function extractRuleFromRNode(rNode) {
             i += 1;
         } else {
             // Legacy positional args
-            if (i === 0) {
-                if (isNum(arg)) {
-                    prio = arg.v;
-                } else {
-                    guard = arg;
-                }
-            } else if (i === 1 && guard && isNum(arg)) {
-                prio = arg.v;
-            }
+            // if (i === 0) {
+            //     if (isNum(arg)) {
+            //         prio = arg.v;
+            //     } else {
+            //         guard = arg;
+            //     }
+            // } else if (i === 1 && guard && isNum(arg)) {
+            //     prio = arg.v;
+            // }
             i++;
         }
     }
@@ -1140,6 +1144,18 @@ function foldPrimsWithFrozen(expr, foldPrimsFn) {
 
         // For other operations, recursively process but preserve Frozen
         const processedArgs = expr.a.map(arg => foldPrimsWithFrozen(arg, foldPrimsFn));
+
+        // Don't fold if any argument is Frozen - this prevents folding {Add {Frozen 1} 2}
+        const hasFrozenArg = processedArgs.some(arg =>
+            isCall(arg) && isSym(arg.h) && arg.h.v === "Frozen"
+        );
+
+        if (hasFrozenArg) {
+            // Return expression with processed args, but don't fold the primitive
+            return Call(expr.h, ...processedArgs);
+        }
+
+        // Safe to fold - no Frozen arguments
         const newExpr = Call(expr.h, ...processedArgs);
         return foldPrimsFn(newExpr);
     }
@@ -1710,7 +1726,7 @@ function normalizeIterative(expr, rules, maxSteps = 10000, skipPrims = false, fo
 
 export function normalize(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false) {
     return normalizeIterative(expr, rules, maxSteps, skipPrims, foldPrimsFn, preserveUnboundPatterns, {
-        skipFrozen: false,
+        skipFrozen: true,  // Frozen wrapper prevents normalization everywhere
         includeTrace: false
     });
 }
@@ -1718,7 +1734,7 @@ export function normalize(expr, rules, maxSteps = 10000, skipPrims = false, fold
 /* Normalization with step trace for debugger UIs */
 export function normalizeWithTrace(expr, rules, maxSteps = 10000, skipPrims = false, foldPrimsFn = null, preserveUnboundPatterns = false) {
     return normalizeIterative(expr, rules, maxSteps, skipPrims, foldPrimsFn, preserveUnboundPatterns, {
-        skipFrozen: false,
+        skipFrozen: true,  // Frozen wrapper prevents normalization everywhere
         includeTrace: true
     });
 }

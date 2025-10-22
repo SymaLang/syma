@@ -374,17 +374,23 @@ Modules can import symbols from other modules using either syntax:
 
 ```lisp
 ;; Brace syntax
-{Import Core/KV as KV}               ; Qualified: use as KV/Get, KV/Set
+{Import Core/KV}                     ; Alias defaults to full name "Core/KV"
+{Import Core/KV as KV}               ; Explicit short alias: use as KV/Get, KV/Set
+{Import Core/KV open}                ; Open import with full name alias
 {Import Core/KV as KV open}          ; Open: use as Get, Set
 {Import Core/Rules/Sugar as CRS macro}  ; Import RuleRules: apply to this module's rules
 {Import Core/Set as CS open macro}   ; Both: open symbols AND apply RuleRules
 
 ;; Function syntax
-Import(Core/KV, as, KV)              ; Qualified: use as KV/Get, KV/Set
+Import(Core/KV)                      ; Alias defaults to full name "Core/KV"
+Import(Core/KV, as, KV)              ; Explicit short alias: use as KV/Get, KV/Set
+Import(Core/KV, open)                ; Open import with full name alias
 Import(Core/KV, as, KV, open)        ; Open: use as Get, Set
 Import(Core/Rules/Sugar, as, CRS, macro)  ; Import RuleRules
 Import(Core/Set, as, CS, open, macro)     ; Both modifiers
 ```
+
+**Note:** The `as Alias` clause is optional. When omitted, the alias defaults to the full module name (e.g., `Core/KV` → alias `Core/KV`, `Core/Rules/Sugar` → alias `Core/Rules/Sugar`). Use explicit `as` clauses to create shorter aliases like `KV` or `CRS`.
 
 #### Import Modifiers
 
@@ -404,7 +410,7 @@ After compilation, all symbols are qualified with their module namespace:
 
 ```lisp
 {Module App/Counter
-  {Import Core/KV as KV open}
+  {Import Core/KV open}
 
   {Export InitialState Inc Dec}
 
@@ -486,47 +492,85 @@ R("IsPositive", Check(n_), "positive", Gt(n_, 0))
 R("GuardedRule", pattern, replacement, IsNum(n_), 50)
 ```
 
-### Guard Evaluation and the Frozen Wrapper
+### The Frozen Wrapper
 
-Guards are fully normalized with all rules, which allows using user-defined predicates. However, this can sometimes cause issues when you want to check the matched value as-is, without normalization.
+The `Frozen` wrapper prevents normalization (rule matching and primitive folding) of its contents. Any expression wrapped in `{Frozen ...}` will not be transformed during normalization, regardless of where it appears in the program.
 
-**The Frozen Wrapper:**
-The `Frozen` wrapper prevents normalization of its contents during guard evaluation:
+**Syntax:**
+```lisp
+{Frozen expr}
+```
 
+**Behavior:**
+- The Frozen wrapper itself is preserved in the AST
+- No rules are matched against expressions inside Frozen
+- No primitive operations are folded inside Frozen
+- If a node has a `{Frozen}` parent anywhere in its ancestor chain, rules will not match on it
+- Frozen can appear anywhere: in programs, guards, replacements, or data structures
+
+**Use Cases:**
+
+1. **Prevent premature evaluation:**
+```lisp
+; Keep Add unevaluated until later
+{Store {Frozen {Add 1 2}}}  ; Stores the symbolic structure, not 3
+
+; Preserve code as data
+{Template {Frozen {If cond_ then_ else_}}}
+```
+
+2. **Guard evaluation - check matched values as-is:**
 ```lisp
 ; Check if x_ is a number AFTER normalization (might transform first)
 {R "Rule1" {Process x_} result {IsNum x_}}
 
 ; Check if x_ is a number AS-IS, without any transformation
 {R "Rule2" {Process x_} result {IsNum {Frozen x_}}}
-```
 
-**When to use Frozen:**
-- Use `{Frozen x_}` when you want to check the exact matched value without transformation
-- Useful for type checking before any rules transform the value
-- Essential when the matched value might be transformed by other rules before the check
-
-**Examples with Frozen:**
-```lisp
-; These rules check the matched value without transformation
+; More examples with Frozen in guards:
 {R "JSONNum" {ToJSON x_} {Str x_} {IsNum {Frozen x_}}}
 {R "JSONStr" {ToJSON x_} {Quote x_} {IsStr {Frozen x_}}}
 {R "EmptyCheck" {Process x_} "empty" {Eq Empty {Frozen x_}}}
 {R "BoolCheck" {Process x_} "true" {Eq True {Frozen x_}}}
 ```
 
-**User-defined predicates still work:**
+3. **Metaprogramming - build code templates:**
 ```lisp
-; IsDigit is defined as a rule, needs normalization to work
-{R "DigitCheck" {Parse c_} digit {IsDigit c_}}  ; No Frozen needed
+; Generate rules without evaluating them
+{DefineRule {Frozen {R "Generated" {Match x_} {Result x_}}}}
 
-; But for primitives checking the actual value:
-{R "NumCheck" {Parse n_} number {IsNum {Frozen n_}}}
+; Store unevaluated patterns
+{PatternLibrary {Frozen {Tuple a_ b_ c_}}}
+```
+
+4. **Conditional evaluation:**
+```lisp
+; Delay evaluation until condition is met
+{R "LazyEval"
+   {Eval {Lazy cond_ expr_}}
+   {If cond_ expr_ {Frozen expr_}}}  ; Keep frozen if condition not met
+```
+
+5. **File operations - code as data:**
+```lisp
+; ReadSymaFile returns Frozen to prevent eval-on-read
+{R "LoadModule"
+   {Program app_ {Effects pending_ {Inbox {ReadSymaFileComplete id_ {Frozen code_}} rest..}}}
+   {Program
+     {Apply {ModuleLoaded code_} app_}  ; Store code without evaluating
+     {Effects pending_ {Inbox rest..}}}}
+
+; Later, explicitly evaluate when needed
+{R "EvalStoredModule"
+   {EvalModule {StoredCode code_}}
+   {Normalize code_}}  ; Extract from storage and normalize explicitly
 ```
 
 **Important Notes:**
-- Guards are fully normalized with all rules (allows user-defined predicates)
-- Use `Frozen` wrapper to prevent normalization of specific values in guards
+- Frozen is structural - it remains in the AST and must be explicitly unwrapped to evaluate contents
+- Frozen does not prevent pattern matching in the pattern position of rules - patterns are matched, not normalized
+- Guards are fully normalized with all rules (allows user-defined predicates), so use `{Frozen x_}` to check matched values without transformation
+- To evaluate Frozen contents, extract and normalize them explicitly outside the Frozen wrapper
 
 ### Scope Restrictions with `:scope`
 
@@ -1088,6 +1132,20 @@ Programs can include an Effects node alongside the main application:
 - **ReadLine**: `{ReadLine id}` → `{ReadLineComplete id {Text "input"}}`
 - **GetChar**: `{GetChar id}` → `{GetCharComplete id {Char "a"}}`
 
+#### File I/O (Node.js/REPL only)
+
+- **File Read**: `{FileRead id {Path "file.txt"}}` → `{FileReadComplete id {Content "data"}}`
+- **File Write**: `{FileWrite id {Path "file.txt"} {Content "data"}}` → `{FileWriteComplete id Ok}`
+- **Read Syma File**: `{ReadSymaFile id {Path "file.syma"}}` → `{ReadSymaFileComplete id {Frozen expression}}`
+- **Write Syma File**: `{WriteSymaFile id {Path "file.syma"} {Ast expr} {Pretty True}}` → `{WriteSymaFileComplete id Ok}`
+
+**Note on Syma File Operations:**
+- `ReadSymaFile` reads and parses Syma source code into AST, wrapping it in `{Frozen ...}` to prevent eval-on-read (code-as-data)
+- To evaluate loaded code, extract it from the Frozen wrapper and normalize explicitly
+- `WriteSymaFile` serializes Syma AST to source code (unwrap Frozen before writing if needed)
+- `{Pretty True}` enables formatted output, `{Pretty False}` for compact
+- Available in Node.js and REPL only (browser returns error responses)
+
 #### Utilities
 
 - **Random**: `{RandRequest id {Min 0} {Max 100}}` → `{RandResponse id value}`
@@ -1186,13 +1244,13 @@ RuleRules are scoped to modules. They only transform rules in modules that expli
 
 ;; Module Core/Set imports with 'macro' - gets sugar transformation
 {Module Core/Set
-  {Import Core/Rules/Sugar as CRS macro}  ; 'macro' applies RuleRules
+  {Import Core/Rules/Sugar macro}  ; 'macro' applies RuleRules
   {Rules
     {:rule "MyRule" pattern -> result}}}  ; This gets transformed
 
 ;; Module App/Main doesn't import with 'macro' - no transformation
 {Module App/Main
-  {Import Core/Set as CS}  ; No 'macro', no RuleRule application
+  {Import Core/Set}  ; No 'macro', no RuleRule application
   {Rules
     {:rule "Test" x -> y}}}  ; Error! :rule syntax not available
 ```
@@ -1257,7 +1315,7 @@ A practical example showing how RuleRules create function definition syntax:
          body_}}}}
 
 {Module MyApp
-  {Import Core/Functions as F macro}  ; Need 'macro' to use Def syntax
+  {Import Core/Functions macro}  ; Need 'macro' to use Def syntax
   {Rules
     {Def Double {Args x} {Mul x 2}}}}  ; Becomes a proper rule
 ```
@@ -1465,7 +1523,7 @@ Module definitions become rules with high priority (1000):
 ### App/Counter Module
 ```lisp
 {Module App/Counter
-  {Import Core/KV as KV open}
+  {Import Core/KV open}
 
   {Export InitialState View Inc Dec}
 
@@ -1497,12 +1555,12 @@ Module definitions become rules with high priority (1000):
 ### App/Main Module
 ```lisp
 {Module App/Main
-  {Import App/Counter as Counter}
+  {Import App/Counter}
 
   {Program
     {App
-      {State Counter/InitialState}
-      {UI {Project {Counter/View}}}}}
+      {State App/Counter/InitialState}
+      {UI {Project {App/Counter/View}}}}}
 
   {Rules
     {R "LiftApplyThroughProgram"
@@ -1531,13 +1589,14 @@ Module definitions become rules with high priority (1000):
 4. **Greedy anchors** - `..symbol` for matching to last occurrence instead of first
 5. **Rewrite rules** for computation and transformation
 6. **Two-pass normalization** - innermost-first for `:innermost` rules, then outermost-first for regular rules
-7. **Symbol qualification** for namespace isolation
-8. **Context-aware projection** for UI rendering
-9. **Event handling** through `Apply` patterns with lifting rules
-10. **Symbolic effects** for pure I/O representation
-11. **Event action combinators** for composable UI interactions
-12. **Meta-programming** with rule-rewriting rules
-13. **Priority system** for controlling rule application order
-14. **Evaluation strategies** - `:innermost` for bottom-up, `:scope` for context restrictions
+7. **Frozen wrapper** - `{Frozen expr}` prevents normalization of contents, enabling code-as-data and lazy evaluation
+8. **Symbol qualification** for namespace isolation
+9. **Context-aware projection** for UI rendering
+10. **Event handling** through `Apply` patterns with lifting rules
+11. **Symbolic effects** for pure I/O representation
+12. **Event action combinators** for composable UI interactions
+13. **Meta-programming** with rule-rewriting rules
+14. **Priority system** for controlling rule application order
+15. **Evaluation strategies** - `:innermost` for bottom-up, `:scope` for context restrictions
 
 Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.

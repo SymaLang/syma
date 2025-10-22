@@ -125,6 +125,15 @@ export class Platform {
         throw new Error("exec() must be implemented by platform adapter");
     }
 
+    // Syma-specific file operations
+    async readSymaFile(path) {
+        throw new Error("readSymaFile() must be implemented by platform adapter");
+    }
+
+    async writeSymaFile(path, ast, pretty = false) {
+        throw new Error("writeSymaFile() must be implemented by platform adapter");
+    }
+
     // Platform identification
     getPlatformName() {
         throw new Error("getPlatformName() must be implemented by platform adapter");

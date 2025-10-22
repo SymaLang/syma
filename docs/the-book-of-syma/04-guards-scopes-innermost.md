@@ -79,11 +79,24 @@ The guard `{IsEven n_}` isn't a built-in — it's **normalized through rules**!
 
 ⸻
 
-## The Frozen Wrapper: Guards Without Normalization
+## The Frozen Wrapper: Preventing Normalization
 
-Sometimes you want to check the **matched value as-is**, without any transformations.
+The `{Frozen}` wrapper is a **general language feature** that prevents normalization (rule matching and primitive folding) of its contents anywhere in the program.
 
-Use `{Frozen x_}` to prevent normalization:
+**Syntax:**
+```lisp
+{Frozen expr}
+```
+
+**Behavior:**
+- The Frozen wrapper itself is preserved in the AST
+- No rules are matched against expressions inside Frozen
+- No primitive operations are folded inside Frozen
+- Frozen can appear anywhere: in programs, guards, replacements, or data structures
+
+### Use Case 1: Guards Without Normalization
+
+When checking the **matched value as-is**, without any transformations:
 
 ```lisp
 syma> :rule JSONNum {ToJSON x_} → {Str x_} when {IsNum {Frozen x_}}
@@ -105,6 +118,33 @@ when {IsNum x_}
 when {IsNum {Frozen x_}}
 ```
 
+### Use Case 2: Code as Data
+
+Use `{Frozen}` to prevent eval-on-read when loading code dynamically:
+
+```lisp
+syma> :rule StoreCode {Store code_} → {Stored {Frozen code_}}
+Rule "StoreCode" added
+
+syma> {Store {Add 1 2}}
+→ {Stored {Frozen {Add 1 2}}}  ; Preserves structure, doesn't evaluate to 3
+```
+
+### Use Case 3: Development and Debugging
+
+Wrap parts of your universe in `{Frozen}` to inspect them without normalization:
+
+```lisp
+syma> :rule DebugState
+  {Apply action_ {Program app_ {Frozen effects_}}}
+  → {Debug app_}
+Rule "DebugState" added
+
+; The effects structure won't be normalized, so you can inspect it as-is
+```
+
+**💡 Development Tip:** When debugging complex rule interactions, wrap subexpressions in `{Frozen}` to "freeze" parts of the universe and see their exact structure without normalization transforming them.
+
 ### Example: Type-Safe Operations
 
 ```lisp
@@ -118,7 +158,7 @@ syma> {Div "oops" 2}
 → {Div "oops" 2}  ; Guard fails, rule doesn't fire
 ```
 
-🜛 *`Frozen` is your shield against premature normalization. It preserves the raw matched value.*
+🜛 *`Frozen` is your shield against premature normalization. It preserves the raw matched value and enables code-as-data patterns.*
 
 ⸻
 
@@ -497,11 +537,12 @@ Implement a simple calculator that evaluates innermost expressions first:
 ## Key Takeaways
 
 - **Guards** control *when* rules fire (conditional logic)
-- **Frozen** prevents normalization in guards (check raw matched values)
+- **Frozen** prevents normalization anywhere (check raw values, code-as-data, debugging)
 - **Scopes** control *where* rules fire (context-sensitive)
 - **Innermost** controls *how* rules fire (bottom-up evaluation)
 - **`:with`** binds variables from context
 - Modifiers can be combined in any order
+- **Development Tip**: Use `{Frozen}` to inspect universe parts without normalization
 
 ⸻
 

@@ -152,6 +152,31 @@ This document provides a quick reference for all available effect operations in 
 |---------|-------------------|------------------|
 | `{FileWrite id {Path "file.txt"} {Content "data"}}` | `{FileWriteComplete id Ok}` | `{FileWriteComplete id {Error "msg"}}` |
 
+### Read Syma File
+
+| Request | Response (Success) | Response (Error) |
+|---------|-------------------|------------------|
+| `{ReadSymaFile id {Path "file.syma"}}` | `{ReadSymaFileComplete id {Frozen expression}}` | `{ReadSymaFileComplete id {Error "msg"}}` |
+
+**Notes:**
+- Reads and parses Syma source code into AST
+- Result is wrapped in `{Frozen ...}` to prevent eval-on-read (code-as-data)
+- Extract from Frozen and normalize explicitly to evaluate the loaded code
+- Available in Node.js and REPL only
+- Browser returns error response (not supported)
+
+### Write Syma File
+
+| Request | Response (Success) | Response (Error) |
+|---------|-------------------|------------------|
+| `{WriteSymaFile id {Path "file.syma"} {Ast expr} {Pretty True}}` | `{WriteSymaFileComplete id Ok}` | `{WriteSymaFileComplete id {Error "msg"}}` |
+
+**Notes:**
+- Serializes Syma AST to source code
+- `{Pretty True}` for formatted output, `{Pretty False}` for compact
+- Available in Node.js and REPL only
+- Browser returns error response (not supported)
+
 ## Process Execution (Node.js/REPL only)
 
 | Request | Response |
@@ -206,6 +231,7 @@ Removed from Pending immediately upon scheduling, responses arrive later:
 | WebSocket | ✓ | ✓ | ✓ |
 | Navigate/ReadLocation | ✓ | ✗ | ✗ |
 | FileRead/Write | ✗ | ✓ | ✓ |
+| ReadSymaFile/WriteSymaFile | ✗ | ✓ | ✓ |
 | Exec | ✗ | ✓ | ✓ |
 | Exit | ✗ | ✓ | ✓ |
 

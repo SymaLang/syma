@@ -814,6 +814,64 @@ export class EffectsProcessor {
         }
     }
 
+    async processReadSymaFile(req) {
+        // ReadSymaFile[id, Path[str]]
+        const [id, pathNode] = req.a;
+        if (!id || !pathNode) return null;
+
+        const path = pathNode && isCall(pathNode) && pathNode.a[0] && isStr(pathNode.a[0])
+            ? pathNode.a[0].v : "";
+
+        try {
+            const ast = await this.platform.readSymaFile(path);
+            return Call(
+                Sym("ReadSymaFileComplete"),
+                id,
+                Call(Sym("Frozen"), ast)
+            );
+        } catch (error) {
+            return Call(
+                Sym("ReadSymaFileComplete"),
+                id,
+                Call(Sym("Error"), Str(error.message))
+            );
+        }
+    }
+
+    async processWriteSymaFile(req) {
+        // WriteSymaFile[id, Path[str], Ast[expr], Pretty[True|False]]
+        const [id, pathNode, astNode, prettyNode] = req.a;
+        if (!id || !pathNode || !astNode) return null;
+
+        const path = pathNode && isCall(pathNode) && pathNode.a[0] && isStr(pathNode.a[0])
+            ? pathNode.a[0].v : "";
+
+        // Extract the AST expression (unwrap from Ast[...])
+        const ast = astNode && isCall(astNode) && astNode.a[0]
+            ? astNode.a[0]
+            : astNode;
+
+        // Extract pretty flag
+        const pretty = prettyNode && isCall(prettyNode) && prettyNode.a[0] && isSym(prettyNode.a[0])
+            ? prettyNode.a[0].v === "True"
+            : false;
+
+        try {
+            await this.platform.writeSymaFile(path, ast, pretty);
+            return Call(
+                Sym("WriteSymaFileComplete"),
+                id,
+                Sym("Ok")
+            );
+        } catch (error) {
+            return Call(
+                Sym("WriteSymaFileComplete"),
+                id,
+                Call(Sym("Error"), Str(error.message))
+            );
+        }
+    }
+
     processExit(req) {
         // Exit[code]
         const [code] = req.a;
@@ -910,6 +968,14 @@ export class EffectsProcessor {
                         response = await this.processExec(req);
                         break;
 
+                    case "ReadSymaFile":
+                        response = await this.processReadSymaFile(req);
+                        break;
+
+                    case "WriteSymaFile":
+                        response = await this.processWriteSymaFile(req);
+                        break;
+
                     case "Exit":
                         // Exit effect doesn't have an ID, so we need to handle it specially
                         this.processExit(req);
@@ -972,9 +1038,18 @@ export class EffectsProcessor {
                         continue;
 
                     default:
-                        // Unknown effect type - skip
+                        // Unknown effect type - create error response
                         console.warn(`Unknown effect type: ${effectType}`);
-                        continue;
+
+                        // Try to extract ID from first argument (if present)
+                        const unknownId = req.a[0] || Str('unknown');
+
+                        response = Call(
+                            Sym("UnknownEffectComplete"),
+                            unknownId,
+                            Call(Sym("Error"), Str(`Unknown effect type: ${effectType}`))
+                        );
+                        break;
                 }
 
                 if (response) {
