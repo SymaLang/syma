@@ -79,6 +79,9 @@ export class DebugOverlay {
     }
 
     handleError(error) {
+        // Always log to console
+        console.error('Syma Error:', error);
+
         // Store the error as pending
         this.pendingError = error;
 
@@ -90,10 +93,6 @@ export class DebugOverlay {
         // Wait before actually showing the error
         // This allows transient errors to be cancelled by successful renders
         this.errorTimeout = setTimeout(() => {
-            if (window.SYMA_DEV_TRACE) {
-                console.error('Syma Error:', error);
-            }
-
             this.errorSection.addError(error);
             this.updateBadge();
 
@@ -351,9 +350,11 @@ export class DebugOverlay {
         // Clear and rebuild content
         this.content.innerHTML = '';
 
-        // Always render error section first
+        // Render error section first (only if there are errors)
         const errorEl = this.errorSection.render();
-        this.content.appendChild(errorEl);
+        if (errorEl) {
+            this.content.appendChild(errorEl);
+        }
 
         if (!this.parser || !this.getUniverse) {
             this.content.innerHTML += '<span style="color: #f85149;">Parser or universe not available</span>';

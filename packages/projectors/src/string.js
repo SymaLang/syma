@@ -53,16 +53,17 @@ export class StringProjector extends BaseProjector {
         }
 
         const [state, ui] = app.a;
-        return this.renderNode(ui, state);
+        return this.renderNode(ui, state, app);
     }
 
     /**
      * Render a single UI node to HTML string
      * @param {Object} node - The node to render
      * @param {Object} state - Current state
+     * @param {Object} app - Current App node
      * @returns {string} HTML string
      */
-    renderNode(node, state) {
+    renderNode(node, state, app) {
         // Handle text nodes (atoms)
         if (!isCall(node)) {
             if (isSym(node) && node.v === "Empty") {
@@ -81,41 +82,40 @@ export class StringProjector extends BaseProjector {
         if (tag === "/@") {
             const currentRules = this.extractRulesFunc(this.universe);
             const reduced = this.normalizeFunc(node, currentRules);
-            return this.renderNode(reduced, state);
+            return this.renderNode(reduced, state, app);
         }
 
         if (tag === "Project") {
             if (node.a.length !== 1) {
                 throw new Error("Project[...] expects exactly one child expression");
             }
-            const rendered = this.project(node.a[0], state);
+            const rendered = this.project(node.a[0], app);
 
             if (isSplice(rendered)) {
                 // Filter out Empty symbols
                 const items = rendered.items.filter(item =>
                     !(isSym(item) && item.v === "Empty")
                 );
-                return items.map(item => this.renderNode(item, state)).join('');
+                return items.map(item => this.renderNode(item, state, app)).join('');
             }
 
             if (isSym(rendered) && rendered.v === "Empty") {
                 return '';
             }
 
-            return this.renderNode(rendered, state);
+            return this.renderNode(rendered, state, app);
         }
 
         if (tag === "UI") {
             if (node.a.length !== 1) {
                 throw new Error("UI[...] must wrap exactly one subtree");
             }
-            return this.renderNode(node.a[0], state);
+            return this.renderNode(node.a[0], state, app);
         }
 
         if (tag === "Show") {
             // Project Show node to get text
-            const appCtx = Call(Sym("App"), state, Sym("_"));
-            const annotated = Call(Sym("/@"), node, appCtx);
+            const annotated = Call(Sym("/@"), node, app);
             const currentRules = this.extractRulesFunc(this.universe);
             const reduced = this.normalizeFunc(annotated, currentRules);
 
@@ -170,7 +170,7 @@ export class StringProjector extends BaseProjector {
             if (isSym(child) && child.v === "Empty") {
                 continue;
             }
-            html += this.renderNode(child, state);
+            html += this.renderNode(child, state, app);
         }
 
         // Closing tag
@@ -180,14 +180,14 @@ export class StringProjector extends BaseProjector {
     }
 
     /**
-     * Project a symbolic UI node under current App/State context
+     * Project a symbolic UI node under current App context
      * @param {Object} node - The node to project
-     * @param {Object} state - Current state
+     * @param {Object} app - Current App node
      * @returns {Object} Projected node
      */
-    project(node, state) {
-        // Build /@ node: (/@ node (App state _))
-        const annotated = Call(Sym("/@"), node, Call(Sym("App"), state, Sym("_")));
+    project(node, app) {
+        // Build /@ node: (/@ node app)
+        const annotated = Call(Sym("/@"), node, app);
         const currentRules = this.extractRulesFunc(this.universe);
         const reduced = this.normalizeFunc(annotated, currentRules);
 

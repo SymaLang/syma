@@ -21,7 +21,7 @@ export class DOMProjector extends BaseProjector {
         this.normalizeFunc = null;
         this.extractRulesFunc = null;
         this.virtualTree = null;
-        this.virtualState = null; // Track the state used for virtual tree
+        this.virtualApp = null; // Track the app used for virtual tree
         this.rootElement = null; // Track the root DOM element
         this.domMap = new WeakMap(); // Maps virtual nodes to DOM elements
         this.hashCache = new WeakMap(); // Cache for AST node hashes
@@ -78,23 +78,23 @@ export class DOMProjector extends BaseProjector {
             }
 
             // Build new virtual tree
-            const newVirtualTree = this.buildVirtualTree(ui, state);
+            const newVirtualTree = this.buildVirtualTree(ui, state, app);
 
             if (!this.virtualTree || !this.rootElement) {
                 // First render - create DOM from scratch
                 this.mount.innerHTML = "";
-                this.rootElement = this.createDOMFromVirtual(newVirtualTree, state, this.onDispatch);
+                this.rootElement = this.createDOMFromVirtual(newVirtualTree, state, app, this.onDispatch);
                 this.mount.appendChild(this.rootElement);
                 this.domMap.set(newVirtualTree, this.rootElement);
             } else {
                 // Incremental update - diff and patch
-                // Pass both old and new states for proper comparison
-                const patches = this.diff(this.virtualTree, newVirtualTree, this.virtualState, state);
-                this.applyPatches(patches, state, this.onDispatch);
+                // Pass both old and new app/state for proper comparison
+                const patches = this.diff(this.virtualTree, newVirtualTree, this.virtualApp, app);
+                this.applyPatches(patches, state, app, this.onDispatch);
             }
 
             this.virtualTree = newVirtualTree;
-            this.virtualState = state; // Store the state for next diff
+            this.virtualApp = app; // Store the app for next diff
 
             // Note: We intentionally DON'T clear hashCache here!
             // The newState of this render becomes the oldState of the next render.
@@ -122,14 +122,14 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
-     * Project a symbolic UI node under current App/State context
+     * Project a symbolic UI node under current App context
      * @param {Object} node - The node to project
-     * @param {Object} state - Current state
+     * @param {Object} app - Current App node
      * @returns {Object} Projected node
      */
-    project(node, state) {
-        // Build /@ node: (/@ node (App state _))
-        const annotated = Call(Sym("/@"), node, Call(Sym("App"), state, Sym("_")));
+    project(node, app) {
+        // Build /@ node: (/@ node app)
+        const annotated = Call(Sym("/@"), node, app);
         const currentRules = this.extractRulesFunc(this.universe);
 
         const reduced = getTraceState()
@@ -140,7 +140,7 @@ export class DOMProjector extends BaseProjector {
         if (isCall(reduced) && isSym(reduced.h) && reduced.h.v === "/@") {
             throw new Error(`No projection rule found for: ${show(node)}\n` +
                           `Tried to match: ${show(annotated)}\n` +
-                          `Make sure you have a rule like: (R "ProjectionRule" (/@ ${show(node)} (App ...)) ...)`);
+                          `Make sure you have a rule like: {R ProjectionRule {/@ ${show(node)} {App ...}} ...}`);
         }
 
         return reduced;
@@ -323,7 +323,7 @@ export class DOMProjector extends BaseProjector {
     /**
      * Build a virtual tree representation from Syma nodes
      */
-    buildVirtualTree(node, state) {
+    buildVirtualTree(node, state, app) {
         // Handle special node types first
         if (!isCall(node)) {
             // Handle Empty symbols specially - they represent nothing
@@ -345,14 +345,14 @@ export class DOMProjector extends BaseProjector {
             const reduced = getTraceState()
                 ? this.normalizeWithTrace(node, currentRules).result
                 : this.normalizeFunc(node, currentRules);
-            return this.buildVirtualTree(reduced, state);
+            return this.buildVirtualTree(reduced, state, app);
         }
 
         if (tag === "Project") {
             if (node.a.length !== 1) {
                 throw new Error("Project[...] expects exactly one child expression");
             }
-            const rendered = this.project(node.a[0], state);
+            const rendered = this.project(node.a[0], app);
 
             if (isSplice(rendered)) {
                 // For splices, we need to return multiple nodes
@@ -363,7 +363,7 @@ export class DOMProjector extends BaseProjector {
                 // Return a special marker that the parent will handle
                 return {
                     type: 'project-splice',
-                    children: items.map(item => this.buildVirtualTree(item, state))
+                    children: items.map(item => this.buildVirtualTree(item, state, app))
                 };
             }
 
@@ -371,14 +371,14 @@ export class DOMProjector extends BaseProjector {
             if (isSym(rendered) && rendered.v === "Empty") {
                 return { type: 'empty' };
             }
-            return this.buildVirtualTree(rendered, state);
+            return this.buildVirtualTree(rendered, state, app);
         }
 
         if (tag === "UI") {
             if (node.a.length !== 1) {
                 throw new Error("UI[...] must wrap exactly one subtree");
             }
-            return this.buildVirtualTree(node.a[0], state);
+            return this.buildVirtualTree(node.a[0], state, app);
         }
 
         // Regular DOM element
@@ -400,7 +400,7 @@ export class DOMProjector extends BaseProjector {
             } else if (isCall(child) && isSym(child.h) && child.h.v === "Show") {
                 virtualChildren.push({ type: 'show', value: child });
             } else {
-                const childVNode = this.buildVirtualTree(child, state);
+                const childVNode = this.buildVirtualTree(child, state, app);
                 // Skip empty nodes
                 if (childVNode.type === 'empty') {
                     return;
@@ -435,7 +435,7 @@ export class DOMProjector extends BaseProjector {
     /**
      * Diff two virtual trees and generate patches
      */
-    diff(oldVNode, newVNode, oldState, newState, patches = [], path = []) {
+    diff(oldVNode, newVNode, oldApp, newApp, patches = [], path = []) {
         if (!oldVNode && !newVNode) {
             return patches;
         }
@@ -460,9 +460,9 @@ export class DOMProjector extends BaseProjector {
 
         // Handle different node types
         if (newVNode.type === 'text' || newVNode.type === 'show') {
-            // Compare text values using appropriate states
-            const oldText = this.getTextValue(oldVNode, oldState);
-            const newText = this.getTextValue(newVNode, newState);
+            // Compare text values using appropriate apps
+            const oldText = this.getTextValue(oldVNode, oldApp);
+            const newText = this.getTextValue(newVNode, newApp);
             if (oldText !== newText) {
                 patches.push({ type: 'text', path, oldVNode, newVNode });
             }
@@ -470,21 +470,21 @@ export class DOMProjector extends BaseProjector {
             // Compare props
             const propsHaveChanged = this.propsChanged(oldVNode.props, newVNode.props);
 
-            // Check if children have dynamic content that might depend on state
+            // Check if children have dynamic content that might depend on app/state
             const hasDynamicChildren = this.hasDynamicContent(newVNode.children);
 
             if (propsHaveChanged) {
                 // When parent props change significantly, replace the entire element
                 // This ensures all children are re-rendered with the new parent context
                 patches.push({ type: 'replace', path, oldVNode, newVNode });
-            } else if (hasDynamicChildren && this.stateHasChanged(oldState, newState)) {
-                // If state changed meaningfully and children have dynamic content, replace to ensure proper re-evaluation
-                // This handles cases where Project/Show nodes need re-evaluation with new state
+            } else if (hasDynamicChildren && this.appHasChanged(oldApp, newApp)) {
+                // If app changed meaningfully and children have dynamic content, replace to ensure proper re-evaluation
+                // This handles cases where Project/Show nodes need re-evaluation with new app
                 patches.push({ type: 'replace', path, oldVNode, newVNode });
             } else {
                 // Props haven't changed and no dynamic children, so we can safely diff children
                 // Diff children with key-based reconciliation
-                this.diffChildren(oldVNode.children, newVNode.children, oldState, newState, patches, path);
+                this.diffChildren(oldVNode.children, newVNode.children, oldApp, newApp, patches, path);
             }
         }
 
@@ -494,7 +494,7 @@ export class DOMProjector extends BaseProjector {
     /**
      * Diff children arrays with proper reconciliation
      */
-    diffChildren(oldChildren, newChildren, oldState, newState, patches, parentPath) {
+    diffChildren(oldChildren, newChildren, oldApp, newApp, patches, parentPath) {
         // Separate keyed and non-keyed children
         const hasKeys = newChildren.some(c => c.key !== undefined) || oldChildren.some(c => c.key !== undefined);
 
@@ -531,7 +531,7 @@ export class DOMProjector extends BaseProjector {
                     if (oldData) {
                         processedOldKeys.add(newChild.key);
                         // Recursively diff the matching keyed node
-                        this.diff(oldData.node, newChild, oldState, newState, patches, path);
+                        this.diff(oldData.node, newChild, oldApp, newApp, patches, path);
                     } else {
                         // New keyed node
                         patches.push({ type: 'add', path, newVNode: newChild });
@@ -546,7 +546,7 @@ export class DOMProjector extends BaseProjector {
                     const path = [...parentPath, newIdx];
                     if (nonKeyedIdx < oldNonKeyed.length) {
                         // Match by position for non-keyed items
-                        this.diff(oldNonKeyed[nonKeyedIdx].node, newChild, oldState, newState, patches, path);
+                        this.diff(oldNonKeyed[nonKeyedIdx].node, newChild, oldApp, newApp, patches, path);
                         nonKeyedIdx++;
                     } else {
                         // New non-keyed node
@@ -598,7 +598,7 @@ export class DOMProjector extends BaseProjector {
                 // Diff common elements by position
                 for (let i = 0; i < minLen; i++) {
                     const path = [...parentPath, i];
-                    this.diff(oldChildren[i], newChildren[i], oldState, newState, patches, path);
+                    this.diff(oldChildren[i], newChildren[i], oldApp, newApp, patches, path);
                 }
 
                 // Add new elements
@@ -690,17 +690,17 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
-     * Check if state has meaningfully changed
+     * Check if app has meaningfully changed
      */
-    stateHasChanged(oldState, newState) {
+    appHasChanged(oldApp, newApp) {
         // If references are the same, no change
-        if (oldState === newState) return false;
+        if (oldApp === newApp) return false;
 
         // If one is null/undefined and other isn't, changed
-        if (!oldState || !newState) return true;
+        if (!oldApp || !newApp) return true;
 
         // Compare hashes for fast inequality check
-        return this.hashNode(oldState) !== this.hashNode(newState);
+        return this.hashNode(oldApp) !== this.hashNode(newApp);
     }
 
     /**
@@ -756,7 +756,7 @@ export class DOMProjector extends BaseProjector {
     /**
      * Get text value from a virtual node
      */
-    getTextValue(vNode, state) {
+    getTextValue(vNode, app) {
         if (vNode.type === 'text') {
             const val = vNode.value;
             if (isStr(val)) return val.v;
@@ -764,8 +764,7 @@ export class DOMProjector extends BaseProjector {
             if (isSym(val)) return val.v === "Empty" ? "" : val.v;
         } else if (vNode.type === 'show') {
             // Project Show node to get text
-            const appCtx = Call(Sym("App"), state, Sym("_"));
-            const annotated = Call(Sym("/@"), vNode.value, appCtx);
+            const annotated = Call(Sym("/@"), vNode.value, app);
             const currentRules = this.extractRulesFunc(this.universe);
             const reduced = this.normalizeFunc(annotated, currentRules);
 
@@ -783,7 +782,7 @@ export class DOMProjector extends BaseProjector {
     /**
      * Apply patches to the DOM
      */
-    applyPatches(patches, state, onDispatch) {
+    applyPatches(patches, state, app, onDispatch) {
         // Group patches by type
         const patchGroups = {
             remove: [],
@@ -813,12 +812,12 @@ export class DOMProjector extends BaseProjector {
         });
 
         // Apply patches in order: removals, moves, replacements, additions, text updates, prop updates
-        patchGroups.remove.forEach(patch => this.applyPatch(patch, state, onDispatch));
-        patchGroups.move.forEach(patch => this.applyPatch(patch, state, onDispatch));
-        patchGroups.replace.forEach(patch => this.applyPatch(patch, state, onDispatch));
-        patchGroups.add.forEach(patch => this.applyPatch(patch, state, onDispatch));
-        patchGroups.text.forEach(patch => this.applyPatch(patch, state, onDispatch));
-        patchGroups.props.forEach(patch => this.applyPatch(patch, state, onDispatch));
+        patchGroups.remove.forEach(patch => this.applyPatch(patch, state, app, onDispatch));
+        patchGroups.move.forEach(patch => this.applyPatch(patch, state, app, onDispatch));
+        patchGroups.replace.forEach(patch => this.applyPatch(patch, state, app, onDispatch));
+        patchGroups.add.forEach(patch => this.applyPatch(patch, state, app, onDispatch));
+        patchGroups.text.forEach(patch => this.applyPatch(patch, state, app, onDispatch));
+        patchGroups.props.forEach(patch => this.applyPatch(patch, state, app, onDispatch));
     }
 
     /**
@@ -910,13 +909,13 @@ export class DOMProjector extends BaseProjector {
     /**
      * Apply a single patch
      */
-    applyPatch(patch, state, onDispatch) {
+    applyPatch(patch, state, app, onDispatch) {
         switch (patch.type) {
             case 'add': {
                 if (patch.path.length === 0) {
                     // Root level add - should not happen in normal flow
                     // but handle it by replacing root
-                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, app, onDispatch);
                     if (this.rootElement) {
                         this.mount.replaceChild(newEl, this.rootElement);
                     } else {
@@ -926,7 +925,7 @@ export class DOMProjector extends BaseProjector {
                     this.domMap.set(patch.newVNode, newEl);
                 } else {
                     const parent = this.getElementByPath(patch.path.slice(0, -1));
-                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, app, onDispatch);
                     const index = patch.path[patch.path.length - 1];
 
                     // Insert at the correct position, accounting for current DOM state
@@ -972,7 +971,7 @@ export class DOMProjector extends BaseProjector {
 
                 if (patch.path.length === 0) {
                     // Replacing root
-                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, app, onDispatch);
                     if (this.rootElement) {
                         this.mount.replaceChild(newEl, this.rootElement);
                     } else {
@@ -984,7 +983,7 @@ export class DOMProjector extends BaseProjector {
                     // Restore focus after replacing root
                     this.restoreFocusState(newEl, focusState);
                 } else if (element && element.parentNode) {
-                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, onDispatch);
+                    const newEl = this.createDOMFromVirtual(patch.newVNode, state, app, onDispatch);
                     element.parentNode.replaceChild(newEl, element);
                     this.domMap.set(patch.newVNode, newEl);
 
@@ -997,7 +996,7 @@ export class DOMProjector extends BaseProjector {
             case 'text': {
                 const element = this.getElementByPath(patch.path);
                 if (element) {
-                    element.textContent = this.getTextValue(patch.newVNode, state);
+                    element.textContent = this.getTextValue(patch.newVNode, app);
                 }
                 break;
             }
@@ -1066,9 +1065,9 @@ export class DOMProjector extends BaseProjector {
     /**
      * Create DOM element from virtual node
      */
-    createDOMFromVirtual(vNode, state, onDispatch) {
+    createDOMFromVirtual(vNode, state, app, onDispatch) {
         if (vNode.type === 'text' || vNode.type === 'show') {
-            return document.createTextNode(this.getTextValue(vNode, state));
+            return document.createTextNode(this.getTextValue(vNode, app));
         }
 
         // Note: fragments should be flattened during buildVirtualTree,
@@ -1076,7 +1075,7 @@ export class DOMProjector extends BaseProjector {
         if (vNode.type === 'fragment') {
             const fragment = document.createDocumentFragment();
             for (const child of vNode.children) {
-                fragment.appendChild(this.createDOMFromVirtual(child, state, onDispatch));
+                fragment.appendChild(this.createDOMFromVirtual(child, state, app, onDispatch));
             }
             return fragment;
         }
@@ -1091,7 +1090,7 @@ export class DOMProjector extends BaseProjector {
 
             // Add children
             for (const child of vNode.children) {
-                el.appendChild(this.createDOMFromVirtual(child, state, onDispatch));
+                el.appendChild(this.createDOMFromVirtual(child, state, app, onDispatch));
             }
 
             // Store mapping
@@ -1119,7 +1118,7 @@ export class DOMProjector extends BaseProjector {
             this.mount.innerHTML = "";
         }
         this.virtualTree = null;
-        this.virtualState = null;
+        this.virtualApp = null;
         this.rootElement = null;
         this.domMap = new WeakMap();
         this.hashCache = new WeakMap(); // Clear hash cache on cleanup

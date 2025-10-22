@@ -38,6 +38,11 @@ export class ErrorSection {
     }
 
     render() {
+        // Don't render anything if there are no errors
+        if (this.errors.length === 0) {
+            return null;
+        }
+
         const section = document.createElement('div');
         section.style.cssText = `
             display: flex;
@@ -55,74 +60,56 @@ export class ErrorSection {
         `;
 
         const title = document.createElement('h3');
-        title.textContent = this.errors.length > 0 ? `⚠️ Errors (${this.errors.length})` : '✓ No Errors';
+        title.textContent = `⚠️ Errors (${this.errors.length})`;
         title.style.cssText = `
             margin: 0;
             font-size: 14px;
             font-weight: bold;
-            color: ${this.errors.length > 0 ? '#f85149' : '#3fb950'};
+            color: #f85149;
         `;
 
         header.appendChild(title);
 
-        if (this.errors.length > 0) {
-            const clearBtn = document.createElement('button');
-            clearBtn.textContent = 'Clear';
-            clearBtn.style.cssText = `
-                background: #30363d;
-                border: 1px solid #444;
-                color: #8b949e;
-                padding: 4px 12px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 11px;
-                transition: all 0.2s;
-            `;
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = 'Clear';
+        clearBtn.style.cssText = `
+            background: #30363d;
+            border: 1px solid #444;
+            color: #8b949e;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        `;
 
-            clearBtn.addEventListener('mouseenter', () => {
-                clearBtn.style.background = '#3d4449';
-                clearBtn.style.color = '#f0f6fc';
-            });
+        clearBtn.addEventListener('mouseenter', () => {
+            clearBtn.style.background = '#3d4449';
+            clearBtn.style.color = '#f0f6fc';
+        });
 
-            clearBtn.addEventListener('mouseleave', () => {
-                clearBtn.style.background = '#30363d';
-                clearBtn.style.color = '#8b949e';
-            });
+        clearBtn.addEventListener('mouseleave', () => {
+            clearBtn.style.background = '#30363d';
+            clearBtn.style.color = '#8b949e';
+        });
 
-            clearBtn.addEventListener('click', () => {
-                this.clearErrors();
-                // Notify overlay to update everything
-                if (window.__symaDebugOverlay) {
-                    window.__symaDebugOverlay.updateBadge();
-                    window.__symaDebugOverlay.updateContent();
-                }
-            });
+        clearBtn.addEventListener('click', () => {
+            this.clearErrors();
+            // Notify overlay to update everything
+            if (window.__symaDebugOverlay) {
+                window.__symaDebugOverlay.updateBadge();
+                window.__symaDebugOverlay.updateContent();
+            }
+        });
 
-            header.appendChild(clearBtn);
-        }
-
+        header.appendChild(clearBtn);
         section.appendChild(header);
 
         // Error list
-        if (this.errors.length === 0) {
-            const noErrors = document.createElement('div');
-            noErrors.textContent = 'No errors detected';
-            noErrors.style.cssText = `
-                color: #8b949e;
-                font-style: italic;
-                font-size: 12px;
-                padding: 12px;
-                background: rgba(35, 134, 54, 0.1);
-                border-radius: 6px;
-                border: 1px solid rgba(35, 134, 54, 0.3);
-            `;
-            section.appendChild(noErrors);
-        } else {
-            this.errors.forEach((error, index) => {
-                const errorEl = this.renderError(error, index);
-                section.appendChild(errorEl);
-            });
-        }
+        this.errors.forEach((error, index) => {
+            const errorEl = this.renderError(error, index);
+            section.appendChild(errorEl);
+        });
 
         return section;
     }

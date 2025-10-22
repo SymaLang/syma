@@ -41,8 +41,8 @@ export const show = n => {
     if (isNum(n)) return String(n.v);
     if (isStr(n)) return JSON.stringify(n.v);
     if (isCall(n)) {
-        if (n.h === null) return `{}[${n.a.map(show).join(", ")}]`;
-        return `${show(n.h)}[${n.a.map(show).join(", ")}]`;
+        if (n.h === null) return `{{} ${n.a.map(show).join(" ")}}`;
+        return `{${show(n.h)} ${n.a.map(show).join(" ")}}`;
     }
     throw new Error("show: unknown node kind");
 };
