@@ -31,7 +31,7 @@ export class TerminalProjector extends BaseProjector {
     }
 
     render(universe) {
-        // Store universe for /@ handling
+        // Store universe for :project handling
         this.universe = universe;
 
         // For REPL, we typically want to show the result of evaluation
@@ -80,8 +80,8 @@ export class TerminalProjector extends BaseProjector {
             // Special formatting for certain constructs
             if (isSym(head)) {
                 switch (head.v) {
-                    case '/@':
-                        // Handle projection operator by normalizing it
+                    case ':project':
+                        // Handle projection marker by normalizing it
                         // This matches the DOM projector behavior
                         if (this.normalizeFunc && this.extractRulesFunc && this.universe) {
                             const currentRules = this.extractRulesFunc(this.universe);

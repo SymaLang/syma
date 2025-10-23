@@ -49,7 +49,7 @@ export const BUILTINS = [
   // Special forms (language constructs)
   'R', 'Universe', 'Program', 'Rules', 'RuleRules', 'App', 'State',
   'UI', 'Apply', 'Bundle', 'Module', 'Import', 'Export', 'Defs', 'Effects',
-  'Var', 'VarRest', '/@',
+  'Var', 'VarRest',
 
   // Runtime operators
   'Show', 'Project', 'Input',
@@ -135,5 +135,8 @@ export const BUILTINS = [
   'Ast', 'Pretty',
 
   // Effect system - Process execution (Node.js/REPL)
-  'Exec', 'ExecComplete', 'Command', 'Output', 'Exit'
+  'Exec', 'ExecComplete', 'Command', 'Output', 'Exit',
+
+  // Special markers
+  ':with', ':scope', ':project', ':innermost'
 ];

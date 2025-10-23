@@ -166,14 +166,16 @@ When timer fires:
 
     ; View
     {R "View"
-       {/@ {View} {App {State {Count n_}} _}}
+       {:project {View}}
        {Div
-         {H1 "Countdown: " {Show Count}}}}
+         {H1 "Countdown: " {Show Count}}}
+       :with {App {State {Count n_}} _}}
 
     ; Show count
     {R "ShowCount"
-       {/@ {Show Count} {App {State {Count n_}} _}}
-       {ToString n_}}}}
+       {:project {Show Count}}
+       {ToString n_}
+       :with {App {State {Count n_}} _}}}}
 ```
 
 Run it:
@@ -373,14 +375,16 @@ Without `{Frozen}`, the loaded code would be normalized immediately, potentially
 
     ; View
     {R "View"
-       {/@ {View} {App state_ _}}
+       {:project {View}}
        {Div
          {Input :type "text" :value {Input todoInput} :onKeydown {When {KeyIs "Enter"} {Seq {AddTodo {Input todoInput}} {ClearInput todoInput}}}}
-         {Ul {Project {TodoList}}}}}
+         {Ul {Project {TodoList}}}}
+       :with {App state_ _}}
 
     {R "TodoList"
-       {/@ {TodoList} {App {State {Todos todos..} _} _}}
-       {Map {Lambda t {Li {Show {Get t text}}}} {Todos todos..}}}}}
+       {:project {TodoList}}
+       {Map {Lambda t {Li {Show {Get t text}}}} {Todos todos..}}
+       :with {App {State {Todos todos..} _} _}}}}
 ```
 
 **Flow:**

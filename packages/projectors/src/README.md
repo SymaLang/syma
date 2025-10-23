@@ -43,6 +43,26 @@ ProjectorFactory.create('name', config)            // Create an instance
 ProjectorFactory.getAvailable()                    // List registered types
 ```
 
+## Projection System
+
+All projectors use the `:project` marker system for dynamic content:
+
+When projectors encounter `{Show expr}` or `{Project expr}`, they:
+1. Wrap the expression with `:project` marker: `{:project expr}`
+2. Embed it in a temporary Program structure to provide ancestor context
+3. Normalize the structure - the engine matches projection rules with `:with` clauses
+4. Extract the normalized result
+
+**Example Projection Rule:**
+```lisp
+{R "ShowCount"
+  {:project {Show Count}}
+  n_
+  :with {Program {App {State n_} _} _}}
+```
+
+The `:with` pattern automatically finds the Program node in the parent chain, binding variables from the full context. This makes projection rules clean and declarative - no need to pass context explicitly.
+
 ## Built-in Projectors
 
 ### DOMProjector
@@ -50,7 +70,7 @@ ProjectorFactory.getAvailable()                    // List registered types
 Renders symbolic UI to browser DOM elements:
 - Creates real HTML elements
 - Binds event handlers
-- Handles dynamic content projection with `Show[...]`
+- Handles dynamic content projection with `Show[...]` and `{:project}` rules
 - Supports two-way data binding
 
 ### TraceProjector
@@ -91,7 +111,7 @@ Renders symbolic UI to HTML string:
 - SEO-friendly output
 
 Features:
-- Supports `/@ projection` with context
+- Supports `:project` marker with `:with` context binding
 - Handles `Project[...]` and `Show[...]` nodes
 - Omits event handlers (client-side only)
 - Omits bindings (bind-value, bind-checked, etc.)

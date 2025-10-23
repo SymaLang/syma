@@ -678,7 +678,7 @@ export class SymaParser {
             'And', 'Or', 'Not',
             'IsNum', 'IsStr', 'IsSym', 'IsTrue', 'IsFalse',
             'Random', 'ParseNum', 'Debug',
-            'R', 'Apply', '/@',
+            'R', 'Apply',
             'App', 'State'
         ];
         return functionLike.includes(sym);

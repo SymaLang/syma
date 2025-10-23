@@ -609,10 +609,14 @@ See [CHEATSHEET.md](../../CHEATSHEET.md) for complete primitive reference.
 ```lisp
 :guard condition        ; Conditional matching
 :scope ParentSymbol     ; Context restriction
-:with contextPattern    ; Bind from context
+:with contextPattern    ; Bind from context (scoped parent or top Program)
 :innermost              ; Bottom-up evaluation
 :prio N                 ; Priority (higher first)
 ```
+
+**The `:with` modifier:**
+- **With `:scope`**: Matches the scoped compound
+- **Without `:scope`**: Matches the top `{Program}` node (access Effects, full App, etc.)
 
 **Order doesn't matter after replacement:**
 

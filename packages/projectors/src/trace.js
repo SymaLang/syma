@@ -83,9 +83,34 @@ export class TraceProjector extends BaseProjector {
      * Project a symbolic node in context
      */
     project(node, state) {
-        const annotated = Call(Sym("/@"), node, Call(Sym("App"), state, Sym("_")));
+        // Build synthetic program with state for :with matching
+        const program = Call(Sym("Program"), Call(Sym("App"), state, Sym("_")));
+
+        // Wrap :project in a structure where Program is an ancestor
+        const marker = Call(Sym(":project"), node);
+        const wrapper = Call(Sym("__SYMA_PROJECT_WRAPPER__"), marker);
+
+        // Get app from program
+        const app = program.a[0]; // First child is App
+        const tempProgram = Call(Sym("Program"), app, wrapper);
+
         const currentRules = this.extractRulesFunc(this.universe);
-        return this.normalizeFunc(annotated, currentRules);
+        const normalizedProgram = this.normalizeFunc(tempProgram, currentRules);
+
+        // Extract result from wrapper
+        if (isCall(normalizedProgram) && normalizedProgram.a.length >= 2) {
+            const wrapperPos = normalizedProgram.a.findIndex(n =>
+                isCall(n) && isSym(n.h) && n.h.v === "__SYMA_PROJECT_WRAPPER__"
+            );
+            if (wrapperPos >= 0) {
+                const resultWrapper = normalizedProgram.a[wrapperPos];
+                if (resultWrapper.a.length > 0) {
+                    return resultWrapper.a[0];
+                }
+            }
+        }
+
+        return node; // Fallback
     }
 
     /**
@@ -100,7 +125,7 @@ export class TraceProjector extends BaseProjector {
         const tag = node.h.v;
 
         // Handle special nodes
-        if (tag === "/@") {
+        if (tag === ":project") {
             const currentRules = this.extractRulesFunc(this.universe);
             const reduced = this.normalizeFunc(node, currentRules);
             this.traceNode(reduced, state);
@@ -162,10 +187,7 @@ export class TraceProjector extends BaseProjector {
      * Project a Show[...] expression
      */
     projectShow(part, state) {
-        const appCtx = Call(Sym("App"), state, Sym("_"));
-        const annotated = Call(Sym("/@"), part, appCtx);
-        const currentRules = this.extractRulesFunc(this.universe);
-        const reduced = this.normalizeFunc(annotated, currentRules);
+        const reduced = this.project(part, state);
 
         if (!isStr(reduced) && !isNum(reduced)) {
             return `[ERROR: Show did not reduce to Str/Num: ${show(reduced)}]`;

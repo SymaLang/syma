@@ -317,17 +317,18 @@ Use `:innermost` when:
 
 ## The `:with` Modifier: Context Binding
 
-Sometimes you need to **bind variables from the scoped parent**:
+Sometimes you need to **bind variables from context**:
 
 ```lisp
+:rule Name pattern replacement :with contextPattern
 :rule Name pattern replacement :scope Parent :with contextPattern
 ```
 
 The `:with` pattern matches against:
 - **With `:scope`** → matches the scoped compound
-- **Without `:scope`** → matches the same expression as the main pattern
+- **Without `:scope`** → matches the top `{Program}` node
 
-### Example: Accessing Parent Context
+### Example: Accessing Parent Context (with `:scope`)
 
 ```lisp
 syma> :rule General {Some ..} → {Matched binding_} :scope Foo :with {Foo binding_ ..}
@@ -345,19 +346,32 @@ syma> {Foo "Something" {Some data}}
 4. Replacement gets both matches merged
 5. Result: `{Matched "Something"}`
 
-### Without Scope
+### Without Scope: Accessing Program Context
 
 ```lisp
-syma> :rule Extract {Process ..} → {Result first_ second_} :with {Process first_ second_ ..}
-Rule "Extract" added
+syma> :rule ShowEffects {Display ..} → {Count pending_} :with {Program app_ {Effects {Pending pending_} inbox_}}
+Rule "ShowEffects" added
 
-syma> {Process "A" "B" "C"}
-→ {Result "A" "B"}
+; In a full program:
+{Program
+  {App {State ...} {UI {Display status}}}
+  {Effects {Pending {HttpReq ...} {Timer ...}} {Inbox}}}
+
+; The Display rule can access Effects from Program!
+→ {Count 2}  ; 2 pending effects
 ```
 
-Here, `:with` matches **the same expression** and extracts additional bindings.
+Here, `:with` matches **the top Program node**, giving rules access to:
+- The full `{App}` structure
+- `{Effects}` (Pending and Inbox)
+- Any other Program-level data
 
-🜛 *`:with` is like pattern matching with peripheral vision. The main pattern focuses; `:with` sees the surroundings.*
+**Why is this powerful?**
+- UI rules can check pending effects
+- Projection rules can access both App state AND effects
+- No need for manual threading of context through every level
+
+🜛 *`:with` is like pattern matching with peripheral vision. The main pattern focuses; `:with` sees the surroundings—or the whole universe.*
 
 ⸻
 

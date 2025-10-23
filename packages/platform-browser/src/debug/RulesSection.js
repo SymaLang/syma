@@ -351,9 +351,24 @@ export class RulesSection {
             this.addLabeledCode(content, 'Guard:', this.parser.prettyPrint(rule.guard, 1));
         }
 
+        // With pattern (if present)
+        if (rule.withPattern) {
+            this.addLabeledCode(content, 'With:', this.parser.prettyPrint(rule.withPattern, 1));
+        }
+
         // Priority (if not default)
         if (rule.prio !== 0 && rule.prio !== 500) {
             this.addLabel(content, `Priority: ${rule.prio}`);
+        }
+
+        // Scope restriction (if present)
+        if (rule.scope) {
+            this.addLabel(content, `Scope: ${rule.scope}`);
+        }
+
+        // Innermost flag (if true)
+        if (rule.innermost) {
+            this.addLabel(content, `Innermost: true`);
         }
 
         // Module tag (if available)

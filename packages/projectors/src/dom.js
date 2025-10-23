@@ -61,6 +61,7 @@ export class DOMProjector extends BaseProjector {
         try {
             this.universe = universe;
 
+            const program = this.getProgram(universe);
             const app = this.getProgramApp(universe);
             if (!isCall(app) || !isSym(app.h) || app.h.v !== "App") {
                 throw new Error("Program must contain App[State[...], UI[...]]");
@@ -77,8 +78,8 @@ export class DOMProjector extends BaseProjector {
                 throw new Error("App must contain UI[...] node");
             }
 
-            // Build new virtual tree
-            const newVirtualTree = this.buildVirtualTree(ui, state, app);
+            // Build new virtual tree (pass program for projection context)
+            const newVirtualTree = this.buildVirtualTree(ui, state, app, program);
 
             if (!this.virtualTree || !this.rootElement) {
                 // First render - create DOM from scratch
@@ -122,28 +123,52 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
-     * Project a symbolic UI node under current App context
+     * Project a symbolic UI node under current Program context
      * @param {Object} node - The node to project
-     * @param {Object} app - Current App node
+     * @param {Object} program - Current Program node (full context)
      * @returns {Object} Projected node
      */
-    project(node, app) {
-        // Build /@ node: (/@ node app)
-        const annotated = Call(Sym("/@"), node, app);
+    project(node, program) {
+        // Wrap :project in a structure where Program is an ancestor
+        // This ensures :with can find Program in the parents array during normalization
+        // Pattern: {Program app {:__project_marker__ {:project node}}}
+        // After normalization, extract from marker
+        const marker = Call(Sym(":project"), node);
+        const wrapper = Call(Sym("__SYMA_PROJECT_WRAPPER__"), marker);
+
+        // Get app from program for reconstruction
+        const app = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "App");
+        const effects = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Effects");
+
+        // Reconstruct program with wrapper as additional child (will be ignored by other rules)
+        const tempProgram = effects
+            ? Call(Sym("Program"), app, effects, wrapper)
+            : Call(Sym("Program"), app, wrapper);
+
         const currentRules = this.extractRulesFunc(this.universe);
 
-        const reduced = getTraceState()
-            ? this.normalizeWithTrace(annotated, currentRules).result
-            : this.normalizeFunc(annotated, currentRules);
+        // Normalize the entire temporary program structure
+        const normalizedProgram = getTraceState()
+            ? this.normalizeWithTrace(tempProgram, currentRules).result
+            : this.normalizeFunc(tempProgram, currentRules);
 
-        // Check if projection failed (still has /@ at the root)
-        if (isCall(reduced) && isSym(reduced.h) && reduced.h.v === "/@") {
-            throw new Error(`No projection rule found for: ${show(node)}\n` +
-                          `Tried to match: ${show(annotated)}\n` +
-                          `Make sure you have a rule like: {R ProjectionRule {/@ ${show(node)} {App ...}} ...}`);
+        // Extract the result from the wrapper position
+        if (isCall(normalizedProgram) && normalizedProgram.a.length >= 2) {
+            const wrapperPos = normalizedProgram.a.findIndex(n =>
+                isCall(n) && isSym(n.h) && n.h.v === "__SYMA_PROJECT_WRAPPER__"
+            );
+
+            if (wrapperPos >= 0) {
+                const resultWrapper = normalizedProgram.a[wrapperPos];
+                if (resultWrapper.a.length > 0) {
+                    return resultWrapper.a[0];
+                }
+            }
         }
 
-        return reduced;
+        // If extraction failed, check if projection failed
+        throw new Error(`No projection rule found for: ${show(node)}\n` +
+                      `Make sure you have a rule like: {R "ProjectionRule" {:project ${show(node)}} ... :with {Program ...}}`);
     }
 
     /**
@@ -159,11 +184,19 @@ export class DOMProjector extends BaseProjector {
     }
 
     /**
+     * Get Program node from universe
+     */
+    getProgram(universe) {
+        const prog = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
+        if (!prog) throw new Error("Universe missing Program[...]");
+        return prog;
+    }
+
+    /**
      * Get Program/App from universe
      */
     getProgramApp(universe) {
-        const prog = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
-        if (!prog) throw new Error("Universe missing Program[...]");
+        const prog = this.getProgram(universe);
 
         // Program might contain [App[...]] or [App[...], Effects[...]]
         const app = prog.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "App");
@@ -323,7 +356,7 @@ export class DOMProjector extends BaseProjector {
     /**
      * Build a virtual tree representation from Syma nodes
      */
-    buildVirtualTree(node, state, app) {
+    buildVirtualTree(node, state, app, program) {
         // Handle special node types first
         if (!isCall(node)) {
             // Handle Empty symbols specially - they represent nothing
@@ -340,19 +373,11 @@ export class DOMProjector extends BaseProjector {
         const tag = node.h.v;
 
         // Handle special cases
-        if (tag === "/@") {
-            const currentRules = this.extractRulesFunc(this.universe);
-            const reduced = getTraceState()
-                ? this.normalizeWithTrace(node, currentRules).result
-                : this.normalizeFunc(node, currentRules);
-            return this.buildVirtualTree(reduced, state, app);
-        }
-
         if (tag === "Project") {
             if (node.a.length !== 1) {
                 throw new Error("Project[...] expects exactly one child expression");
             }
-            const rendered = this.project(node.a[0], app);
+            const rendered = this.project(node.a[0], program);
 
             if (isSplice(rendered)) {
                 // For splices, we need to return multiple nodes
@@ -363,7 +388,7 @@ export class DOMProjector extends BaseProjector {
                 // Return a special marker that the parent will handle
                 return {
                     type: 'project-splice',
-                    children: items.map(item => this.buildVirtualTree(item, state, app))
+                    children: items.map(item => this.buildVirtualTree(item, state, app, program))
                 };
             }
 
@@ -371,14 +396,14 @@ export class DOMProjector extends BaseProjector {
             if (isSym(rendered) && rendered.v === "Empty") {
                 return { type: 'empty' };
             }
-            return this.buildVirtualTree(rendered, state, app);
+            return this.buildVirtualTree(rendered, state, app, program);
         }
 
         if (tag === "UI") {
             if (node.a.length !== 1) {
                 throw new Error("UI[...] must wrap exactly one subtree");
             }
-            return this.buildVirtualTree(node.a[0], state, app);
+            return this.buildVirtualTree(node.a[0], state, app, program);
         }
 
         // Regular DOM element
@@ -398,9 +423,9 @@ export class DOMProjector extends BaseProjector {
             if (isStr(child) || isNum(child) || isSym(child)) {
                 virtualChildren.push({ type: 'text', value: child });
             } else if (isCall(child) && isSym(child.h) && child.h.v === "Show") {
-                virtualChildren.push({ type: 'show', value: child });
+                virtualChildren.push({ type: 'show', value: child, program });
             } else {
-                const childVNode = this.buildVirtualTree(child, state, app);
+                const childVNode = this.buildVirtualTree(child, state, app, program);
                 // Skip empty nodes
                 if (childVNode.type === 'empty') {
                     return;
@@ -763,18 +788,16 @@ export class DOMProjector extends BaseProjector {
             if (isNum(val)) return String(val.v);
             if (isSym(val)) return val.v === "Empty" ? "" : val.v;
         } else if (vNode.type === 'show') {
-            // Project Show node to get text
-            const annotated = Call(Sym("/@"), vNode.value, app);
-            const currentRules = this.extractRulesFunc(this.universe);
-            const reduced = this.normalizeFunc(annotated, currentRules);
+            // Project Show node to get text using Program context
+            const program = vNode.program || this.getProgram(this.universe);
+            const reduced = this.project(vNode.value, program);
 
             if (isStr(reduced)) return reduced.v;
             if (isNum(reduced)) return String(reduced.v);
 
-            // Try ToString coercion
-            const coerced = this.normalizeFunc(Call(Sym("ToString"), reduced), currentRules);
-            if (isStr(coerced)) return coerced.v;
-            if (isNum(coerced)) return String(coerced.v);
+            // Reduced value should already be a displayable value
+            // If it's a symbol, show it as text
+            if (isSym(reduced)) return reduced.v;
         }
         return "";
     }

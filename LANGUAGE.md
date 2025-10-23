@@ -753,7 +753,7 @@ The `:with` modifier allows rules to bind additional variables from a related co
 
 **How it works:**
 - **With `:scope`**: The `:with` pattern matches against the scoped compound
-- **Without `:scope`**: The `:with` pattern matches against the same expression as the main pattern
+- **Without `:scope`**: The `:with` pattern matches against the top `{Program}` node
 - Bindings from both patterns are merged and available in the replacement
 
 **Examples:**
@@ -769,33 +769,19 @@ The `:with` modifier allows rules to bind additional variables from a related co
 ```
 
 ```lisp
-; Bind from same expression when no :scope
-:rule Extract {Process ..} -> {Result first_ second_} :with {Process first_ second_ ..}
+; Bind from Program context when no :scope
+:rule ExtractEffects {SomeUI ..} -> {WithEffects pending_} :with {Program app_ {Effects {Pending pending_} inbox_}}
 
-; Expression: {Process "A" "B" "C"}
-; Main pattern matches Process with any args
-; :with pattern binds first_ = "A", second_ = "B"
-; Result: {Result "A" "B"}
-```
-
-**User's original example:**
-
-```lisp
-{Foo "Something" {Some moo}}
-
-:rule Specific {Some ..} -> {Match}
-:rule General {..} -> {Splat oops bind_} :scope Foo :with {Foo bind_ ..}
-
-; When {Some moo} matches:
-; - Main pattern {..} matches {Some moo}
-; - :scope Foo ensures we're inside Foo
-; - :with {Foo bind_ ..} binds bind_ = "Something" from the Foo compound
-; - Result includes both oops and the bound value
+; The :with pattern can access Effects from the top-level Program
+; This gives rules access to global context (Effects, full App structure, etc.)
+; Main pattern matches anywhere in the tree
+; :with pattern binds from the root Program node
 ```
 
 **Common use cases:**
-- Accessing parent context while transforming nested elements
-- Extracting multiple values from the same expression
+- Accessing parent context while transforming nested elements (with `:scope`)
+- Accessing global Program context from anywhere in the tree (without `:scope`)
+- Binding Effects, App state, or other Program-level data in UI rules
 - Context-aware transformations that need information from the scoping compound
 
 **All modifiers together:**
@@ -1124,22 +1110,33 @@ The `{Project expression}` form evaluates an expression in the current state con
 
 ---
 
-## 9. Projection Operator `/@`
+## 9. Projection with `:project` and `:with`
 
-The projection operator `/@` enables context-aware evaluation:
+Projection rules use the `:project` marker combined with `:with` for context binding:
 
 ```lisp
-{/@ expression context}
+{R "RuleName"
+  {:project expression}
+  replacement
+  :with contextPattern}
 ```
 
-Common usage in rules:
+When the projector encounters `{Project expr}` or `{Show expr}`, it wraps them with the `:project` marker. The `:with` clause automatically binds from the Program context in the ancestor chain:
+
 ```lisp
 {R "ShowCount"
-  {/@ {Show Count} {App {State ...} {Var _}}}
-  {Str "42"}}
+  {:project {Show Count}}
+  {Str "42"}
+  :with {Program {App {State {Count 42}} ui_} effects_}}
+
+; Can also access Effects:
+{R "ShowPendingCount"
+  {:project {Show PendingEffects}}
+  {ToString {Length pending..}}
+  :with {Program app_ {Effects {Pending pending..} inbox_}}}
 ```
 
-This allows rules to match projections and compute values based on the current application state.
+The engine automatically finds the Program node in the parent chain during normalization, making projection rules clean and declarative.
 
 ---
 
@@ -1731,7 +1728,7 @@ Module definitions become rules with high priority (1000):
    - **Source**: Write unqualified with `open` or `{Open ...}` for clean code
    - **Runtime**: Everything fully qualified for deterministic execution
    - Best of both worlds: ergonomic authoring + safe execution
-9. **Context-aware projection** for UI rendering
+9. **Projection with `:project` and `:with`** - clean declarative syntax for context-aware UI rendering
 10. **Event handling** through `Apply` patterns with lifting rules
 11. **Symbolic effects** for pure I/O representation
 12. **Event action combinators** for composable UI interactions

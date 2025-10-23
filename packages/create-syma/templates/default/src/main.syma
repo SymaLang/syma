@@ -19,8 +19,9 @@
 
   {Rules
     {R "ShowCount"
-      {/@ {Show Count} {App {State {CounterState st_}} _}}
+      {:project {Show Count} }
       st_
+      :with {Program .. {App {State {CounterState st_}} _} ..}
     }
 
     {R "Inc"

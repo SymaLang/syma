@@ -47,13 +47,14 @@ export class StringProjector extends BaseProjector {
     render(universe) {
         this.universe = universe;
 
+        const program = this.getProgram(universe);
         const app = this.getProgramApp(universe);
         if (!isCall(app) || !isSym(app.h) || app.h.v !== "App") {
             throw new Error("Program must contain App[state, ui]");
         }
 
         const [state, ui] = app.a;
-        return this.renderNode(ui, state, app);
+        return this.renderNode(ui, state, app, program);
     }
 
     /**
@@ -61,9 +62,10 @@ export class StringProjector extends BaseProjector {
      * @param {Object} node - The node to render
      * @param {Object} state - Current state
      * @param {Object} app - Current App node
+     * @param {Object} program - Current Program node (for projection context)
      * @returns {string} HTML string
      */
-    renderNode(node, state, app) {
+    renderNode(node, state, app, program) {
         // Handle text nodes (atoms)
         if (!isCall(node)) {
             if (isSym(node) && node.v === "Empty") {
@@ -79,53 +81,41 @@ export class StringProjector extends BaseProjector {
         const tag = node.h.v;
 
         // Handle special cases
-        if (tag === "/@") {
-            const currentRules = this.extractRulesFunc(this.universe);
-            const reduced = this.normalizeFunc(node, currentRules);
-            return this.renderNode(reduced, state, app);
-        }
-
         if (tag === "Project") {
             if (node.a.length !== 1) {
                 throw new Error("Project[...] expects exactly one child expression");
             }
-            const rendered = this.project(node.a[0], app);
+            const rendered = this.project(node.a[0], program);
 
             if (isSplice(rendered)) {
                 // Filter out Empty symbols
                 const items = rendered.items.filter(item =>
                     !(isSym(item) && item.v === "Empty")
                 );
-                return items.map(item => this.renderNode(item, state, app)).join('');
+                return items.map(item => this.renderNode(item, state, app, program)).join('');
             }
 
             if (isSym(rendered) && rendered.v === "Empty") {
                 return '';
             }
 
-            return this.renderNode(rendered, state, app);
+            return this.renderNode(rendered, state, app, program);
         }
 
         if (tag === "UI") {
             if (node.a.length !== 1) {
                 throw new Error("UI[...] must wrap exactly one subtree");
             }
-            return this.renderNode(node.a[0], state, app);
+            return this.renderNode(node.a[0], state, app, program);
         }
 
         if (tag === "Show") {
-            // Project Show node to get text
-            const annotated = Call(Sym("/@"), node, app);
-            const currentRules = this.extractRulesFunc(this.universe);
-            const reduced = this.normalizeFunc(annotated, currentRules);
+            // Project Show node to get text using Program context
+            const reduced = this.project(node, program);
 
             if (isStr(reduced)) return this.escapeHtml(reduced.v);
             if (isNum(reduced)) return this.escapeHtml(String(reduced.v));
-
-            // Try ToString coercion
-            const coerced = this.normalizeFunc(Call(Sym("ToString"), reduced), currentRules);
-            if (isStr(coerced)) return this.escapeHtml(coerced.v);
-            if (isNum(coerced)) return this.escapeHtml(String(coerced.v));
+            if (isSym(reduced)) return this.escapeHtml(reduced.v);
 
             return '';
         }
@@ -170,7 +160,7 @@ export class StringProjector extends BaseProjector {
             if (isSym(child) && child.v === "Empty") {
                 continue;
             }
-            html += this.renderNode(child, state, app);
+            html += this.renderNode(child, state, app, program);
         }
 
         // Closing tag
@@ -180,33 +170,64 @@ export class StringProjector extends BaseProjector {
     }
 
     /**
-     * Project a symbolic UI node under current App context
+     * Project a symbolic UI node under current Program context
      * @param {Object} node - The node to project
-     * @param {Object} app - Current App node
+     * @param {Object} program - Current Program node (full context)
      * @returns {Object} Projected node
      */
-    project(node, app) {
-        // Build /@ node: (/@ node app)
-        const annotated = Call(Sym("/@"), node, app);
-        const currentRules = this.extractRulesFunc(this.universe);
-        const reduced = this.normalizeFunc(annotated, currentRules);
+    project(node, program) {
+        // Wrap :project in a structure where Program is an ancestor
+        // This ensures :with can find Program in the parents array during normalization
+        const marker = Call(Sym(":project"), node);
+        const wrapper = Call(Sym("__SYMA_PROJECT_WRAPPER__"), marker);
 
-        // Check if projection failed (still has /@ at the root)
-        if (isCall(reduced) && isSym(reduced.h) && reduced.h.v === "/@") {
-            throw new Error(`No projection rule found for: ${show(node)}\n` +
-                          `Tried to match: ${show(annotated)}\n` +
-                          `Make sure you have a rule like: (R "ProjectionRule" (/@ ${show(node)} (App ...)) ...)`);
+        // Get app from program for reconstruction
+        const app = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "App");
+        const effects = program.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Effects");
+
+        // Reconstruct program with wrapper as additional child
+        const tempProgram = effects
+            ? Call(Sym("Program"), app, effects, wrapper)
+            : Call(Sym("Program"), app, wrapper);
+
+        const currentRules = this.extractRulesFunc(this.universe);
+
+        // Normalize the entire temporary program structure
+        const normalizedProgram = this.normalizeFunc(tempProgram, currentRules);
+
+        // Extract the result from the wrapper position
+        if (isCall(normalizedProgram) && normalizedProgram.a.length >= 2) {
+            const wrapperPos = normalizedProgram.a.findIndex(n =>
+                isCall(n) && isSym(n.h) && n.h.v === "__SYMA_PROJECT_WRAPPER__"
+            );
+
+            if (wrapperPos >= 0) {
+                const resultWrapper = normalizedProgram.a[wrapperPos];
+                if (resultWrapper.a.length > 0) {
+                    return resultWrapper.a[0];
+                }
+            }
         }
 
-        return reduced;
+        // If extraction failed, check if projection failed
+        throw new Error(`No projection rule found for: ${show(node)}\n` +
+                      `Make sure you have a rule like: {R "ProjectionRule" {:project ${show(node)}} ... :with {Program ...}}`);
+    }
+
+    /**
+     * Get Program node from universe
+     */
+    getProgram(universe) {
+        const prog = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
+        if (!prog) throw new Error("Universe missing Program[...]");
+        return prog;
     }
 
     /**
      * Get Program/App from universe
      */
     getProgramApp(universe) {
-        const prog = universe.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "Program");
-        if (!prog) throw new Error("Universe missing Program[...]");
+        const prog = this.getProgram(universe);
 
         // Program might contain [App[...]] or [App[...], Effects[...]]
         const app = prog.a.find(n => isCall(n) && isSym(n.h) && n.h.v === "App");
