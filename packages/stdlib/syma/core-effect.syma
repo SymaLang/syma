@@ -13,7 +13,7 @@
       {Program .. {Effects {Pending .. ef_} ..} ..}
     }
 
-    {R Eff/MoveLeft
+    {R Eff:MoveLeft
       {Program .. {Eff e..} ..}
       {Program {Eff e..} .. ..}
     }

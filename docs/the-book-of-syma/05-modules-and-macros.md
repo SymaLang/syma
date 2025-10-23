@@ -54,12 +54,14 @@ A module is a symbolic expression:
 ### Components
 
 - **Module/Name** — Qualified module identifier (slash-separated namespace)
-- **Export** — Symbols that CAN be imported (but qualification depends on how they're imported)
-- **Import** — Dependencies on other modules
+- **Export** — Symbols that can be imported by other modules
+- **Import** — Dependencies on other modules (controls how you write symbols in source)
 - **Defs** — Named constants (expanded to high-priority rules)
 - **Program** — Entry point for executable modules
 - **Rules** — Transformation rules
 - **RuleRules** — Meta-rules that transform the Rules section
+
+**Key insight:** Exports define what's available. Imports control how you write it in source. The compiler always outputs fully qualified symbols.
 
 ⸻
 
@@ -129,15 +131,21 @@ After import, use `KV/Get`, `KV/Set`, etc.
        {Get State Count state_}}}}  ; ← No qualification needed!
 ```
 
-With `open`, exported symbols from Core/KV remain unqualified in **both modules**:
-- In App/Main: you can use `Get` instead of `KV/Get`
-- In Core/KV itself: its own code uses `Get` instead of `Core/KV/Get`
+With `open`, you can **write** symbols unqualified in your source code. The compiler resolves them to fully qualified names:
 
-This bidirectional effect ensures consistency.
+```lisp
+; Source code - write naturally
+{R "GetCount" {GetCount state_} {Get State Count state_}}
+
+; Compiled - fully qualified
+{R "App/Main/GetCount" {App/Main/GetCount state_} {Core/KV/Get State Count state_}}
+```
+
+**Key insight**: `open` affects what you can write in source, not what the runtime sees. At runtime, everything is fully qualified for safety.
 
 ### Selective Opening (New!)
 
-Use `{Open Symbol1 Symbol2}` for fine-grained control:
+Use `{Open Symbol1 Symbol2}` for fine-grained control over which symbols you can write unqualified:
 
 ```lisp
 {Module App/Main
@@ -146,82 +154,68 @@ Use `{Open Symbol1 Symbol2}` for fine-grained control:
   {Rules
     {R "ShowRoute"
        {ShowRoute}
-       CurrentRoute}              ; ← Unqualified!
+       CurrentRoute}              ; ← Can write unqualified
 
     {R "Navigate"
        {Navigate path_}
-       {Router/Navigate path_}}}} ; ← Still qualified!
+       {Router/Navigate path_}}}} ; ← Must qualify
 ```
 
-Only `CurrentRoute` is unqualified. Everything else from Router requires qualification.
+Only `CurrentRoute` can be written unqualified. At compile time, it resolves to `Syma/Router/CurrentRoute`.
 
-🜛 *`open` is convenient but global. `{Open ...}` gives you surgical precision.*
-
-### The Bidirectional Effect
-
-**Important:** When you import a module with `open` or use `{Open ...}`, it affects **both sides**:
-
-```lisp
-; Core/KV module - exported symbols
-{Module Core/KV
-  {Export Get Set Put}
-  {Rules
-    ; If someone imports Core/KV with 'open':
-    {R "Get/Found" {Get tag_ key_ state_} value_}
-    ; Get is unqualified here too!
-
-    ; If no one imports Core/KV with 'open':
-    {R "Get/Found" {Core/KV/Get tag_ key_ state_} value_}
-    ; Get gets qualified in its own module
-  }}
-```
-
-This ensures consistency: if you can use `Get` unqualified in your code, the library itself uses `Get` unqualified too. No surprises.
+🜛 *`open` is all-or-nothing. `{Open ...}` gives you surgical precision. Both compile to fully qualified names.*
 
 ⸻
 
 ## Symbol Qualification
 
-Symbol qualification depends on **how a module is imported**:
+Syma uses a **two-stage qualification process**:
 
-### Always Unqualified
-- **Built-ins**: `Add`, `Mul`, `Concat`, `If`, etc.
-- **HTML tags**: `Div`, `Button`, `Span`, etc.
-- **Explicitly opened symbols**: Listed in `{Open ...}` clauses
+### Stage 1: Source Code (What You Write)
 
-### Conditionally Unqualified
-- **Exported symbols**: Only remain unqualified if:
-  - The module is imported with `open` by someone, OR
-  - The symbol is listed in an `{Open ...}` clause
+**Can write unqualified:**
+- Built-ins: `Add`, `Mul`, `If`, etc.
+- HTML tags: `Div`, `Button`, `Span`, etc.
+- Symbols from `open` imports
+- Symbols listed in `{Open ...}` clauses
+- Your module's own exports
 
-### Always Qualified
-- **Local symbols** in modules not imported with `open`
-- **Standard imports** without `open` or `{Open ...}`
+**Must write qualified:**
+- Standard imports (with alias): `KV/Get`, `Utils/Helper`
 
-### Example
+### Stage 2: Compiled Output (What Runtime Sees)
+
+**ALL symbols are fully qualified** (except built-ins):
+- `Get` → `Core/KV/Get`
+- `Inc` → `App/Counter/Inc`
+- `CurrentRoute` → `Syma/Router/CurrentRoute`
+
+### Example - Source vs Compiled
 
 ```lisp
+; ===== SOURCE CODE =====
 {Module App/Counter
-  {Export Inc Dec}  ; Only unqualified if imported with 'open'
+  {Import Core/KV as KV open}
+  {Export Inc Dec}
 
   {Rules
-    ; If Counter is imported with 'open' somewhere:
-    {R "Inc" {Inc n_} {Add n_ 1}}  ; Inc is unqualified
+    {R "Inc"
+       {Inc n_}              ; Can write unqualified (exported symbol)
+       {Set Count {Add {Get Count n_} 1} n_}}}}  ; Can write unqualified (open import)
 
-    ; If Counter is NOT imported with 'open':
-    {R "Inc" {App/Counter/Inc n_} {Add n_ 1}}  ; Inc gets qualified
-}}
-
-{Module App/Main
-  {Import App/Counter as C open}  ; Now Counter exports are unqualified!
-
-  {Rules
-    {R "Increment"
-       {DoIncrement}
-       {Inc 5}}}}  ; Can use Inc unqualified
+; ===== COMPILED OUTPUT =====
+{Rules
+  {R "App/Counter/Inc"
+     {App/Counter/Inc n_}  ; Fully qualified
+     {Core/KV/Set {App/Counter/Count}
+                  {Add {Core/KV/Get {App/Counter/Count} n_} 1}
+                  n_}}}
 ```
 
-**Key insight**: A module's exports only remain unqualified in its own code if someone imports it with `open` or explicitly opens those symbols.
+**Why this design?**
+- **Clean source** - no namespace clutter, reads naturally
+- **Safe runtime** - fully qualified symbols, zero ambiguity
+- **Best of both** - write like Python, execute like Java
 
 ⸻
 
@@ -464,37 +458,47 @@ The `*` scope means global RuleRules from `Core/Syntax/Global`.
 ### Examples
 
 ```lisp
-; Standard import - everything qualified
+; ===== SOURCE CODE =====
+
+; Standard import - write everything qualified
 {Import Core/List as L}
 {L/Map f_ {L/List items..}}
 
-; Open import - all exports unqualified
+; Open import - write all exports unqualified
 {Import Core/List as L open}
-{Map f_ {List items..}}
+{Map f_ {List items..}}              ; Source: unqualified
 
-; Selective opening - only specific symbols unqualified
+; Selective opening - write only specific symbols unqualified
 {Import Syma/Router as R {Open CurrentRoute}}
-CurrentRoute              ; ← Unqualified
-{R/Navigate "/home"}      ; ← Still qualified
+CurrentRoute                          ; Source: unqualified
+{R/Navigate "/home"}                 ; Source: qualified
 
-; Macro import - RuleRules applied, symbols qualified
+; Macro import - RuleRules applied, write symbols qualified
 {Import Core/Fun as F macro}
-{Fn {Double n} {Mul n 2}}  ; ← Sugar from RuleRules!
-{F/Call Double 5}          ; ← Qualified usage
+{Fn {Double n} {Mul n 2}}            ; Sugar from RuleRules!
+{F/Call Double 5}                    ; Source: qualified
 
-; Open + Macro - RuleRules applied, all symbols unqualified
+; Open + Macro - RuleRules applied, write symbols unqualified
 {Import Core/Fun as F open macro}
 {Fn {Double n} {Mul n 2}}
-{Call Double 5}            ; ← Unqualified usage
+{Call Double 5}                      ; Source: unqualified
 
-; Selective + Macro - RuleRules applied, selective symbols unqualified
+; Selective + Macro - RuleRules applied, selective unqualified
 {Import MyLib as ML macro {Open Helper Config}}
-Helper                     ; ← Unqualified
-Config                     ; ← Unqualified
-{ML/OtherFunc}            ; ← Still qualified
+Helper                               ; Source: unqualified
+Config                               ; Source: unqualified
+{ML/OtherFunc}                       ; Source: qualified
+
+; ===== COMPILED OUTPUT =====
+; Everything becomes fully qualified:
+{Core/List/Map f_ {Core/List/List items..}}
+{Core/Fun/Call {App/Main/Double} 5}
+{Syma/Router/CurrentRoute}
+{App/Main/Helper}
+{MyLib/OtherFunc}
 ```
 
-🜛 *`open` is all-or-nothing. `{Open ...}` is surgical. `macro` enables transformation. Mix and match for the perfect API.*
+🜛 *`open` is all-or-nothing. `{Open ...}` is surgical. Both compile to fully qualified. `macro` enables transformation.*
 
 ⸻
 
@@ -668,17 +672,19 @@ Create syntax for test assertions:
 ## Key Takeaways
 
 - **Modules** organize code into namespaced units
-- **Imports** have three modes:
-  - Standard: qualified (`M/Symbol`)
-  - Open: all exports unqualified (`Symbol`)
-  - Selective: only specified symbols unqualified (`{Open Sym1 Sym2}`)
-- **Symbol qualification** is bidirectional: affects both importing and imported modules
-- **Exports** are conditionally qualified based on how they're imported
+- **Imports** have three modes for source code:
+  - Standard: write qualified (`M/Symbol`)
+  - Open: write all exports unqualified (`Symbol`)
+  - Selective: write only specified symbols unqualified (`{Open Sym1 Sym2}`)
+- **Two-stage qualification**:
+  - Source code: write symbols the way you want to read them
+  - Compiled output: everything fully qualified for runtime safety
 - **`macro` modifier** enables RuleRules transformation
 - **RuleRules** transform the Rules section before runtime
 - **Splat** generates multiple rules from one meta-rule
 - **Core/Syntax/Global** provides universal syntax to all modules
 - **Defs** create high-priority constant rules
+- **Best of both worlds**: clean, readable source + safe, unambiguous runtime
 
 ⸻
 

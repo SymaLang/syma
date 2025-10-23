@@ -7,12 +7,12 @@
       {State .. {InitRam}   ..}
       {State .. {InitRam 0} ..}
     }
-    {R InitRam/Repeat
+    {R InitRam:Repeat
       {State b.. {InitRam     n_     ..}          ..}
       {State b.. {InitRam Add(n_, 1) .. {0 n_ 0}} ..}
       :guard Lt(n_, 1023)  // Limit RAM size to 1024 cells
     }
-    {R InitRam/Done
+    {R InitRam:Done
       {State .. {InitRam n_ ..} ..}
       {State .. {RAM        ..} ..}
       :guard Not(Lt(n_, 1023))

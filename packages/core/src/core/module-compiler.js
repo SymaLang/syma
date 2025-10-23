@@ -217,25 +217,24 @@ export class Module {
 
 /* ---------------- Symbol Qualification ---------------- */
 export class SymbolQualifier {
-  constructor(module, moduleMap, isImportedOpen = false, explicitlyOpenedSymbols = new Set()) {
+  constructor(module, moduleMap) {
     this.module = module;
     this.moduleMap = moduleMap;
     this.importMap = new Map(); // alias -> module name
     this.openImports = new Set(); // set of module names imported open
+    this.explicitlyOpenedSymbols = new Map(); // symbol -> source module name (from this module's imports)
     this.localSymbols = new Set(); // symbols defined in this module
-    this.isImportedOpen = isImportedOpen; // is this module imported "open" by anyone?
-    this.explicitlyOpenedSymbols = new Set(explicitlyOpenedSymbols); // explicitly opened symbols from imports
 
-    // Build import maps and collect explicitly opened symbols
+    // Build import maps and collect explicitly opened symbols with their source modules
     for (const imp of module.imports) {
       this.importMap.set(imp.alias, imp.module);
       if (imp.open) {
         this.openImports.add(imp.module);
       }
-      // Add explicitly opened symbols from this import
+      // Track explicitly opened symbols and which module they come from
       if (imp.openSymbols && imp.openSymbols.length > 0) {
         for (const sym of imp.openSymbols) {
-          this.explicitlyOpenedSymbols.add(sym);
+          this.explicitlyOpenedSymbols.set(sym, imp.module);
         }
       }
     }
@@ -278,21 +277,24 @@ export class SymbolQualifier {
     if (BUILTINS.includes(sym)) return sym;
 
     // Check if this symbol is explicitly opened via {Open ...} clause
+    // Resolve to fully qualified name from source module
     if (this.explicitlyOpenedSymbols.has(sym)) {
-      return sym;
+      const sourceModule = this.explicitlyOpenedSymbols.get(sym);
+      return `${sourceModule}/${sym}`;
     }
 
     // Is it an exported symbol from this module?
-    // Only leave unqualified if this module is imported "open" by someone
-    if (this.isImportedOpen && this.module.exports.includes(sym)) {
-      return sym;
+    // Always qualify with module name
+    if (this.module.exports.includes(sym)) {
+      return `${this.module.name}/${sym}`;
     }
 
     // Is it exported by an open import?
+    // Resolve to fully qualified name from imported module
     for (const modName of this.openImports) {
       const mod = this.moduleMap.get(modName);
       if (mod && mod.exports.includes(sym)) {
-        return `${sym}`;
+        return `${modName}/${sym}`;
       }
     }
 
@@ -430,34 +432,9 @@ export class ModuleLinker {
       macroScopes.set('*', new Set(['Core/Syntax/Global']));
     }
 
-    // Build set of modules that are imported "open" by anyone
-    const openImportedModules = new Set();
-    // Build map of module name -> Set of explicitly opened symbols
-    const explicitlyOpenedByModule = new Map();
-
-    for (const mod of sorted) {
-      for (const imp of mod.imports) {
-        if (imp.open) {
-          openImportedModules.add(imp.module);
-        }
-        // Collect explicitly opened symbols for the imported module
-        if (imp.openSymbols && imp.openSymbols.length > 0) {
-          if (!explicitlyOpenedByModule.has(imp.module)) {
-            explicitlyOpenedByModule.set(imp.module, new Set());
-          }
-          const symbolSet = explicitlyOpenedByModule.get(imp.module);
-          for (const sym of imp.openSymbols) {
-            symbolSet.add(sym);
-          }
-        }
-      }
-    }
-
     // Process each module in dependency order
     for (const mod of sorted) {
-      const isImportedOpen = openImportedModules.has(mod.name);
-      const explicitlyOpened = explicitlyOpenedByModule.get(mod.name) || new Set();
-      const qualifier = new SymbolQualifier(mod, this.moduleMap, isImportedOpen, explicitlyOpened);
+      const qualifier = new SymbolQualifier(mod, this.moduleMap);
 
       // Tag and qualify all rules with their source module
       const qualifiedRules = mod.rules.map(rule => {
@@ -535,9 +512,7 @@ export class ModuleLinker {
         throw new Error(`Entry module ${entryModuleName} must have a Program section`);
       }
 
-      const entryIsImportedOpen = openImportedModules.has(entryModuleName);
-      const entryExplicitlyOpened = explicitlyOpenedByModule.get(entryModuleName) || new Set();
-      const entryQualifier = new SymbolQualifier(entryMod, this.moduleMap, entryIsImportedOpen, entryExplicitlyOpened);
+      const entryQualifier = new SymbolQualifier(entryMod, this.moduleMap);
       const qualifiedProgram = entryQualifier.qualify(entryMod.program);
 
       // Build the Universe

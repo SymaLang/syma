@@ -407,87 +407,120 @@ Import(Syma/Router, as, Router, Open(CurrentRoute, Router))
 
 #### Import Modifiers
 
-- **`open`**: Makes all exported symbols from the imported module available without qualification in both the importing module and the imported module itself
+- **`open`**: Allows writing all exported symbols from the imported module without qualification in source code. At compile time, they're resolved to fully qualified names.
 - **`macro`**: Applies the imported module's RuleRules to this module's rules
-- **`{Open Symbol1 Symbol2 ...}`**: Explicitly specifies which symbols should remain unqualified (fine-grained control). These symbols remain unqualified in both the importing module and the imported module.
+- **`{Open Symbol1 Symbol2 ...}`**: Allows writing only the specified symbols without qualification in source code (fine-grained control). At compile time, they're resolved to fully qualified names.
 - All modifiers can be combined: `{Import Module as M open macro {Open Sym1 Sym2}}`
 
 #### How Symbol Qualification Works
 
-1. **With `open` modifier**: All exported symbols from the imported module remain unqualified in both modules
-2. **With `{Open ...}` clause**: Only the explicitly listed symbols remain unqualified in both modules
-3. **Without modifiers**: Symbols must be qualified with the module name or alias (e.g., `KV/Get`, `Core/KV/Get`)
-4. **Exported symbols**: Only remain unqualified if the module is imported with `open` by at least one other module OR if explicitly listed in an `{Open ...}` clause
+**In Source Code:**
+- With `open`: Write exported symbols unqualified: `Get`, `Set`
+- With `{Open Sym}`: Write only listed symbols unqualified: `CurrentRoute`
+- Without modifiers: Must write with module prefix: `KV/Get`, `Core/KV/Get`
+
+**After Compilation:**
+- **ALL symbols are fully qualified** for runtime safety
+- `Get` (from `open` import) → `Core/KV/Get`
+- `CurrentRoute` (from `{Open ...}`) → `Router/CurrentRoute`
+- Local symbols → `Module/Name/Symbol`
+
+This approach gives developers clean, readable source code while ensuring the runtime has no naming conflicts.
 
 ### Symbol Qualification
 
-After compilation, symbols are qualified based on their context and import settings:
+Symbol qualification happens in two stages:
 
-**Always Unqualified:**
-- Built-in primitives and operators: `Add`, `True`, `If`, `Eq`, etc.
-- HTML tags: `Div`, `Button`, `Input`, etc.
-- HTML attributes: `:class`, `:onClick`, etc.
+**Stage 1: Source Code (What You Write)**
 
-**Conditionally Unqualified:**
-- Exported symbols from modules imported with `open`: remain unqualified
-- Symbols explicitly listed in `{Open ...}` clauses: remain unqualified
-- Symbols exported by the current module: only unqualified if this module is imported with `open` by another module OR if listed in an `{Open ...}` clause
+You can write symbols unqualified when:
+- Using `open` imports: all exports are unqualified
+- Using `{Open ...}`: only listed symbols are unqualified
+- Built-ins and HTML tags are always unqualified
 
-**Always Qualified:**
-- Local symbols in modules not imported with `open`: `Module/Name`
-- Imported symbols without `open` or `{Open ...}`: `Module/Name`
+**Stage 2: Compiled Output (Runtime)**
 
-**Example:**
+After compilation, **ALL** symbols (except built-ins) are fully qualified:
+- Built-in primitives: `Add`, `True`, `If`, etc. (remain unqualified)
+- HTML tags: `Div`, `Button`, etc. (remain unqualified)
+- Everything else: `Module/Name/Symbol` (fully qualified)
+
+**Example - Source Code:**
 ```lisp
 {Module App/Counter
-  {Import Core/KV as KV open}           ; KV exports: Get, Set, Put
-  {Import Syma/Router as R {Open CurrentRoute}}  ; Only CurrentRoute unqualified
+  {Import Core/KV as KV open}           ; Can write Get, Set unqualified
+  {Import Syma/Router as R {Open CurrentRoute}}  ; Can write CurrentRoute unqualified
 
-  {Export Inc Dec}  ; Only unqualified if Counter imported with 'open'
+  {Export Inc Dec}
 
   {Rules
-    ; KV/Get is unqualified (open import):
+    ; Source: Write unqualified thanks to 'open'
     {R "Inc" {Apply Inc st_} {Set Count {Add {Get Count st_} 1} st_}}
 
-    ; CurrentRoute is unqualified (explicit Open):
+    ; Source: Write unqualified thanks to {Open ...}
     {R "ShowRoute" {/@ {Show Route} _} CurrentRoute}
 
-    ; Router needs qualification (not in Open clause):
+    ; Source: Must qualify (not in Open clause)
     {R "Navigate" {Apply Nav path_} {R/Navigate path_}}}}
 ```
 
+**Example - Compiled Output:**
+```lisp
+{Rules
+  ; Compiled: Everything fully qualified (except built-ins like Add)
+  {R "App/Counter/Inc"
+     {Apply {App/Counter/Inc} st_}
+     {Core/KV/Set {App/Counter/Count} {Add {Core/KV/Get {App/Counter/Count} st_} 1} st_}}
+
+  ; Compiled: CurrentRoute resolved to full name
+  {R "App/Counter/ShowRoute"
+     {/@ {Show {App/Counter/Route}} _}
+     {Syma/Router/CurrentRoute}}
+
+  ; Compiled: Already had prefix, resolved to full name
+  {R "App/Counter/Navigate"
+     {Apply {App/Counter/Nav} path_}
+     {Syma/Router/Navigate path_}}}
+```
+
+This separation gives you:
+- **Clean source code** - write naturally without namespace clutter
+- **Safe runtime** - no naming conflicts, fully qualified symbols
+- **Best of both worlds** - ergonomic authoring + deterministic execution
+
 ### Import and Export Summary
 
-The module system provides three levels of symbol exposure:
+The module system provides three levels of symbol exposure in source code:
 
 **1. Full Open Import (`open` modifier)**
 ```lisp
 {Import Core/KV as KV open}
 ```
-- **Effect**: ALL exported symbols from Core/KV remain unqualified
-- **Where**: In both the importing module AND in Core/KV itself (if imported open elsewhere)
-- **Use case**: When you want to use a library's entire API without qualification
+- **Source code**: Write ALL exported symbols unqualified: `Get`, `Set`, `Put`
+- **Compiled output**: Resolved to `Core/KV/Get`, `Core/KV/Set`, `Core/KV/Put`
+- **Use case**: Clean API usage when you need most/all symbols from a module
 
 **2. Selective Opening (`{Open ...}` clause)**
 ```lisp
-{Import Syma/Router as Router {Open CurrentRoute Router}}
+{Import Syma/Router as Router {Open CurrentRoute}}
 ```
-- **Effect**: ONLY CurrentRoute and Router remain unqualified
-- **Where**: In both the importing module AND in Syma/Router itself
-- **Use case**: Fine-grained control when you only want specific symbols unqualified
+- **Source code**: Write ONLY `CurrentRoute` unqualified
+- **Compiled output**: `CurrentRoute` → `Syma/Router/CurrentRoute`
+- **Use case**: Surgical precision - expose only specific symbols
 
 **3. Standard Import (no modifiers)**
 ```lisp
 {Import Utils as U}
 ```
-- **Effect**: All symbols must be qualified with alias: `U/Helper`
-- **Use case**: Explicit namespacing to avoid conflicts
+- **Source code**: Must qualify everything: `U/Helper`, `U/Config`
+- **Compiled output**: Resolved to full names: `Utils/Helper`, `Utils/Config`
+- **Use case**: Explicit namespacing, no ambiguity
 
-**Key Insight**: The `open` and `{Open ...}` modifiers affect BOTH modules:
-- The importing module can use symbols without qualification
-- The exported module's own code uses those symbols without qualification (if imported open elsewhere)
-
-This bidirectional effect ensures consistency: if you import a module's API unqualified, the module's internal code also uses that API unqualified.
+**Key Principle**:
+- Write code the way you want to read it (qualified or unqualified)
+- Compiler resolves everything to fully qualified names
+- Runtime always works with unambiguous, fully qualified symbols
+- No naming conflicts, no surprises
 
 ### Module Example
 
@@ -1566,25 +1599,28 @@ Syma runs on multiple platforms through a platform abstraction layer:
 
 ### Symbol Qualification Process
 
-During compilation, symbols are transformed based on their context and import relationships:
+During compilation, the module system transforms source code into a fully qualified runtime representation:
 
-**Qualification Rules:**
-1. **Built-ins and HTML tags** → always remain unqualified
-2. **Explicitly opened symbols** (via `{Open ...}` clause) → remain unqualified
-3. **Symbols from `open` imports** → remain unqualified in importing module
-4. **Exported symbols** → remain unqualified only if:
-   - The module is imported with `open` by another module, OR
-   - The symbol is listed in an `{Open ...}` clause
-5. **All other symbols** → qualified as `Module/Name`
+**Source Code → Compiled Output:**
 
-**Processing Steps:**
+1. **Built-ins and HTML tags** → remain unqualified (both in source and output)
+2. **Symbols from `open` imports** → unqualified in source, fully qualified in output
+3. **Symbols from `{Open ...}` clauses** → unqualified in source, fully qualified in output
+4. **Exported symbols** → written unqualified in source, fully qualified in output
+5. **Standard imports** → qualified in source (with alias), fully qualified in output
+6. **Local symbols** → written unqualified in source, fully qualified in output
+
+**Compilation Steps:**
 1. Parse all module files and extract imports/exports
 2. Build dependency graph and topologically sort modules
-3. Identify which modules are imported with `open`
-4. Collect explicitly opened symbols from `{Open ...}` clauses
-5. Qualify symbols according to the rules above
-6. Expand Defs as high-priority rules
-7. Bundle into a single Universe
+3. For each module, build symbol resolution maps:
+   - Track which symbols can be written unqualified (from `open` and `{Open ...}`)
+   - Map unqualified symbols to their fully qualified names
+4. Qualify all symbols by resolving through import maps
+5. Expand Defs as high-priority rules
+6. Bundle into a single Universe with all symbols fully qualified
+
+**Result**: Source code is ergonomic and readable. Compiled output is unambiguous and safe.
 
 ### Def Expansion
 
@@ -1682,17 +1718,19 @@ Module definitions become rules with high priority (1000):
 
 1. **Symbolic expressions** as universal syntax
 2. **Module system** for code organization and namespacing
-   - `open` imports make all exports unqualified in both modules
-   - `{Open Symbol1 Symbol2}` for selective symbol exposure
+   - `open` imports allow writing all exports unqualified in source code
+   - `{Open Symbol1 Symbol2}` for selective unqualified symbols in source
    - `macro` imports apply RuleRules transformations
+   - All symbols fully qualified at runtime for safety
 3. **Pattern matching** with variables, wildcards, and rest patterns
 4. **Greedy anchors** - `..symbol` for matching to last occurrence instead of first
 5. **Rewrite rules** for computation and transformation
 6. **Two-pass normalization** - innermost-first for `:innermost` rules, then outermost-first for regular rules
 7. **Frozen wrapper** - `{Frozen expr}` prevents normalization of contents, enabling code-as-data and lazy evaluation
-8. **Symbol qualification** - context-dependent based on import modifiers
-   - Exports remain unqualified only if imported with `open` or listed in `{Open ...}`
-   - Bidirectional effect: affects both importing and imported modules
+8. **Symbol qualification** - two-stage process:
+   - **Source**: Write unqualified with `open` or `{Open ...}` for clean code
+   - **Runtime**: Everything fully qualified for deterministic execution
+   - Best of both worlds: ergonomic authoring + safe execution
 9. **Context-aware projection** for UI rendering
 10. **Event handling** through `Apply` patterns with lifting rules
 11. **Symbolic effects** for pure I/O representation
@@ -1701,4 +1739,4 @@ Module definitions become rules with high priority (1000):
 14. **Priority system** for controlling rule application order
 15. **Evaluation strategies** - `:innermost` for bottom-up, `:scope` for context restrictions
 
-Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language, with fine-grained control over symbol visibility and namespace isolation. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.
+Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language. Source code is clean and readable with unqualified symbols, while the runtime works with fully qualified names for complete namespace isolation. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.

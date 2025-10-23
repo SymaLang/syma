@@ -1,12 +1,12 @@
 {Module RippleVM
-  {Import RippleVM/Registers as Registers from "./registers.syma" open}
-  {Import RippleVM/RAM as RAM from "./ram.syma" open}
+  {Import RippleVM/Registers as Registers from "./registers.syma"}
+  {Import RippleVM/RAM as RAM from "./ram.syma"}
   {Import Core/Plumb as Plumb open macro}
   {Import Core/Main as CoreMain open}
   {Program
       {State
           Starting
-          {InitRegisters}
+          {Registers/InitRegisters}
           {Ops
             {0 0  7  7  14}  // LI A0, 7;
             {1 0  10 8  14}  // LI A1, 8;
@@ -16,7 +16,7 @@
             {5 7  0  10 17}  // LOAD A3, R0, A0; // Load A0 from address in R0 + cell offset A0
             {6 0  0  0  0}   // HALT
           }
-          {InitRam}
+          {RAM/InitRam}
       }
       {App}
   }
@@ -68,8 +68,8 @@
   {Rules
 
     {R Start
-      {State Starting .. {RAM ..} ..}
-      {State Running .. {RAM ..} ..}
+      {State Starting .. {RAM/RAM ..} ..}
+      {State Running .. {RAM/RAM ..} ..}
     }
 
     {R Running->Fetch
@@ -78,8 +78,8 @@
     }
 
     {R Fetch->Decode
-      {State Fetch {Registers p.. {reg_ PC pc_} n..} {Ops .. {pc_ op..} ..} ..}
-      {State Decode {Op {pc_ op..}} {Registers p.. {reg_ PC {Add pc_ 1}} n..} {Ops .. {pc_ op..} ..} ..}
+      {State Fetch {Registers/Registers p.. {reg_ Registers/PC pc_} n..} {Ops .. {pc_ op..} ..} ..}
+      {State Decode {Op {pc_ op..}} {Registers/Registers p.. {reg_ Registers/PC {Add pc_ 1}} n..} {Ops .. {pc_ op..} ..} ..}
     }
 
     {R Decode->Decoding
@@ -143,13 +143,13 @@
 
     // ======= Memory Operations =======
     {R Execute->Microcode/Load
-      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Load into target_}} .. {Registers .. {target_ rname_ _}  ..} .. {RAM .. {bank_ addr_ v_} ..} .. }
-      {State ExecutingMicrocode {ALU}             {Current}                     .. {Registers .. {target_ rname_ v_} ..} .. {RAM .. {bank_ addr_ v_} ..} .. }
+      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Load into target_}} .. {Registers/Registers .. {target_ rname_ _}  ..} .. {RAM/RAM .. {bank_ addr_ v_} ..} .. }
+      {State ExecutingMicrocode {ALU}             {Current}                     .. {Registers/Registers .. {target_ rname_ v_} ..} .. {RAM/RAM .. {bank_ addr_ v_} ..} .. }
     }
 
     {R Execute->Microcode/Store
-      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Store into v_}} .. {RAM .. {bank_ addr_ _}  ..} ..}
-      {State ExecutingMicrocode {ALU}             {Current}                 .. {RAM .. {bank_ addr_ v_} ..} ..}
+      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Store into v_}} .. {RAM/RAM .. {bank_ addr_ _}  ..} ..}
+      {State ExecutingMicrocode {ALU}             {Current}                 .. {RAM/RAM .. {bank_ addr_ v_} ..} ..}
     }
 
     // ======= Helpers =======
@@ -160,13 +160,13 @@
     }
 
     {R Execute->Microcode/PutImm
-      {State ExecutingMicrocode {ALU} {Current {PutImm imm_ to reg reg_}} .. {Registers .. {reg_ rname_ _}    ..} ..}
-      {State ExecutingMicrocode {ALU} {Current}                           .. {Registers .. {reg_ rname_ imm_} ..} ..}
+      {State ExecutingMicrocode {ALU} {Current {PutImm imm_ to reg reg_}} .. {Registers/Registers .. {reg_ rname_ _}    ..} ..}
+      {State ExecutingMicrocode {ALU} {Current}                           .. {Registers/Registers .. {reg_ rname_ imm_} ..} ..}
     }
 
     {R Execute->Microcode/LoadReg
-      {State ExecutingMicrocode {ALU ..}    {Current {LoadReg reg_}} .. {Registers .. {reg_ _ v_} ..} ..}
-      {State ExecutingMicrocode {ALU .. v_} {Current}                .. {Registers .. {reg_ _ v_} ..} ..}
+      {State ExecutingMicrocode {ALU ..}    {Current {LoadReg reg_}} .. {Registers/Registers .. {reg_ _ v_} ..} ..}
+      {State ExecutingMicrocode {ALU .. v_} {Current}                .. {Registers/Registers .. {reg_ _ v_} ..} ..}
     }
 
     // ======= Microcode Completion =======
@@ -187,8 +187,8 @@
           :guard Eq(opcode_, OPCODE_)
         }
         {R Concat("Executing/Microcode->", ToString(OPNAME_))
-          {State ExecutingMicrocode {ALU a_ b_} {Current {OPNAME_ into op0_}} .. {Registers .. {op0_ rname_ _}     ..} ..}
-          {State ExecutingMicrocode {ALU}       {Current}                     .. {Registers .. {op0_ rname_ EXPR_} ..} ..}
+          {State ExecutingMicrocode {ALU a_ b_} {Current {OPNAME_ into op0_}} .. {Registers/Registers .. {op0_ rname_ _}     ..} ..}
+          {State ExecutingMicrocode {ALU}       {Current}                     .. {Registers/Registers .. {op0_ rname_ EXPR_} ..} ..}
         }
       }
     }
