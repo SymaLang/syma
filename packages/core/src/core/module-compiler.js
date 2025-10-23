@@ -6,6 +6,7 @@
  ******************************************************************/
 
 import { K, Sym, Num, Str, Call, isSym, isNum, isStr, isCall } from '../ast-helpers.js';
+import { BUILTINS } from './builtins-vocab.js';
 
 /* ---------------- Module representation ---------------- */
 export class Module {
@@ -211,30 +212,31 @@ export class SymbolQualifier {
       }
     }
 
-    // Track symbols defined in this module
-    // 1. Exported symbols
-    for (const exp of module.exports) {
-      this.localSymbols.add(exp);
-    }
+    // Track ALL symbols that appear in this module (qualify everything by default)
+    // Recursively collect all symbols from all sections
+    this.collectSymbols(module.ast);
+  }
 
-    // 2. Def names
-    for (const name of Object.keys(module.defs)) {
-      this.localSymbols.add(name);
-    }
-
-    // 3. Action symbols from rule patterns (Apply patterns)
-    // Look for patterns like Apply(ActionName, ...) in rules
-    for (const rule of module.rules) {
-      if (isCall(rule) && isSym(rule.h) && rule.h.v === 'R' && rule.a.length >= 2) {
-        const pattern = rule.a[1]; // The LHS pattern
-        if (isCall(pattern) && isSym(pattern.h) && pattern.h.v === 'Apply') {
-          if (pattern.a.length > 0 && isSym(pattern.a[0])) {
-            // This is an action symbol that should be qualified
-            this.localSymbols.add(pattern.a[0].v);
-          }
-        }
+  /**
+   * Recursively collect all symbols from an AST node
+   * Skip pattern variables (Var/VarRest) - those should not be qualified
+   */
+  collectSymbols(node) {
+    if (isSym(node)) {
+      // Only collect unqualified symbols (no '/')
+      if (!node.v.includes('/')) {
+        this.localSymbols.add(node.v);
+      }
+    } else if (isCall(node)) {
+      // Recursively collect from head and arguments
+      if (node.h) {
+        this.collectSymbols(node.h);
+      }
+      for (const arg of node.a) {
+        this.collectSymbols(arg);
       }
     }
+    // Num and Str nodes don't contain symbols
   }
 
   qualifySymbol(sym) {
@@ -244,47 +246,8 @@ export class SymbolQualifier {
     // HTML attributes (start with :) should NEVER be qualified
     if (sym.startsWith(':')) return sym;
 
-    // Special built-in symbols that should never be qualified
-    const builtins = ['True', 'False', 'Nil', 'Add', 'Sub', 'Mul', 'Div', 'Mod',
-                      'Pow', 'Sqrt', 'Abs', 'Min', 'Max', 'Floor', 'Ceil', 'Round',
-                      'Concat', 'ToString', 'ToUpper', 'ToLower', 'Trim', 'StrLen',
-                      'Substring', 'IndexOf', 'Replace', 'Eq', 'Neq', 'Lt', 'Gt',
-                      'Lte', 'Gte', 'And', 'Or', 'Not', 'IsNum', 'IsStr', 'IsSym',
-                      'IsTrue', 'IsFalse', 'FreshId', 'Random', 'ParseNum', 'Debug',
-                      'If', 'Cons', 'IsNil', 'CharFromCode',
-                      // Special forms that are part of the language
-                      'R', 'Universe', 'Program', 'Rules', 'RuleRules', 'App', 'State',
-                      'UI', 'Apply', 'Bundle', 'Module', 'Import', 'Export', 'Defs', 'Effects',
-                      'Var', 'VarRest', '/@',
-                      // Runtime operators
-                      'Show', 'Project', 'Input',
-                      // Event action combinators
-                      'Seq', 'When', 'PreventDefault', 'StopPropagation', 'KeyIs',
-                      'ClearInput', 'SetInput',
-                      // HTML tags - MUST remain unqualified for DOM
-                      'Div', 'Span', 'H1', 'H2', 'H3', 'P', 'Button', 'Input', 'Ul', 'Li', 'Fragment',
-                      'A', 'Section', 'Header', 'Footer', 'Nav', 'Main', 'Article', 'Aside',
-                      'Form', 'Label', 'Select', 'Option', 'Textarea', 'Table', 'Tr', 'Td', 'Th',
-                      'Img', 'Video', 'Audio', 'Canvas', 'Svg', 'Path',
-                      // Other thingies
-                      'Frozen', 'Splat',
-                      // Tag helper symbols
-                      'KV', 'Props',
-                      // Effect terms
-                      'Pending', 'Inbox', 'Timer', 'Delay', 'TimerComplete', 'Print', 'Message',
-                      'PrintComplete', 'AnimationFrame', 'AnimationFrameComplete', 'Now',
-                      'StorageSet', 'StorageGet', 'StorageDel', 'Store', 'Local', 'Session',
-                      'Key', 'Value', 'StorageSetComplete', 'StorageGetComplete', 'StorageDelComplete',
-                      'Found', 'Missing', 'Ok', 'ClipboardWrite', 'ClipboardRead', 'Text',
-                      'ClipboardWriteComplete', 'ClipboardReadComplete', 'Navigate', 'Url',
-                      'NavigateComplete', 'ReadLocation', 'ReadLocationComplete', 'Location',
-                      'Path', 'RandRequest', 'RandResponse',
-                      'HttpReq', 'HttpRes', 'Method', 'Body', 'Headers', 'Status', 'Json', 'Error',
-                      'WsConnect', 'WsConnectComplete', 'WsSend', 'WsSendComplete', 'WsRecv',
-                      'WsClose', 'WsCloseComplete', 'Opened', 'Closed', 'Ack', 'Code', 'Reason',
-                      'ReadLine', 'ReadLineComplete', 'GetChar', 'GetCharComplete', 'Char',
-                      'Obj', 'List', 'Pair'];
-    if (builtins.includes(sym)) return sym;
+    // Check against built-in vocabulary (imported from builtins-vocab.js)
+    if (BUILTINS.includes(sym)) return sym;
 
     // Is it exported by an open import?
     for (const modName of this.openImports) {
