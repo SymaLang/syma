@@ -422,8 +422,6 @@ export class DOMProjector extends BaseProjector {
 
             if (isStr(child) || isNum(child) || isSym(child)) {
                 virtualChildren.push({ type: 'text', value: child });
-            } else if (isCall(child) && isSym(child.h) && child.h.v === "Show") {
-                virtualChildren.push({ type: 'show', value: child, program });
             } else {
                 const childVNode = this.buildVirtualTree(child, state, app, program);
                 // Skip empty nodes
@@ -484,7 +482,7 @@ export class DOMProjector extends BaseProjector {
         }
 
         // Handle different node types
-        if (newVNode.type === 'text' || newVNode.type === 'show') {
+        if (newVNode.type === 'text') {
             // Compare text values using appropriate apps
             const oldText = this.getTextValue(oldVNode, oldApp);
             const newText = this.getTextValue(newVNode, newApp);
@@ -504,7 +502,7 @@ export class DOMProjector extends BaseProjector {
                 patches.push({ type: 'replace', path, oldVNode, newVNode });
             } else if (hasDynamicChildren && this.appHasChanged(oldApp, newApp)) {
                 // If app changed meaningfully and children have dynamic content, replace to ensure proper re-evaluation
-                // This handles cases where Project/Show nodes need re-evaluation with new app
+                // This handles cases where Project nodes need re-evaluation with new app
                 patches.push({ type: 'replace', path, oldVNode, newVNode });
             } else {
                 // Props haven't changed and no dynamic children, so we can safely diff children
@@ -736,13 +734,13 @@ export class DOMProjector extends BaseProjector {
 
         for (const child of children) {
             // Check for dynamic node types
-            if (child.type === 'show' || child.type === 'project-splice') {
+            if (child.type === 'project-splice') {
                 return true;
             }
 
             // Check if the original node was a Project node
             if (child.node && isCall(child.node) && isSym(child.node.h) &&
-                (child.node.h.v === 'Project' || child.node.h.v === 'Show')) {
+                child.node.h.v === 'Project') {
                 return true;
             }
 
@@ -787,17 +785,6 @@ export class DOMProjector extends BaseProjector {
             if (isStr(val)) return val.v;
             if (isNum(val)) return String(val.v);
             if (isSym(val)) return val.v === "Empty" ? "" : val.v;
-        } else if (vNode.type === 'show') {
-            // Project Show node to get text using Program context
-            const program = vNode.program || this.getProgram(this.universe);
-            const reduced = this.project(vNode.value, program);
-
-            if (isStr(reduced)) return reduced.v;
-            if (isNum(reduced)) return String(reduced.v);
-
-            // Reduced value should already be a displayable value
-            // If it's a symbol, show it as text
-            if (isSym(reduced)) return reduced.v;
         }
         return "";
     }
@@ -1089,7 +1076,7 @@ export class DOMProjector extends BaseProjector {
      * Create DOM element from virtual node
      */
     createDOMFromVirtual(vNode, state, app, onDispatch) {
-        if (vNode.type === 'text' || vNode.type === 'show') {
+        if (vNode.type === 'text') {
             return document.createTextNode(this.getTextValue(vNode, app));
         }
 

@@ -1032,8 +1032,8 @@ The `ProjectToString` primitive enables rendering UI nodes to HTML strings, maki
 ; Dynamic content with state
 {ProjectToString
   {Div :class "profile"
-    {H2 "Hello, " {Show userName}}
-    {P "Email: " {Show userEmail}}}
+    {H2 "Hello, " {Project userName}}
+    {P "Email: " {Project userEmail}}}
   {State
     {KV userName "Alice"}
     {KV userEmail "alice@example.com"}}}
@@ -1043,7 +1043,7 @@ The `ProjectToString` primitive enables rendering UI nodes to HTML strings, maki
 **Key Features:**
 - **Omits event handlers**: `onClick`, `onInput`, etc. are removed (client-side only)
 - **Omits bindings**: `bind-value`, `bind-checked`, etc. are removed (client-side only)
-- **Supports projection**: Handles `Project[...]` and `Show[...]` nodes with state context
+- **Supports projection**: Handles `Project[...]` nodes with state context, automatically rendering primitives as text and Call nodes as UI
 - **Escapes HTML**: Automatically escapes special characters for security
 - **Optional state**: State parameter can be omitted for pure static HTML
 
@@ -1061,9 +1061,9 @@ The `ProjectToString` primitive enables rendering UI nodes to HTML strings, maki
   {ProjectToString
     {Article :class "blog-post"
       {Header
-        {H1 {Show title}}
-        {Time :datetime {Show date} {Show formattedDate}}}
-      {Div :class "content" {Show content}}}
+        {H1 {Project title}}
+        {Time :datetime {Project date} {Project formattedDate}}}
+      {Div :class "content" {Project content}}}
     {State
       {KV title {Get Post title post_}}
       {KV date {Get Post date post_}}
@@ -1096,17 +1096,16 @@ Properties are specified using `:key value` syntax:
 - `:onClick ActionName` for event handlers
 - Other HTML attributes as needed
 
-### Dynamic Content
+### Dynamic Content and Projection
 
-Use `{Show expression}` to display computed values:
+The `{Project expression}` form evaluates an expression in the current state context and renders the result. It automatically handles both UI elements and text values:
 
 ```lisp
-{Span "Count: " {Show CountValue}}
+{Span "Count: " {Project CountValue}}  ; Renders as text
+{Div {Project UserCard}}                ; Renders as UI element
 ```
 
-### Projection
-
-The `{Project expression}` form evaluates an expression in the current state context and renders the result as UI.
+When the projected expression evaluates to a primitive (Str, Num, Sym), it's rendered as text. When it evaluates to a Call, it's rendered as a UI element.
 
 ---
 
@@ -1121,20 +1120,30 @@ Projection rules use the `:project` marker combined with `:with` for context bin
   :with contextPattern}
 ```
 
-When the projector encounters `{Project expr}` or `{Show expr}`, it wraps them with the `:project` marker. The `:with` clause automatically binds from the Program context in the ancestor chain:
+When the projector encounters `{Project expr}`, it wraps the expression with the `:project` marker and normalizes it with full Program context. The `:with` clause automatically binds from the Program context in the ancestor chain:
 
 ```lisp
-{R "ShowCount"
-  {:project {Show Count}}
-  {Str "42"}
-  :with {Program {App {State {Count 42}} ui_} effects_}}
+{R "ProjectCount"
+  {:project Count}
+  {ToString count_}
+  :with {Program {App {State {Count count_}} ui_} effects_}}
 
 ; Can also access Effects:
-{R "ShowPendingCount"
-  {:project {Show PendingEffects}}
+{R "ProjectPendingCount"
+  {:project PendingEffects}
   {ToString {Length pending..}}
   :with {Program app_ {Effects {Pending pending..} inbox_}}}
+
+; Return UI elements for complex projections:
+{R "ProjectUserCard"
+  {:project UserCard}
+  {Div :class "card"
+    {H2 {Project userName}}
+    {P {Project userEmail}}}
+  :with {Program {App {State {User {Name userName} {Email userEmail}}} _} _}}
 ```
+
+**Key insight:** Projection rules can return either primitives (Str, Num, Sym) for text rendering, or Call nodes for UI elements. The projector automatically detects the type and renders accordingly.
 
 The engine automatically finds the Program node in the parent chain during normalization, making projection rules clean and declarative.
 
@@ -1728,7 +1737,10 @@ Module definitions become rules with high priority (1000):
    - **Source**: Write unqualified with `open` or `{Open ...}` for clean code
    - **Runtime**: Everything fully qualified for deterministic execution
    - Best of both worlds: ergonomic authoring + safe execution
-9. **Projection with `:project` and `:with`** - clean declarative syntax for context-aware UI rendering
+9. **Unified projection with `{Project}`** - single mechanism handles both text and UI rendering:
+   - Primitives (Str, Num, Sym) render as text
+   - Call nodes render as UI elements
+   - Uses `:project` marker and `:with` for context-aware transformations
 10. **Event handling** through `Apply` patterns with lifting rules
 11. **Symbolic effects** for pure I/O representation
 12. **Event action combinators** for composable UI interactions

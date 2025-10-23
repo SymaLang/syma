@@ -168,12 +168,12 @@ When timer fires:
     {R "View"
        {:project {View}}
        {Div
-         {H1 "Countdown: " {Show Count}}}
+         {H1 "Countdown: " {Project Count}}}
        :with {App {State {Count n_}} _}}
 
-    ; Show count
-    {R "ShowCount"
-       {:project {Show Count}}
+    ; Project count as text
+    {R "ProjectCount"
+       {:project Count}
        {ToString n_}
        :with {App {State {Count n_}} _}}}}
 ```
@@ -383,7 +383,7 @@ Without `{Frozen}`, the loaded code would be normalized immediately, potentially
 
     {R "TodoList"
        {:project {TodoList}}
-       {Map {Lambda t {Li {Show {Get t text}}}} {Todos todos..}}
+       {Map {Lambda t {Li {Project {Get t text}}}} {Todos todos..}}
        :with {App {State {Todos todos..} _} _}}}}
 ```
 

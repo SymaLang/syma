@@ -482,13 +482,13 @@ Write the same logic in brace and function syntax. Which is clearer?
 ```lisp
 ; Brace
 {If {Gt {Get state count} 0}
-  {Show "Positive"}
-  {Show "Zero or negative"}}
+  {Project "Positive"}
+  {Project "Zero or negative"}}
 
 ; Function
 If(Gt(Get(state, count), 0),
-   Show("Positive"),
-   Show("Zero or negative"))
+   Project("Positive"),
+   Project("Zero or negative"))
 ```
 
 ⸻

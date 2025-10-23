@@ -162,7 +162,7 @@ This shift changes everything:
 **Refactoring** becomes rule rewriting:
 ```lisp
 ; Change one rule, the whole system adapts
-{R "ShowCount" {Show Count} {Get CounterState Count st_}}
+{R "ProjectCount" {:project Count} {Get CounterState Count st_} :with {App {State st_} _}}
 ```
 
 ⸻

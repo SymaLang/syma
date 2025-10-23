@@ -109,17 +109,6 @@ export class StringProjector extends BaseProjector {
             return this.renderNode(node.a[0], state, app, program);
         }
 
-        if (tag === "Show") {
-            // Project Show node to get text using Program context
-            const reduced = this.project(node, program);
-
-            if (isStr(reduced)) return this.escapeHtml(reduced.v);
-            if (isNum(reduced)) return this.escapeHtml(String(reduced.v));
-            if (isSym(reduced)) return this.escapeHtml(reduced.v);
-
-            return '';
-        }
-
         // Regular HTML element
         const { props, children } = this.splitPropsAndChildren(node);
 
