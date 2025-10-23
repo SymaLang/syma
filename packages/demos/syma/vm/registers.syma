@@ -34,7 +34,7 @@
 | R31     | GP       | Global Pointer       | Bank for globals      |
 */
 {Module RippleVM/Registers
-    {Export InitRegisters}
+    {Export InitRegisters PC Registers}
     {Defs
       {InitRegisters
         {Registers {0 R0 0} {1 PC 0} {2 PCB 0} {3 RA 0} {4 RAB 0} {5 RV0 0} {6 RV1 0}

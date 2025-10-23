@@ -1,6 +1,6 @@
 {Module RippleVM/RAM
   {Import Core/Plumb as Plumb open macro}
-  {Export InitRAM}
+  {Export InitRam RAM}
   
   {Rules
     {R InitRAM

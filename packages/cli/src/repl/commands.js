@@ -182,7 +182,19 @@ Debugging:
             this.repl.platform.printWithNewline("No Program section defined in the universe");
             return true;
         }
-        const output = this.repl.formatResult(program);
+        let output = this.repl.formatResult(program);
+
+        // Limit to top N lines if argument provided
+        if (args[0]) {
+            const limit = parseInt(args[0]);
+            if (!isNaN(limit) && limit > 0) {
+                const lines = output.split('\n');
+                if (lines.length > limit) {
+                    output = lines.slice(0, limit).join('\n') + `\n... (${lines.length - limit} more lines)`;
+                }
+            }
+        }
+
         this.repl.platform.printWithNewline(output);
         return true;
     }

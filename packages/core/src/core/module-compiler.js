@@ -266,9 +266,22 @@ export class SymbolQualifier {
     // Num and Str nodes don't contain symbols
   }
 
+  /**
+   * Check if a symbol with "/" is legitimately qualified
+   * (i.e., the prefix is a known module name)
+   */
+  isLegitimatelyQualified(sym) {
+    if (!sym.includes('/')) return false;
+    const [prefix] = sym.split('/');
+    // Check if prefix is a known module name
+    return this.moduleMap.has(prefix);
+  }
+
   qualifySymbol(sym) {
-    // Already qualified?
-    if (sym.includes('/')) return sym;
+    // Check if already legitimately qualified (prefix is a known module)
+    if (sym.includes('/') && this.isLegitimatelyQualified(sym)) {
+      return sym;
+    }
 
     // HTML attributes (start with :) should NEVER be qualified
     if (sym.startsWith(':')) return sym;
@@ -311,21 +324,31 @@ export class SymbolQualifier {
 
     // Otherwise it's a free variable - leave it unqualified
     // This includes mathematical variables, unbound symbols, etc.
+    // NOTE: This also includes symbols that happen to contain "/" but aren't
+    // legitimately qualified - they'll be treated as regular symbol names
     return sym;
   }
 
   qualify(node) {
     if (isSym(node)) {
-      // Check if it's a module prefix (e.g., "KV" in "KV/Get")
       const v = node.v;
       if (v.includes('/')) {
         const [prefix, ...rest] = v.split('/');
         const suffix = rest.join('/');
+
+        // Check if it's an import alias prefix (e.g., "KV" in "KV/Get")
         if (this.importMap.has(prefix)) {
           const realModule = this.importMap.get(prefix);
           return Sym(`${realModule}/${suffix}`);
         }
-        return node; // Already qualified
+
+        // Check if it's legitimately qualified (prefix is a known module)
+        if (this.isLegitimatelyQualified(v)) {
+          return node; // Already qualified
+        }
+
+        // Otherwise treat the whole thing (including "/") as a symbol name
+        // and qualify it normally through qualifySymbol
       }
       return Sym(this.qualifySymbol(v));
     }
