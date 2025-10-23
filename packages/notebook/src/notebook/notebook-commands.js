@@ -1570,9 +1570,25 @@ Examples:
                         content += `\n\nGuard:\n  ${guardStr}`;
                     }
 
+                    // With pattern (if present)
+                    if (rule.withPattern) {
+                        const withStr = this.repl.parser.prettyPrint(rule.withPattern, 1);
+                        content += `\n\nWith:\n  ${withStr}`;
+                    }
+
                     // Priority (if not default)
                     if (rule.prio !== 0 && rule.prio !== 500) {
                         content += `\n\nPriority: ${rule.prio}`;
+                    }
+
+                    // Scope restriction (if present)
+                    if (rule.scope) {
+                        content += `\n\nScope: ${rule.scope}`;
+                    }
+
+                    // Innermost flag (if true)
+                    if (rule.innermost) {
+                        content += `\n\nInnermost: true`;
                     }
 
                     // Module tag (if available)

@@ -16,6 +16,14 @@ export class RulesSection {
         this.expandedRules = new Set();
     }
 
+    /**
+     * Generate a unique key for a rule based on its content
+     * This handles cases where multiple rules have the same name
+     */
+    getRuleKey(rule) {
+        return `${rule.name}::${JSON.stringify(rule.lhs)}::${JSON.stringify(rule.rhs)}`;
+    }
+
     render() {
         const universe = this.getUniverse();
         if (!universe) {
@@ -172,7 +180,7 @@ export class RulesSection {
         const expandAllBtn = this.createControlButton('Expand all', () => {
             this.expandedRules.clear();
             const filtered = this.filterRules(flatRules, this.searchTerm);
-            filtered.forEach(r => this.expandedRules.add(r.name));
+            filtered.forEach(r => this.expandedRules.add(this.getRuleKey(r)));
             this.updateRulesDisplay(flatRules, container);
         });
 
@@ -259,7 +267,8 @@ export class RulesSection {
     }
 
     createRuleAccordionItem(rule, searchTerm, allRules, container) {
-        const isExpanded = this.expandedRules.has(rule.name);
+        const ruleKey = this.getRuleKey(rule);
+        const isExpanded = this.expandedRules.has(ruleKey);
 
         const item = document.createElement('div');
         item.style.cssText = `
@@ -297,10 +306,10 @@ export class RulesSection {
         header.appendChild(titleEl);
 
         header.addEventListener('click', () => {
-            if (this.expandedRules.has(rule.name)) {
-                this.expandedRules.delete(rule.name);
+            if (this.expandedRules.has(ruleKey)) {
+                this.expandedRules.delete(ruleKey);
             } else {
-                this.expandedRules.add(rule.name);
+                this.expandedRules.add(ruleKey);
             }
             this.updateRulesDisplay(allRules, container);
         });
