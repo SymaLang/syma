@@ -1380,7 +1380,7 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
             if (r.withPattern) {
                 // Determine what to match :with against:
                 // - If :scope is specified, match against the scoped compound
-                // - Otherwise, match against the same expression (expr)
+                // - Otherwise, match against the top Program node
                 let withTarget = expr;
 
                 if (r.scope) {
@@ -1399,6 +1399,25 @@ function tryMatchRule(expr, ruleIndex, foldPrimsFn = null, preserveUnboundPatter
                     }
 
                     withTarget = scopedCompound;
+                } else {
+                    // No :scope - match against the top Program node
+                    // First check if expr itself is a Program node
+                    if (isCall(expr) && isSym(expr.h) && expr.h.v === "Program") {
+                        withTarget = expr;
+                    } else {
+                        // Search parents array for the first Program node (from root toward current)
+                        let programNode = null;
+                        for (const parent of parents) {
+                            if (isCall(parent) && isSym(parent.h) && parent.h.v === "Program") {
+                                programNode = parent;
+                                break;
+                            }
+                        }
+                        if (programNode) {
+                            withTarget = programNode;
+                        }
+                        // If no Program node found, fallback to expr
+                    }
                 }
 
                 // Index wildcards in :with pattern if needed
