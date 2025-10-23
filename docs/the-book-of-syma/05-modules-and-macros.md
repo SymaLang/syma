@@ -36,8 +36,11 @@ A module is a symbolic expression:
 ```lisp
 {Module Module/Name
   {Export symbol1 symbol2 symbol3}
-  {Import Other/Module as Alias}
-  {Import Another/Module as A open}
+  {Import Other/Module as Alias}                    ; Standard import
+  {Import Another/Module as A open}                 ; Open import - all exports
+  {Import Utils as U {Open Helper Config}}          ; Selective opening
+  {Import Syntax as S macro}                        ; Macro import
+  {Import Lib as L open macro {Open Foo}}           ; Combined
   {Defs
     {ConstantName value}}
   {Program
@@ -51,7 +54,7 @@ A module is a symbolic expression:
 ### Components
 
 - **Module/Name** — Qualified module identifier (slash-separated namespace)
-- **Export** — Public symbols available to importers
+- **Export** — Symbols that CAN be imported (but qualification depends on how they're imported)
 - **Import** — Dependencies on other modules
 - **Defs** — Named constants (expanded to high-priority rules)
 - **Program** — Entry point for executable modules
@@ -126,46 +129,99 @@ After import, use `KV/Get`, `KV/Set`, etc.
        {Get State Count state_}}}}  ; ← No qualification needed!
 ```
 
-With `open`, you can use `Get` directly instead of `KV/Get`.
+With `open`, exported symbols from Core/KV remain unqualified in **both modules**:
+- In App/Main: you can use `Get` instead of `KV/Get`
+- In Core/KV itself: its own code uses `Get` instead of `Core/KV/Get`
 
-🜛 *Qualified imports are explicit. Open imports are convenient. Choose based on clarity.*
+This bidirectional effect ensures consistency.
+
+### Selective Opening (New!)
+
+Use `{Open Symbol1 Symbol2}` for fine-grained control:
+
+```lisp
+{Module App/Main
+  {Import Syma/Router as Router {Open CurrentRoute}}
+
+  {Rules
+    {R "ShowRoute"
+       {ShowRoute}
+       CurrentRoute}              ; ← Unqualified!
+
+    {R "Navigate"
+       {Navigate path_}
+       {Router/Navigate path_}}}} ; ← Still qualified!
+```
+
+Only `CurrentRoute` is unqualified. Everything else from Router requires qualification.
+
+🜛 *`open` is convenient but global. `{Open ...}` gives you surgical precision.*
+
+### The Bidirectional Effect
+
+**Important:** When you import a module with `open` or use `{Open ...}`, it affects **both sides**:
+
+```lisp
+; Core/KV module - exported symbols
+{Module Core/KV
+  {Export Get Set Put}
+  {Rules
+    ; If someone imports Core/KV with 'open':
+    {R "Get/Found" {Get tag_ key_ state_} value_}
+    ; Get is unqualified here too!
+
+    ; If no one imports Core/KV with 'open':
+    {R "Get/Found" {Core/KV/Get tag_ key_ state_} value_}
+    ; Get gets qualified in its own module
+  }}
+```
+
+This ensures consistency: if you can use `Get` unqualified in your code, the library itself uses `Get` unqualified too. No surprises.
 
 ⸻
 
 ## Symbol Qualification
 
-When modules are compiled, **all symbols are qualified** with their module namespace:
+Symbol qualification depends on **how a module is imported**:
+
+### Always Unqualified
+- **Built-ins**: `Add`, `Mul`, `Concat`, `If`, etc.
+- **HTML tags**: `Div`, `Button`, `Span`, etc.
+- **Explicitly opened symbols**: Listed in `{Open ...}` clauses
+
+### Conditionally Unqualified
+- **Exported symbols**: Only remain unqualified if:
+  - The module is imported with `open` by someone, OR
+  - The symbol is listed in an `{Open ...}` clause
+
+### Always Qualified
+- **Local symbols** in modules not imported with `open`
+- **Standard imports** without `open` or `{Open ...}`
+
+### Example
 
 ```lisp
-; Before compilation (source):
 {Module App/Counter
-  {Export Inc}
-  {Defs {InitialCount 0}}
+  {Export Inc Dec}  ; Only unqualified if imported with 'open'
+
   {Rules
-    {R "Inc" {Inc n_} {Add n_ 1}}}}
+    ; If Counter is imported with 'open' somewhere:
+    {R "Inc" {Inc n_} {Add n_ 1}}  ; Inc is unqualified
 
-; After compilation (universe):
-{Rules
-  {R "App/Counter/InitialCount/Def"
-     App/Counter/InitialCount
-     0
-     1000}  ; High priority for Defs
+    ; If Counter is NOT imported with 'open':
+    {R "Inc" {App/Counter/Inc n_} {Add n_ 1}}  ; Inc gets qualified
+}}
 
-  {R "App/Counter/Inc"
-     {App/Counter/Inc n_}
-     {Add n_ 1}}}
+{Module App/Main
+  {Import App/Counter as C open}  ; Now Counter exports are unqualified!
+
+  {Rules
+    {R "Increment"
+       {DoIncrement}
+       {Inc 5}}}}  ; Can use Inc unqualified
 ```
 
-**Built-ins remain unqualified:**
-- `Add`, `Mul`, `Concat`, `If`, etc.
-- HTML tags: `Div`, `Button`, `Span`
-
-**Local symbols get qualified:**
-- `Inc` → `App/Counter/Inc`
-- `InitialCount` → `App/Counter/InitialCount`
-
-**Imported symbols resolve to their source:**
-- `KV/Get` → `Core/KV/Get` (from Core/KV module)
+**Key insight**: A module's exports only remain unqualified in its own code if someone imports it with `open` or explicitly opens those symbols.
 
 ⸻
 
@@ -397,35 +453,48 @@ The `*` scope means global RuleRules from `Core/Syntax/Global`.
 ## Import Modifiers Cheat Sheet
 
 ```lisp
-{Import Module as M}              ; Qualified only: M/Symbol
-{Import Module as M open}         ; Unqualified: Symbol
-{Import Module as M macro}        ; Qualified + RuleRules applied
-{Import Module as M open macro}   ; Unqualified + RuleRules applied
+{Import Module as M}                        ; Qualified only: M/Symbol
+{Import Module as M open}                   ; All exports unqualified
+{Import Module as M {Open Sym1 Sym2}}      ; Only Sym1, Sym2 unqualified
+{Import Module as M macro}                  ; Qualified + RuleRules applied
+{Import Module as M open macro}             ; All unqualified + RuleRules
+{Import Module as M macro {Open Sym1}}      ; Sym1 unqualified + RuleRules
 ```
 
-Examples:
+### Examples
 
 ```lisp
-; Qualified access, no RuleRules
+; Standard import - everything qualified
 {Import Core/List as L}
 {L/Map f_ {L/List items..}}
 
-; Unqualified access, no RuleRules
+; Open import - all exports unqualified
 {Import Core/List as L open}
 {Map f_ {List items..}}
 
-; Qualified access + RuleRules
+; Selective opening - only specific symbols unqualified
+{Import Syma/Router as R {Open CurrentRoute}}
+CurrentRoute              ; ← Unqualified
+{R/Navigate "/home"}      ; ← Still qualified
+
+; Macro import - RuleRules applied, symbols qualified
 {Import Core/Fun as F macro}
 {Fn {Double n} {Mul n 2}}  ; ← Sugar from RuleRules!
-{F/Call Double 5}
+{F/Call Double 5}          ; ← Qualified usage
 
-; Unqualified + RuleRules (most convenient)
+; Open + Macro - RuleRules applied, all symbols unqualified
 {Import Core/Fun as F open macro}
 {Fn {Double n} {Mul n 2}}
-{Call Double 5}
+{Call Double 5}            ; ← Unqualified usage
+
+; Selective + Macro - RuleRules applied, selective symbols unqualified
+{Import MyLib as ML macro {Open Helper Config}}
+Helper                     ; ← Unqualified
+Config                     ; ← Unqualified
+{ML/OtherFunc}            ; ← Still qualified
 ```
 
-🜛 *`open` controls visibility. `macro` controls transformation. Combine them as needed.*
+🜛 *`open` is all-or-nothing. `{Open ...}` is surgical. `macro` enables transformation. Mix and match for the perfect API.*
 
 ⸻
 
@@ -599,7 +668,12 @@ Create syntax for test assertions:
 ## Key Takeaways
 
 - **Modules** organize code into namespaced units
-- **Imports** can be qualified (`M/Symbol`) or open (`Symbol`)
+- **Imports** have three modes:
+  - Standard: qualified (`M/Symbol`)
+  - Open: all exports unqualified (`Symbol`)
+  - Selective: only specified symbols unqualified (`{Open Sym1 Sym2}`)
+- **Symbol qualification** is bidirectional: affects both importing and imported modules
+- **Exports** are conditionally qualified based on how they're imported
 - **`macro` modifier** enables RuleRules transformation
 - **RuleRules** transform the Rules section before runtime
 - **Splat** generates multiple rules from one meta-rule

@@ -101,7 +101,7 @@ export class Module {
   }
 
   parseImports(nodes) {
-    // Parse {Import X/Y [as Z] [from "path"] [open] [macro]}
+    // Parse {Import X/Y [as Z] [from "path"] [open] [macro] [{Open sym1 sym2 ...}]}
     let i = 0;
     while (i < nodes.length) {
       const moduleNode = nodes[i++];
@@ -109,12 +109,13 @@ export class Module {
         throw new Error(
           'Import module must be a symbol.\n' +
           'Valid syntax:\n' +
-          '  {Import Module/Name [as Alias]}  or  Import(Module/Name, [as, Alias])\n' +
+          '  {Import Module/Name [as Alias] [open] [macro] [{Open sym1 sym2}]}\n' +
           'Examples:\n' +
-          '  {Import Core/KV}               - Alias defaults to full name (Core/KV)\n' +
-          '  {Import Core/KV as KV}         - Use short alias (KV)\n' +
-          '  {Import Core/KV as KV open}\n' +
-          '  {Import Core/Rules/Sugar as CRS macro}'
+          '  {Import Core/KV}                                   - Alias defaults to full name\n' +
+          '  {Import Core/KV as KV}                             - Use short alias\n' +
+          '  {Import Core/KV as KV open}                        - Import all exports unqualified\n' +
+          '  {Import Core/Rules/Sugar as CRS macro}             - Import for macro use\n' +
+          '  {Import Syma/Router as Router {Open CurrentRoute}} - Explicit unqualified symbols'
         );
       }
 
@@ -175,12 +176,31 @@ export class Module {
         }
       }
 
+      // Check for explicit {Open symbol1 symbol2 ...} clause
+      let openSymbols = [];
+      if (i < nodes.length && isCall(nodes[i]) && isSym(nodes[i].h) && nodes[i].h.v === 'Open') {
+        const openNode = nodes[i++];
+        // Extract all symbols from the Open clause
+        for (const sym of openNode.a) {
+          if (isSym(sym)) {
+            openSymbols.push(sym.v);
+          } else {
+            throw new Error(
+              `Open clause must contain only symbols.\n` +
+              `Found non-symbol in: {Open ...}\n` +
+              `Example: {Import Module/Name as Alias {Open Symbol1 Symbol2}}`
+            );
+          }
+        }
+      }
+
       this.imports.push({
         module: moduleNode.v,
         alias,
         fromPath,
         open,
-        macro
+        macro,
+        openSymbols
       });
     }
   }
@@ -197,19 +217,26 @@ export class Module {
 
 /* ---------------- Symbol Qualification ---------------- */
 export class SymbolQualifier {
-  constructor(module, moduleMap, isImportedOpen = false) {
+  constructor(module, moduleMap, isImportedOpen = false, explicitlyOpenedSymbols = new Set()) {
     this.module = module;
     this.moduleMap = moduleMap;
     this.importMap = new Map(); // alias -> module name
     this.openImports = new Set(); // set of module names imported open
     this.localSymbols = new Set(); // symbols defined in this module
     this.isImportedOpen = isImportedOpen; // is this module imported "open" by anyone?
+    this.explicitlyOpenedSymbols = new Set(explicitlyOpenedSymbols); // explicitly opened symbols from imports
 
-    // Build import maps
+    // Build import maps and collect explicitly opened symbols
     for (const imp of module.imports) {
       this.importMap.set(imp.alias, imp.module);
       if (imp.open) {
         this.openImports.add(imp.module);
+      }
+      // Add explicitly opened symbols from this import
+      if (imp.openSymbols && imp.openSymbols.length > 0) {
+        for (const sym of imp.openSymbols) {
+          this.explicitlyOpenedSymbols.add(sym);
+        }
       }
     }
 
@@ -249,6 +276,11 @@ export class SymbolQualifier {
 
     // Check against built-in vocabulary (imported from builtins-vocab.js)
     if (BUILTINS.includes(sym)) return sym;
+
+    // Check if this symbol is explicitly opened via {Open ...} clause
+    if (this.explicitlyOpenedSymbols.has(sym)) {
+      return sym;
+    }
 
     // Is it an exported symbol from this module?
     // Only leave unqualified if this module is imported "open" by someone
@@ -400,10 +432,23 @@ export class ModuleLinker {
 
     // Build set of modules that are imported "open" by anyone
     const openImportedModules = new Set();
+    // Build map of module name -> Set of explicitly opened symbols
+    const explicitlyOpenedByModule = new Map();
+
     for (const mod of sorted) {
       for (const imp of mod.imports) {
         if (imp.open) {
           openImportedModules.add(imp.module);
+        }
+        // Collect explicitly opened symbols for the imported module
+        if (imp.openSymbols && imp.openSymbols.length > 0) {
+          if (!explicitlyOpenedByModule.has(imp.module)) {
+            explicitlyOpenedByModule.set(imp.module, new Set());
+          }
+          const symbolSet = explicitlyOpenedByModule.get(imp.module);
+          for (const sym of imp.openSymbols) {
+            symbolSet.add(sym);
+          }
         }
       }
     }
@@ -411,7 +456,8 @@ export class ModuleLinker {
     // Process each module in dependency order
     for (const mod of sorted) {
       const isImportedOpen = openImportedModules.has(mod.name);
-      const qualifier = new SymbolQualifier(mod, this.moduleMap, isImportedOpen);
+      const explicitlyOpened = explicitlyOpenedByModule.get(mod.name) || new Set();
+      const qualifier = new SymbolQualifier(mod, this.moduleMap, isImportedOpen, explicitlyOpened);
 
       // Tag and qualify all rules with their source module
       const qualifiedRules = mod.rules.map(rule => {
@@ -490,7 +536,8 @@ export class ModuleLinker {
       }
 
       const entryIsImportedOpen = openImportedModules.has(entryModuleName);
-      const entryQualifier = new SymbolQualifier(entryMod, this.moduleMap, entryIsImportedOpen);
+      const entryExplicitlyOpened = explicitlyOpenedByModule.get(entryModuleName) || new Set();
+      const entryQualifier = new SymbolQualifier(entryMod, this.moduleMap, entryIsImportedOpen, entryExplicitlyOpened);
       const qualifiedProgram = entryQualifier.qualify(entryMod.program);
 
       // Build the Universe

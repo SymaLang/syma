@@ -348,24 +348,31 @@ Syma supports a module system for organizing code into reusable, composable unit
 **Brace Syntax:**
 ```lisp
 {Module Module/Name
-  {Export Symbol1 Symbol2 ...}           ; What this module provides
-  {Import Other/Module as Alias open macro}  ; Dependencies
-  {Defs {Name value} ...}                ; Constants/definitions
-  {Program ...}                           ; Main program (entry modules only)
-  {Rules ...}                             ; Transformation rules
-  {RuleRules ...}}                        ; Meta-rules (optional)
+  {Export Symbol1 Symbol2 ...}                    ; What this module provides
+  {Import Other/Module as Alias}                  ; Standard import
+  {Import Core/KV as KV open}                     ; Open import - all exports unqualified
+  {Import Utils as U macro}                       ; Macro import - apply RuleRules
+  {Import Router as R {Open CurrentRoute}}        ; Explicit open - only listed symbols unqualified
+  {Import Lib as L open macro {Open Foo Bar}}     ; Combined modifiers
+  {Defs {Name value} ...}                         ; Constants/definitions
+  {Program ...}                                    ; Main program (entry modules only)
+  {Rules ...}                                      ; Transformation rules
+  {RuleRules ...}}                                 ; Meta-rules (optional)
 ```
 
 **Function Call Syntax:**
 ```lisp
 Module(Module/Name,
-  Export(Symbol1, Symbol2, ...),         ; What this module provides
-  Import(Other/Module, as, Alias),       ; Dependencies (note: 'as' is literal)
-  Import(Core/KV, as, KV, open, macro),         ; Open import
-  Defs(Name(value), ...),                ; Constants/definitions
-  Program(...),                          ; Main program (entry modules only)
-  Rules(...),                            ; Transformation rules
-  RuleRules(...))                        ; Meta-rules (optional)
+  Export(Symbol1, Symbol2, ...),                 ; What this module provides
+  Import(Other/Module, as, Alias),               ; Standard import (note: 'as' is literal)
+  Import(Core/KV, as, KV, open),                 ; Open import
+  Import(Utils, as, U, macro),                   ; Macro import
+  Import(Router, as, R, Open(CurrentRoute)),     ; Explicit open symbols
+  Import(Lib, as, L, open, macro, Open(Foo, Bar)),  ; Combined
+  Defs(Name(value), ...),                        ; Constants/definitions
+  Program(...),                                  ; Main program (entry modules only)
+  Rules(...),                                    ; Transformation rules
+  RuleRules(...))                                ; Meta-rules (optional)
 ```
 
 ### Imports
@@ -376,35 +383,111 @@ Modules can import symbols from other modules using either syntax:
 ;; Brace syntax
 {Import Core/KV}                     ; Alias defaults to full name "Core/KV"
 {Import Core/KV as KV}               ; Explicit short alias: use as KV/Get, KV/Set
-{Import Core/KV open}                ; Open import with full name alias
-{Import Core/KV as KV open}          ; Open: use as Get, Set
+{Import Core/KV open}                ; Open import: exported symbols unqualified
+{Import Core/KV as KV open}          ; Open with short alias
 {Import Core/Rules/Sugar as CRS macro}  ; Import RuleRules: apply to this module's rules
 {Import Core/Set as CS open macro}   ; Both: open symbols AND apply RuleRules
+
+;; Explicit symbol opening (new!)
+{Import Syma/Router as Router {Open CurrentRoute Router}}
+; Makes ONLY CurrentRoute and Router unqualified in both modules
 
 ;; Function syntax
 Import(Core/KV)                      ; Alias defaults to full name "Core/KV"
 Import(Core/KV, as, KV)              ; Explicit short alias: use as KV/Get, KV/Set
-Import(Core/KV, open)                ; Open import with full name alias
-Import(Core/KV, as, KV, open)        ; Open: use as Get, Set
+Import(Core/KV, open)                ; Open import
+Import(Core/KV, as, KV, open)        ; Open with alias
 Import(Core/Rules/Sugar, as, CRS, macro)  ; Import RuleRules
 Import(Core/Set, as, CS, open, macro)     ; Both modifiers
+Import(Syma/Router, as, Router, Open(CurrentRoute, Router))
+; Explicit opening in function syntax
 ```
 
 **Note:** The `as Alias` clause is optional. When omitted, the alias defaults to the full module name (e.g., `Core/KV` → alias `Core/KV`, `Core/Rules/Sugar` → alias `Core/Rules/Sugar`). Use explicit `as` clauses to create shorter aliases like `KV` or `CRS`.
 
 #### Import Modifiers
 
-- **`open`**: Makes exported symbols available without qualification
+- **`open`**: Makes all exported symbols from the imported module available without qualification in both the importing module and the imported module itself
 - **`macro`**: Applies the imported module's RuleRules to this module's rules
-- Both can be used together: `{Import Module as M open macro}`
+- **`{Open Symbol1 Symbol2 ...}`**: Explicitly specifies which symbols should remain unqualified (fine-grained control). These symbols remain unqualified in both the importing module and the imported module.
+- All modifiers can be combined: `{Import Module as M open macro {Open Sym1 Sym2}}`
+
+#### How Symbol Qualification Works
+
+1. **With `open` modifier**: All exported symbols from the imported module remain unqualified in both modules
+2. **With `{Open ...}` clause**: Only the explicitly listed symbols remain unqualified in both modules
+3. **Without modifiers**: Symbols must be qualified with the module name or alias (e.g., `KV/Get`, `Core/KV/Get`)
+4. **Exported symbols**: Only remain unqualified if the module is imported with `open` by at least one other module OR if explicitly listed in an `{Open ...}` clause
 
 ### Symbol Qualification
 
-After compilation, all symbols are qualified with their module namespace:
-- Local symbols: `Module/Name`
-- Imported symbols: resolved to their source module
-- Built-ins: remain unqualified (`Add`, `True`, `If`, etc.)
-- HTML tags: remain unqualified (`Div`, `Button`, etc.)
+After compilation, symbols are qualified based on their context and import settings:
+
+**Always Unqualified:**
+- Built-in primitives and operators: `Add`, `True`, `If`, `Eq`, etc.
+- HTML tags: `Div`, `Button`, `Input`, etc.
+- HTML attributes: `:class`, `:onClick`, etc.
+
+**Conditionally Unqualified:**
+- Exported symbols from modules imported with `open`: remain unqualified
+- Symbols explicitly listed in `{Open ...}` clauses: remain unqualified
+- Symbols exported by the current module: only unqualified if this module is imported with `open` by another module OR if listed in an `{Open ...}` clause
+
+**Always Qualified:**
+- Local symbols in modules not imported with `open`: `Module/Name`
+- Imported symbols without `open` or `{Open ...}`: `Module/Name`
+
+**Example:**
+```lisp
+{Module App/Counter
+  {Import Core/KV as KV open}           ; KV exports: Get, Set, Put
+  {Import Syma/Router as R {Open CurrentRoute}}  ; Only CurrentRoute unqualified
+
+  {Export Inc Dec}  ; Only unqualified if Counter imported with 'open'
+
+  {Rules
+    ; KV/Get is unqualified (open import):
+    {R "Inc" {Apply Inc st_} {Set Count {Add {Get Count st_} 1} st_}}
+
+    ; CurrentRoute is unqualified (explicit Open):
+    {R "ShowRoute" {/@ {Show Route} _} CurrentRoute}
+
+    ; Router needs qualification (not in Open clause):
+    {R "Navigate" {Apply Nav path_} {R/Navigate path_}}}}
+```
+
+### Import and Export Summary
+
+The module system provides three levels of symbol exposure:
+
+**1. Full Open Import (`open` modifier)**
+```lisp
+{Import Core/KV as KV open}
+```
+- **Effect**: ALL exported symbols from Core/KV remain unqualified
+- **Where**: In both the importing module AND in Core/KV itself (if imported open elsewhere)
+- **Use case**: When you want to use a library's entire API without qualification
+
+**2. Selective Opening (`{Open ...}` clause)**
+```lisp
+{Import Syma/Router as Router {Open CurrentRoute Router}}
+```
+- **Effect**: ONLY CurrentRoute and Router remain unqualified
+- **Where**: In both the importing module AND in Syma/Router itself
+- **Use case**: Fine-grained control when you only want specific symbols unqualified
+
+**3. Standard Import (no modifiers)**
+```lisp
+{Import Utils as U}
+```
+- **Effect**: All symbols must be qualified with alias: `U/Helper`
+- **Use case**: Explicit namespacing to avoid conflicts
+
+**Key Insight**: The `open` and `{Open ...}` modifiers affect BOTH modules:
+- The importing module can use symbols without qualification
+- The exported module's own code uses those symbols without qualification (if imported open elsewhere)
+
+This bidirectional effect ensures consistency: if you import a module's API unqualified, the module's internal code also uses that API unqualified.
 
 ### Module Example
 
@@ -1483,11 +1566,25 @@ Syma runs on multiple platforms through a platform abstraction layer:
 
 ### Symbol Qualification Process
 
-During compilation, symbols are transformed based on scope:
-- **Local symbols** → `Module/Name`
-- **Imported with alias** → resolved to source module
-- **From open imports** → qualified with source module
-- **Built-ins** → remain unqualified
+During compilation, symbols are transformed based on their context and import relationships:
+
+**Qualification Rules:**
+1. **Built-ins and HTML tags** → always remain unqualified
+2. **Explicitly opened symbols** (via `{Open ...}` clause) → remain unqualified
+3. **Symbols from `open` imports** → remain unqualified in importing module
+4. **Exported symbols** → remain unqualified only if:
+   - The module is imported with `open` by another module, OR
+   - The symbol is listed in an `{Open ...}` clause
+5. **All other symbols** → qualified as `Module/Name`
+
+**Processing Steps:**
+1. Parse all module files and extract imports/exports
+2. Build dependency graph and topologically sort modules
+3. Identify which modules are imported with `open`
+4. Collect explicitly opened symbols from `{Open ...}` clauses
+5. Qualify symbols according to the rules above
+6. Expand Defs as high-priority rules
+7. Bundle into a single Universe
 
 ### Def Expansion
 
@@ -1523,9 +1620,9 @@ Module definitions become rules with high priority (1000):
 ### App/Counter Module
 ```lisp
 {Module App/Counter
-  {Import Core/KV open}
+  {Import Core/KV open}  ; Core/KV exports become unqualified: Get, Put, Set, Patch
 
-  {Export InitialState View Inc Dec}
+  {Export InitialState View Inc Dec}  ; Only unqualified if Counter imported with 'open'
 
   {Defs
     {InitialState
@@ -1585,18 +1682,23 @@ Module definitions become rules with high priority (1000):
 
 1. **Symbolic expressions** as universal syntax
 2. **Module system** for code organization and namespacing
+   - `open` imports make all exports unqualified in both modules
+   - `{Open Symbol1 Symbol2}` for selective symbol exposure
+   - `macro` imports apply RuleRules transformations
 3. **Pattern matching** with variables, wildcards, and rest patterns
 4. **Greedy anchors** - `..symbol` for matching to last occurrence instead of first
 5. **Rewrite rules** for computation and transformation
 6. **Two-pass normalization** - innermost-first for `:innermost` rules, then outermost-first for regular rules
 7. **Frozen wrapper** - `{Frozen expr}` prevents normalization of contents, enabling code-as-data and lazy evaluation
-8. **Symbol qualification** for namespace isolation
+8. **Symbol qualification** - context-dependent based on import modifiers
+   - Exports remain unqualified only if imported with `open` or listed in `{Open ...}`
+   - Bidirectional effect: affects both importing and imported modules
 9. **Context-aware projection** for UI rendering
 10. **Event handling** through `Apply` patterns with lifting rules
 11. **Symbolic effects** for pure I/O representation
 12. **Event action combinators** for composable UI interactions
-13. **Meta-programming** with rule-rewriting rules
+13. **Meta-programming** with rule-rewriting rules (RuleRules)
 14. **Priority system** for controlling rule application order
 15. **Evaluation strategies** - `:innermost` for bottom-up, `:scope` for context restrictions
 
-Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.
+Syma provides a minimal yet powerful foundation for building reactive applications with a purely functional, rule-based architecture. The module system enables large-scale code organization while maintaining the simplicity of the core language, with fine-grained control over symbol visibility and namespace isolation. All side effects remain symbolic, with the runtime acting as a thin bridge to the real world.
