@@ -1,92 +1,32 @@
-{Module
-  Demo/Input
+{Module Demo/Input
+  {Import Core/Effect open}
   {Program
-    App(
-      State({Input ""}, {Phase "PromptName"}),
-      {UI
-        Div(
-          {H1 "Console Input Demo"},
-          {P "Check console for input prompts"},
-          {P "Last input: " {Show Input}}
-        )
-      }
-    )
-    {Effects
-      {Pending
-        {Print "prompt-name" {Message "Enter your name: \n"}}
-      }
-      {Inbox}
-    }
+    {Effects {Pending} {Inbox}}
+    
+    {PrintEff "Enter your name: \n"}
+    {Eff {ReadLine "name"}}
   }
+
   {Rules
-    R(
-      "AfterNamePrompt",
+    {R NextStep/1
       {Program
-        {App {State {Input input_} {Phase "PromptName"}} ui_}
-        {Effects pending_ {Inbox {PrintComplete "prompt-name" _} rest...}}
-      },
+        {Effects .. {Inbox {ReadLineComplete "name" {Text name_}} ..}}
+      }
       {Program
-        {App {State {Input input_} {Phase "WaitingForName"}} ui_}
-        {Effects
-          {Pending {ReadLine "readline-1"}}
-          {Inbox rest...}
-        }}
-    )
+        {Effects .. {Inbox ..}}
+        {PrintEff Concat("Hello ", name_, "!\nPress any key: ")}
+        {Eff {GetChar "char"}}
+      }
+    }
 
-    R(
-      "ProcessReadLine",
+    {R NextStep/2
       {Program
-        {App {State _ {Phase "WaitingForName"}} ui_}
-        {Effects pending_ {Inbox {ReadLineComplete "readline-1" {Text input_}} rest...}}
-      },
+        {Effects .. {Inbox {GetCharComplete "char" {Char ch_}} ..}}
+      }
       {Program
-        {App {State {Input input_} {Phase "PromptChar"}} ui_}
-        {Effects
-          {Pending {Print "prompt-char" {Message Concat("Hello ", input_, "! Press any key: ")}}}
-          {Inbox rest...}
-        }}
-    )
-
-    R(
-      "AfterCharPrompt",
-      {Program
-        {App {State st_ {Phase "PromptChar"}} ui_}
-        {Effects pending_ {Inbox {PrintComplete "prompt-char" _} rest...}}
-      },
-      {Program
-        {App {State st_ {Phase "WaitingForChar"}} ui_}
-        {Effects
-          {Pending {GetChar "getchar-1"}}
-          {Inbox rest...}
-        }}
-    )
-
-    R(
-      "ProcessGetChar",
-      {Program
-        {App {State st_ {Phase "WaitingForChar"}} ui_}
-        {Effects pending_ {Inbox {GetCharComplete "getchar-1" {Char ch_}} rest...}}
-      },
-      {Program
-        {App {State st_ {Phase "ShowResult"}} ui_}
-        {Effects
-          {Pending
-            {Print "print-1" {Message Concat("You pressed: ", ch_, "\n")}}
-          }
-          {Inbox rest...}
-        }}
-    )
-
-    R(
-      "PrintComplete",
-      {Program {App {State st_ {Phase phase_}} ui_} {Effects pending_ {Inbox {PrintComplete "print-1" _} rest...}}},
-      {Program {App {State st_ {Phase phase_}} ui_} {Effects pending_ {Inbox rest...}}}
-    )
-
-    R(
-      "ShowInput",
-      /@({Show Input}, {App {State {Input val_} phase_} _}),
-      val_
-    )
+        {Effects .. {Inbox ..}}
+        {PrintEff Concat("You pressed: ", ch_, "\n")}
+      }
+    }
   }
 }

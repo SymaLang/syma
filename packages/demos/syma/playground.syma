@@ -1,7 +1,0 @@
-{Module
-  Demo/Playground
-  {Import Core/JSON as CJ open}
-  {Program}
-  {Rules
-  }
-}

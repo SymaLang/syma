@@ -1,24 +1,15 @@
-{Module
-  Demo/Print
-
-  {Import Core/Plumb as CP open}
-  {Import Core/Effect as CE open}
+{Module Demo/Print
+  {Import Core/Effect}
 
   {Program
-    App(
-      State(Empty),
-      {UI Div("Check console for print effect")}
-    )
-    {EffQueue
-      {Print Format("Initial print command\n")}
-      {Print Format("Second print command\n")}
-    }
+    {Core/Effect/Eff {Print {FreshId} {Message Format("Hello, Syma Print!\n")}}}
+    {Core/Effect/Eff {Print {FreshId} {Message Format("Second message printed.\n")}}}
   }
+
   {Rules
-    R(
-      "Format/Message",
-      {Format m_},
+    {R Format/Message
+      {Format m_}
       Concat("Printed message: ", m_)
-    )
+    }
   }
 }

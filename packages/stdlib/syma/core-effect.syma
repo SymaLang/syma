@@ -1,6 +1,6 @@
 {Module
   Core/Effect
-  {Export Eff}
+  {Export Eff PrintEff}
   {Rules
     {R Eff
       {.. {Eff ef_} ..}
@@ -13,6 +13,17 @@
       {Program .. {Effects {Pending .. ef_} ..} ..}
     }
 
+    {R Eff:SimplePrint
+      {PrintEff message_}
+      {Eff {Print SimplePrint {Message message_}}}
+      :innermost
+    }
+
+    {R Eff:SimplePrint/Done
+      {Program .. {Effects .. {Inbox {PrintComplete SimplePrint _} ..}} ..}
+      {Program .. {Effects .. {Inbox ..}} ..}
+    }
+    
     {R Eff:MoveLeft
       {Program .. {Eff e..} ..}
       {Program {Eff e..} .. ..}
