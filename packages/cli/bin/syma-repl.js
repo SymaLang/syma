@@ -17,6 +17,7 @@ import { setPlatform } from '@syma/core/platform';
 import { createRequire } from 'module';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { spawn } from 'child_process';
 import { createParser } from '@syma/core/parser-factory';
 import * as engine from '@syma/core/engine';
@@ -28,6 +29,15 @@ import { parseProgramArgsToKV } from '../src/utils/args-parser.js';
 const require = createRequire(import.meta.url);
 const packageInfo = require('../package.json');
 
+// Expand tilde in file paths
+function expandTilde(filePath) {
+    if (!filePath) return filePath;
+    if (filePath.startsWith('~/')) {
+        return path.join(os.homedir(), filePath.slice(2));
+    }
+    return filePath;
+}
+
 // Parse command-line arguments
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -35,8 +45,8 @@ function parseArgs() {
         help: false,
         version: false,
         trace: false,
-        historyFile: '.syma_history',
-        rcFile: '.symarc',
+        historyFile: expandTilde('~/.syma_history'),
+        rcFile: expandTilde('~/.symarc'),
         loadFile: null,
         runFile: null,  // New: file to run directly
         executeExpr: null,
@@ -80,13 +90,13 @@ function parseArgs() {
 
             case '--history':
                 if (i + 1 < mainArgs.length) {
-                    options.historyFile = mainArgs[++i];
+                    options.historyFile = expandTilde(mainArgs[++i]);
                 }
                 break;
 
             case '--rc':
                 if (i + 1 < mainArgs.length) {
-                    options.rcFile = mainArgs[++i];
+                    options.rcFile = expandTilde(mainArgs[++i]);
                 }
                 break;
 
@@ -146,9 +156,9 @@ Options:
   -t, --trace          Enable trace mode
   -l, --load <file>    Load a file in REPL mode
   -e, --eval <expr>    Evaluate expression and exit
-  --history <file>     History file (default: .syma_history)
+  --history <file>     History file (default: ~/.syma_history)
   --no-history         Disable history
-  --rc <file>          RC file for REPL (default: .symarc)
+  --rc <file>          RC file for REPL (default: ~/.symarc)
   --no-rc              Don't load RC file
   --max-steps <n>      Maximum normalization steps (default: 10000)
 

@@ -34,8 +34,8 @@ function parseArgs() {
         help: false,
         version: false,
         trace: false,
-        historyFile: '.syma_history',
-        rcFile: '.symarc',
+        historyFile: '~/.syma_history',
+        rcFile: '~/.symarc',
         loadFile: null,
         runFile: null,  // New: file to run directly
         executeExpr: null,
